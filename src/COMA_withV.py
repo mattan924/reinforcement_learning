@@ -173,15 +173,15 @@ class COMA_withV:
 
     
     def save_model(self):
-        torch.save(self.actor.state_dict(), 'actor_weight0120.pth')
-        torch.save(self.critic.state_dict(), 'critic_weight0120.pth')
-        torch.save(self.V_net.state_dict(), 'v_net_weight0120.pth')
+        torch.save(self.actor.state_dict(), './model_parameter/actor_weight0123.pth')
+        torch.save(self.critic.state_dict(), './model_parameter/critic_weight0123.pth')
+        torch.save(self.V_net.state_dict(), './model_parameter/v_net_weight0123.pth')
 
 
     def load_model(self):
-        self.actor.load_state_dict(torch.load('actor_weight.pth'))
-        self.critic.load_state_dict(torch.load('critic_weight.pth'))
-        self.V_net.load_state_dict(torch.load('v_net_weight.pth'))
+        self.actor.load_state_dict(torch.load('./model_parameter/actor_weight.pth'))
+        self.critic.load_state_dict(torch.load('./model_parameter/critic_weight.pth'))
+        self.V_net.load_state_dict(torch.load('./model_parameter/v_net_weight.pth'))
 
 
     def train(self, obs, actions, pi, reward, next_obs):
@@ -236,31 +236,6 @@ class COMA_withV:
         actor_loss = torch.FloatTensor([0.0])
         actor_loss = actor_loss.to(self.device)
 
-        """
-        A_list = []
-        critic_obs = obs_tensor[0][1:].unsqueeze(0)
-        Q2 = self.critic.get_value(critic_obs, actions_onehot.unsqueeze(0))
-        for i in range(self.num_agent):
-                
-            actions_onehot_copy = actions_onehot.clone()
-
-            temp_Q = torch.zeros(1, self.N_action, device=self.device)
-
-            for a in range(self.N_action):
-                for j in range(self.N_action):
-                    actions_onehot_copy[i*self.N_action+j] = 0
-                    
-                actions_onehot_copy[i*self.N_action + a] = 1
-                
-                temp_Q[0, a] = self.critic.get_value(critic_obs, actions_onehot_copy.unsqueeze(0))
-            
-            temp_A = Q2[0][0] - torch.sum(pi[i]*temp_Q)
-    
-            A_list.append(temp_A)
-        """
-
-        # 改良？
-        A_list = []
         critic_obs = obs_tensor[0][1:].unsqueeze(0)
         critic_action = actions_onehot.unsqueeze(0)
 
@@ -269,7 +244,6 @@ class COMA_withV:
             critic_action = torch.cat([critic_action, actions_onehot.unsqueeze(0)], dim=0)
         
         Q2 = self.critic.get_value(critic_obs, critic_action)
-
 
         Q_tmp = torch.zeros(9, 50, device=self.device)
                 
