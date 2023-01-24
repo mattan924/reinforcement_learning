@@ -54,7 +54,7 @@ class Actor(nn.Module):
     
 
     def get_action(self, obs):
-        out1 = self.pool1((self.conv1(obs)))
+        out1 = self.pool1(torch.tanh(self.conv1(obs)))
         out2 = self.pool2(torch.tanh(self.conv2(out1)))
         out3 = self.pool3(torch.tanh(self.conv3(out2)))
         out4 = out3.view(-1, 4*3*3)

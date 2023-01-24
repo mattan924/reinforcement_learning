@@ -25,7 +25,7 @@ if __name__ == '__main__':
 
     env = Env(learning_data_index)
 
-    max_epi_itr = 20
+    max_epi_itr = 10
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -72,6 +72,9 @@ if __name__ == '__main__':
 
             # 行動
             actions, pi = agent.get_acction(obs, train_flag)
+
+            for i in range(len(pi)):
+                print(f"agent {i} dist = {pi[i]}")
 
             # 報酬の受け取り
             reward = env.step(actions, time)
