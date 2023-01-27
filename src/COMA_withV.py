@@ -43,22 +43,22 @@ class Actor(nn.Module):
     def __init__(self, N_action):
         super(Actor, self).__init__()
         self.N_action = N_action
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=4, out_channels=8, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(3)
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=8, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
         self.pool2 = nn.MaxPool2d(3)
-        self.conv3 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
         self.pool3 = nn.MaxPool2d(3)
-        self.fc1 = nn.Linear(4*3*3, 32)
+        self.fc1 = nn.Linear(2*3*3, 32)
         self.fc2 = nn.Linear(32, self.N_action)
     
 
     def get_action(self, obs):
-        out1 = self.pool1(nn.ReLU(self.conv1(obs)))
-        out2 = self.pool2(nn.ReLU(self.conv2(out1)))
-        out3 = self.pool3(nn.ReLU(self.conv3(out2)))
-        out4 = out3.view(-1, 4*3*3)
-        out5 = nn.ReLU((self.fc1(out4)))
+        out1 = self.pool1(torch.tanh(self.conv1(obs)))
+        out2 = self.pool2(F.relu(self.conv2(out1)))
+        out3 = self.pool3(F.relu(self.conv3(out2)))
+        out4 = out3.view(-1, 2*3*3)
+        out5 = F.relu((self.fc1(out4)))
         out6 = F.softmax(self.fc2(out5), dim=1)
 
         return out6
@@ -87,18 +87,18 @@ class Critic(nn.Module):
         
 
     def get_value(self, S, A):
-        out1_s = self.pool1(torch.tanh(self.conv1(S)))
-        out2_s = self.pool2(torch.tanh(self.conv2(out1_s)))
-        out3_s = self.pool3(torch.tanh(self.conv3(out2_s)))
+        out1_s = self.pool1(F.relu(self.conv1(S)))
+        out2_s = self.pool2(F.relu(self.conv2(out1_s)))
+        out3_s = self.pool3(F.relu(self.conv3(out2_s)))
         out4_s = out3_s.view(-1, 4*3*3)
         
-        out1_a = torch.tanh(self.fc1(A))
-        out2_a = torch.tanh(self.fc2(out1_a))
-        out3_a = torch.tanh(self.fc3(out2_a))
+        out1_a = F.relu(self.fc1(A))
+        out2_a = F.relu(self.fc2(out1_a))
+        out3_a = F.relu(self.fc3(out2_a))
 
         out4 = torch.cat([out4_s, out3_a], 1)
-        out5 = torch.tanh(self.fc4(out4))
-        out6 = torch.tanh(self.fc5(out5))
+        out5 = F.relu(self.fc4(out4))
+        out6 = F.relu(self.fc5(out5))
         out7 = self.fc6(out6)
 
         return out7
@@ -121,13 +121,13 @@ class V_Net(nn.Module):
 
 
     def get_value(self, S):
-        out1 = self.pool1(torch.tanh(self.conv1(S)))
-        out2 = self.pool2(torch.tanh(self.conv2(out1)))
-        out3 = self.pool3(torch.tanh(self.conv3(out2)))
+        out1 = self.pool1(F.relu(self.conv1(S)))
+        out2 = self.pool2(F.relu(self.conv2(out1)))
+        out3 = self.pool3(F.relu(self.conv3(out2)))
         out4 = out3.view(-1, 4*3*3)
 
-        out5 = torch.tanh(self.fc1(out4))
-        out6 = torch.tanh(self.fc2(out5))
+        out5 = F.relu(self.fc1(out4))
+        out6 = F.relu(self.fc2(out5))
         out7 = self.fc3(out6)
 
         return out7
@@ -158,7 +158,7 @@ class COMA_withV:
         self.V_net_loff_fn = torch.nn.MSELoss()
 
 
-    def get_acction(self, obs, train_flag):        
+    def get_acction(self, obs, clients, train_flag):        
        
         obs_tensor = torch.FloatTensor(obs).to(self.device)
 
@@ -167,7 +167,11 @@ class COMA_withV:
         if train_flag:
             actions = []
             for i in range(self.num_agent):
-                actions.append(Categorical(pi[i]).sample().item())
+                client = clients[i]
+                if client.pub_topic[0] == 1:
+                    actions.append(Categorical(pi[i]).sample().item())
+                else:
+                    actions.append(-1)
         
         return actions, pi
 
@@ -191,22 +195,24 @@ class COMA_withV:
          
         for i in range(self.num_agent):
             action = actions[i]
-            actions_onehot[i*self.N_action + action] = 1
+            if action != -1:
+                actions_onehot[i*self.N_action + action] = 1
         
         # 経験再生用バッファへの追加
         obs_tensor = torch.FloatTensor(obs).to(self.device)
         next_obs_tensor = torch.FloatTensor(next_obs).to(self.device)
         for i in range(self.num_agent):
-            state = obs_tensor[i][1:]
-            next_state = next_obs_tensor[i][1:]
+            if actions[i] != -1:
+                state = obs_tensor[i][1:]
+                next_state = next_obs_tensor[i][1:]
 
-            self.replay_buffer.add(i, state, actions[i], actions_onehot, reward, next_state)
+                self.replay_buffer.add(i, state, actions[i], actions_onehot, reward, next_state)
 
         if len(self.replay_buffer) < self.buffer_size:
             return
 
         # オプティマイザーの設定
-        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
+        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-2)
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
         V_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
 
@@ -262,10 +268,13 @@ class COMA_withV:
             
         A = Q2.squeeze(1) - torch.sum(pi*Q_tmp, 1)
     
+        cnt = 0
         for i in range(self.num_agent):
-            actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]])
+            if actions[i] != -1:
+                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]])
+                cnt += 1
 
-        actor_loss = - actor_loss / self.num_agent
+        actor_loss = - actor_loss / cnt
 
         actor_optimizer.zero_grad()
         actor_loss.backward()

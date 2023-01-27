@@ -178,7 +178,7 @@ class Env:
                 distribution[block_index_x][block_index_y] += 1
                 
                 position_info = np.zeros((81, 81))
-                position_info[block_index_x][block_index_y] = 1
+                position_info[block_index_x][block_index_y] = 100
 
                 obs[i][0] = position_info
             

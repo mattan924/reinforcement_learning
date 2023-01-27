@@ -7,6 +7,9 @@ if __name__ == '__main__':
     start_time = time_modu.time()
     learning_data_index = "../dataset/learning_data/index/index.csv"
     log_file = "../result/out.log"
+    actor_grad_file = "./model_parameter/actor_grad.log"
+    critic_grad_file = "./model_parameter/critic_grad.log"
+    v_net_grad_file = "./model_parameter/v_net_grad.log"
     actor_file = "./model_parameter/actor.log"
     critic_file = "./model_parameter/critic.log"
     v_net_file = "./model_parameter/v_net.log"
@@ -21,6 +24,15 @@ if __name__ == '__main__':
         pass
 
     with open(v_net_file, 'w') as f:
+        pass
+
+    with open(actor_grad_file, 'w') as f:
+        pass
+
+    with open(critic_grad_file, 'w') as f:
+        pass
+
+    with open(v_net_grad_file, 'w') as f:
         pass
 
     env = Env(learning_data_index)
@@ -43,23 +55,41 @@ if __name__ == '__main__':
 
     # 学習ループ
     for epi_iter in range(max_epi_itr):
-        with open(actor_file, 'a') as f:
+        with open(actor_grad_file, 'a') as f:
             f.write(f"===========================================================\n")
             f.write(f"iter = {epi_iter}\n")
             for para in agent.actor.parameters():
                 f.write(f"{para.grad}\n")
 
-        with open(critic_file, 'a') as f:
+        with open(critic_grad_file, 'a') as f:
             f.write(f"===========================================================\n")
             f.write(f"iter = {epi_iter}\n")
             for para in agent.critic.parameters():
                 f.write(f"{para.grad}\n")
 
-        with open(v_net_file, 'a') as f:
+        with open(v_net_grad_file, 'a') as f:
             f.write(f"===========================================================\n")
             f.write(f"iter = {epi_iter}\n")
             for para in agent.V_net.parameters():
                 f.write(f"{para.grad}\n")
+
+        with open(actor_file, 'a') as f:
+            f.write(f"===========================================================\n")
+            f.write(f"iter = {epi_iter}\n")
+            for para in agent.actor.parameters():
+                f.write(f"{para}\n")
+
+        with open(critic_file, 'a') as f:
+            f.write(f"===========================================================\n")
+            f.write(f"iter = {epi_iter}\n")
+            for para in agent.critic.parameters():
+                f.write(f"{para}\n")
+
+        with open(v_net_file, 'a') as f:
+            f.write(f"===========================================================\n")
+            f.write(f"iter = {epi_iter}\n")
+            for para in agent.V_net.parameters():
+                f.write(f"{para}\n")
 
         # 環境のリセット
         env.reset()
@@ -71,9 +101,9 @@ if __name__ == '__main__':
         for time in range(0, env.simulation_time, env.time_step):
 
             # 行動
-            actions, pi = agent.get_acction(obs, train_flag)
+            actions, pi = agent.get_acction(obs, env.clients, train_flag)
 
-            for i in range(len(pi)):
+            for i in range(10):
                 print(f"agent {i} dist = {pi[i]}")
 
             # 報酬の受け取り
