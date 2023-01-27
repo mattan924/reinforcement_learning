@@ -155,49 +155,57 @@ class Env:
         
     # 状態の観測
     def get_observation(self):
-        obs_channel = 4
+        obs_channel = 3
         obs_size = 81
-        obs = np.zeros((self.num_client, obs_channel, obs_size, obs_size))
+        obs = np.zeros((obs_channel, obs_size, obs_size))
 
         block_len_x = (self.max_x-self.min_x)/obs_size
         block_len_y = (self.max_y-self.min_y)/obs_size
 
-        for i in range(self.num_client):
+        distribution = np.zeros((obs_size, obs_size))
 
-            distribution = np.zeros((obs_size, obs_size))
+        for client in self.clients:
+            block_index_x = int(client.x / block_len_x)
+            block_index_y = int(client.y / block_len_y)
 
-            for client in self.clients:
-                block_index_x = int(client.x / block_len_x)
-                block_index_y = int(client.y / block_len_y)
+            if block_index_x == obs_size:
+                block_index_x = obs_size-1
+            if block_index_y == obs_size:
+                block_index_y = obs_size-1
 
-                if block_index_x == obs_size:
-                    block_index_x = obs_size-1
-                if block_index_y == obs_size:
-                    block_index_y = obs_size-1
-
-                distribution[block_index_x][block_index_y] += 1
-                
-                position_info = np.zeros((81, 81))
-                position_info[block_index_x][block_index_y] = 100
-
-                obs[i][0] = position_info
-            
-            obs[i][1] = distribution
+            distribution[block_index_x][block_index_y] += 1
         
-            storage_info = np.zeros((obs_size, obs_size))
-            cpu_info = np.zeros((obs_size, obs_size))
-            for edge in self.all_edge:
-                block_index_x = int(edge.x / block_len_x)
-                block_index_y = int(edge.y / block_len_y)
+        obs[0] = distribution
 
-                storage_info[block_index_x][block_index_y] = edge.max_volume - edge.used_volume
-                cpu_info[block_index_x][block_index_y] = edge.cpu_power
+        storage_info = np.zeros((obs_size, obs_size))
+        cpu_info = np.zeros((obs_size, obs_size))
+        for edge in self.all_edge:
+            block_index_x = int(edge.x / block_len_x)
+            block_index_y = int(edge.y / block_len_y)
 
-            for i in range(self.num_client):
-                obs[i][2] = storage_info
-                obs[i][3] = cpu_info
+            storage_info[block_index_x][block_index_y] = edge.max_volume - edge.used_volume
+            cpu_info[block_index_x][block_index_y] = edge.cpu_power
 
-        return obs
+        for i in range(self.num_client):
+            obs[1] = storage_info
+            obs[2] = cpu_info
+
+        position_info = np.zeros((self.num_client, obs_size, obs_channel))
+
+        for i in range(self.num_client):
+            client = self.clients[i]
+
+            block_index_x = int(client.x / block_len_x)
+            block_index_y = int(client.y / block_len_y)
+
+            if block_index_x == obs_size:
+                block_index_x = obs_size-1
+            if block_index_y == obs_size:
+                block_index_y = obs_size-1
+                
+            position_info[i][block_index_x][block_index_y] = 1
+
+        return position_info, obs
         
  
     # 環境を進める

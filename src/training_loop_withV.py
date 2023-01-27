@@ -93,7 +93,7 @@ if __name__ == '__main__':
 
         # 環境のリセット
         env.reset()
-        obs = env.get_observation()
+        position, obs = env.get_observation()
         next_obs = None
 
         reward_history = []
@@ -101,7 +101,7 @@ if __name__ == '__main__':
         for time in range(0, env.simulation_time, env.time_step):
 
             # 行動
-            actions, pi = agent.get_acction(obs, env.clients, train_flag)
+            actions, pi = agent.get_acction(position, obs, env.clients, train_flag)
 
             for i in range(10):
                 print(f"agent {i} dist = {pi[i]}")
@@ -112,12 +112,13 @@ if __name__ == '__main__':
             reward = -reward
 
             # 状態の観測
-            next_obs = env.get_observation()
+            next_position, next_obs = env.get_observation()
 
             # 学習
-            agent.train(obs, actions, pi, reward, next_obs)
+            agent.train(position, obs, actions, pi, reward, next_position, next_obs)
 
             obs = next_obs
+            position = next_position
 
         if epi_iter % 1 == 0:
             print(f"total_reward = {sum(reward_history)}")

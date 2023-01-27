@@ -17,8 +17,8 @@ class ReplayBuffer:
         self.device = device
 
     
-    def add(self, id, state, action_number, actions, reward, next_state):
-        data = (id, state, action_number, actions, reward, next_state)
+    def add(self, id, state, posi, actions, action_number, reward, next_state, next_posi):
+        data = (id, state, posi, actions, action_number, reward, next_state, next_posi)
         self.buffer.append(data)
 
     
@@ -31,37 +31,41 @@ class ReplayBuffer:
 
         id = np.stack([x[0] for x in data])
         state = torch.cat([x[1].unsqueeze(0) for x in data], dim=0)
-        action_number = np.stack([x[2] for x in data])
+        posi = torch.cat([x[2].unsqueeze(0) for x in data], dim=0)
         actions = torch.cat([x[3].unsqueeze(0) for x in data], dim=0)
-        reward = np.stack([x[4] for x in data])
-        next_state = torch.cat([x[5].unsqueeze(0) for x in data], dim=0)
+        action_number = np.stack([x[4] for x in data])
+        reward = np.stack([x[5] for x in data])
+        next_state = torch.cat([x[6].unsqueeze(0) for x in data], dim=0)
+        next_posi = torch.cat([x[7].unsqueeze(0) for x in data], dim=0)
 
-        return id, state, action_number, actions, reward, next_state
+        return id, state, posi, actions, action_number, reward, next_state, next_posi
 
 class Actor(nn.Module):
     
     def __init__(self, N_action):
         super(Actor, self).__init__()
         self.N_action = N_action
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=8, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(3)
         self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
         self.pool2 = nn.MaxPool2d(3)
         self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
         self.pool3 = nn.MaxPool2d(3)
-        self.fc1 = nn.Linear(2*3*3, 32)
-        self.fc2 = nn.Linear(32, self.N_action)
+        self.fc1 = nn.Linear(2*3*3 + 81*81, 512)
+        self.fc2 = nn.Linear(512, 64)
+        self.fc3 = nn.Linear(64, self.N_action)
     
 
-    def get_action(self, obs):
+    def get_action(self, obs, position):
         out1 = self.pool1(torch.tanh(self.conv1(obs)))
         out2 = self.pool2(F.relu(self.conv2(out1)))
         out3 = self.pool3(F.relu(self.conv3(out2)))
         out4 = out3.view(-1, 2*3*3)
-        out5 = F.relu((self.fc1(out4)))
-        out6 = F.softmax(self.fc2(out5), dim=1)
+        out5 = torch.cat([out4, position], dim=1)
+        out6 = F.relu((self.fc1(out5)))
+        out7 = F.softmax(self.fc2(out6), dim=1)
 
-        return out6
+        return out7
 
 
 class Critic(nn.Module):
@@ -70,18 +74,18 @@ class Critic(nn.Module):
         super(Critic, self).__init__()
         self.N_action = N_action
         self.N_client = num_clinet
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(3)
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=8, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
         self.pool2 = nn.MaxPool2d(3)
-        self.conv3 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
         self.pool3 = nn.MaxPool2d(3)
 
         self.fc1 = nn.Linear(num_clinet*N_action, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 64)
 
-        self.fc4 = nn.Linear(4*3*3+64, 32)
+        self.fc4 = nn.Linear(2*3*3+64, 32)
         self.fc5 = nn.Linear(32, 8)
         self.fc6 = nn.Linear(8, 1)
         
@@ -90,7 +94,7 @@ class Critic(nn.Module):
         out1_s = self.pool1(F.relu(self.conv1(S)))
         out2_s = self.pool2(F.relu(self.conv2(out1_s)))
         out3_s = self.pool3(F.relu(self.conv3(out2_s)))
-        out4_s = out3_s.view(-1, 4*3*3)
+        out4_s = out3_s.view(-1, 2*3*3)
         
         out1_a = F.relu(self.fc1(A))
         out2_a = F.relu(self.fc2(out1_a))
@@ -108,14 +112,14 @@ class V_Net(nn.Module):
 
     def __init__(self):
         super(V_Net, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(3)
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=8, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
         self.pool2 = nn.MaxPool2d(3)
-        self.conv3 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
         self.pool3 = nn.MaxPool2d(3)
 
-        self.fc1 = nn.Linear(4*3*3, 32)
+        self.fc1 = nn.Linear(2*3*3, 32)
         self.fc2 = nn.Linear(32, 8)
         self.fc3 = nn.Linear(8, 1)
 
@@ -124,7 +128,7 @@ class V_Net(nn.Module):
         out1 = self.pool1(F.relu(self.conv1(S)))
         out2 = self.pool2(F.relu(self.conv2(out1)))
         out3 = self.pool3(F.relu(self.conv3(out2)))
-        out4 = out3.view(-1, 4*3*3)
+        out4 = out3.view(-1, 2*3*3)
 
         out5 = F.relu(self.fc1(out4))
         out6 = F.relu(self.fc2(out5))
@@ -158,11 +162,12 @@ class COMA_withV:
         self.V_net_loff_fn = torch.nn.MSELoss()
 
 
-    def get_acction(self, obs, clients, train_flag):        
+    def get_acction(self, position, obs, clients, train_flag):        
        
         obs_tensor = torch.FloatTensor(obs).to(self.device)
+        position_tensor = torch.FloatTensor(position).to(self.device).view(-1, 81*81)
 
-        pi = self.actor.get_action(obs_tensor)
+        pi = self.actor.get_action(obs_tensor, position_tensor)
 
         if train_flag:
             actions = []
@@ -188,7 +193,7 @@ class COMA_withV:
         self.V_net.load_state_dict(torch.load('./model_parameter/v_net_weight.pth'))
 
 
-    def train(self, obs, actions, pi, reward, next_obs):
+    def train(self, position, obs, actions, pi, reward, next_position, next_obs):
        
         # 行動のtensor化
         actions_onehot = torch.zeros(self.num_agent*self.N_action, device=self.device)
@@ -200,13 +205,18 @@ class COMA_withV:
         
         # 経験再生用バッファへの追加
         obs_tensor = torch.FloatTensor(obs).to(self.device)
+        position_tensor = torch.FloatTensor(position).to(self.device).view(-1, 81*81)
         next_obs_tensor = torch.FloatTensor(next_obs).to(self.device)
+        next_position_tensor = torch.FloatTensor(next_position).to(self.device).view(-1, 81*81)
+
         for i in range(self.num_agent):
             if actions[i] != -1:
-                state = obs_tensor[i][1:]
-                next_state = next_obs_tensor[i][1:]
+                state = obs_tensor
+                posi = position_tensor
+                next_state = next_obs_tensor
+                next_posi = next_position_tensor
 
-                self.replay_buffer.add(i, state, actions[i], actions_onehot, reward, next_state)
+                self.replay_buffer.add(i, state, posi, actions[i], actions_onehot, reward, next_state, next_posi)
 
         if len(self.replay_buffer) < self.buffer_size:
             return
@@ -216,7 +226,7 @@ class COMA_withV:
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
         V_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
 
-        id_exp, obs_exp, action_number_exp, actions_exp, reward_exp, next_obs_exp = self.replay_buffer.get_batch()
+        id_exp, obs_exp, position_exp, actions_exp, action_number_exp, reward_exp, next_obs_exp, next_position_exp = self.replay_buffer.get_batch()
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
 
