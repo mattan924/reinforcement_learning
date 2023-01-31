@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import random
+import math
 
 
 class ReplayBuffer:
@@ -45,27 +46,43 @@ class Actor(nn.Module):
     def __init__(self, N_action):
         super(Actor, self).__init__()
         self.N_action = N_action
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=4, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(3)
-        self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
         self.pool2 = nn.MaxPool2d(3)
-        self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
-        self.pool3 = nn.MaxPool2d(3)
-        self.fc1 = nn.Linear(2*3*3 + 81*81, 512)
-        self.fc2 = nn.Linear(512, 64)
-        self.fc3 = nn.Linear(64, self.N_action)
+
+        self.conv_p1 = nn.Conv2d(in_channels=1, out_channels=2 , kernel_size=3, padding=1)
+        self.pool_p1 = nn.MaxPool2d(3)
+        self.conv_p2 = nn.Conv2d(in_channels=2, out_channels=2, kernel_size=3, padding=1)
+        self.pool_p2 = nn.MaxPool2d(3)
+
+        self.fc1 = nn.Linear(2*9*9, 3*3)
+        self.fc2 = nn.Linear(2*9*9, 3*3)
+        self.fc3 = nn.Linear(9 + 9, 18)
+        self.fc4 = nn.Linear(18, self.N_action)
     
 
     def get_action(self, obs, position):
         out1 = self.pool1(torch.tanh(self.conv1(obs)))
         out2 = self.pool2(F.relu(self.conv2(out1)))
-        out3 = self.pool3(F.relu(self.conv3(out2)))
-        out4 = out3.view(-1, 2*3*3)
-        out5 = torch.cat([out4, position], dim=1)
-        out6 = F.relu((self.fc1(out5)))
-        out7 = F.softmax(self.fc2(out6), dim=1)
+        out3 = out2.view(-1, 2*9*9)
+        out4 = F.relu(self.fc1(out3))
 
-        return out7
+        out_p1 = self.pool_p1(torch.tanh(self.conv_p1(position)))
+        out_p2 = self.pool_p2(F.relu(self.conv_p2(out_p1)))
+        out_p3 = out_p2.view(-1, 2*9*9)
+        out_p4 = F.relu(self.fc2(out_p3))
+
+        #print(f"out4 = {out4[0]}")
+        
+        print(f"out_p4  = {out_p4[0]}")
+        out5 = torch.cat([out4, out_p4], dim=1)
+        out6 = F.relu(self.fc3(out5))
+        out7 = self.fc4(out6)
+        #print(f"out7 = {out7[0]}")
+        out8 = F.softmax(out7, dim=1)
+
+        return out8
 
 
 class Critic(nn.Module):
@@ -137,7 +154,6 @@ class V_Net(nn.Module):
         return out7
 
 
-# バッチ処理未対応
 class COMA_withV:
     
     def __init__(self, N_action, num_agent, buffer_size, batch_size, device):
@@ -162,29 +178,55 @@ class COMA_withV:
         self.V_net_loff_fn = torch.nn.MSELoss()
 
 
-    def get_acction(self, position, obs, clients, train_flag):        
-       
-        obs_tensor = torch.FloatTensor(obs).to(self.device)
-        position_tensor = torch.FloatTensor(position).to(self.device).view(-1, 81*81)
+    def get_acction(self, position, obs, env, train_flag, pretrain_flag):        
+        obs_tensor = torch.FloatTensor(obs).unsqueeze(0)
+        for i in range(1, self.num_agent):
+            obs_tensor = torch.cat([obs_tensor, torch.FloatTensor(obs).unsqueeze(0)], dim=0)
+
+        obs_tensor = obs_tensor.to(self.device)
+
+        position_tensor = torch.FloatTensor(position).to(self.device)
+        position_tensor = position_tensor.unsqueeze(1)
 
         pi = self.actor.get_action(obs_tensor, position_tensor)
 
         if train_flag:
+            clients = env.clients
             actions = []
-            for i in range(self.num_agent):
-                client = clients[i]
-                if client.pub_topic[0] == 1:
-                    actions.append(Categorical(pi[i]).sample().item())
-                else:
-                    actions.append(-1)
+            if pretrain_flag:
+                edges = env.all_edge
+
+                for i in range(self.num_agent):
+                    client = clients[i]
+                    min_idx = 0
+                    min_distance = 100000000
+                    if client.pub_topic[0] == 1:
+                        for j in range(len(edges)):
+                            edge = edges[j]
+                            distance = math.sqrt(pow(client.x - edge.x, 2) + pow(client.y - edge.y, 2))
+                            if distance < min_distance:
+                                min_distance = distance
+                                min_idx = j
+                        
+                        actions.append(min_idx)
+                    else:
+                        actions.append(-1)
+
+            else:
+                for i in range(self.num_agent):
+                    client = clients[i]
+                    if client.pub_topic[0] == 1:
+                        actions.append(Categorical(pi[i]).sample().item())
+                    else:
+                        actions.append(-1)
         
         return actions, pi
 
     
     def save_model(self):
-        torch.save(self.actor.state_dict(), './model_parameter/actor_weight0123.pth')
-        torch.save(self.critic.state_dict(), './model_parameter/critic_weight0123.pth')
-        torch.save(self.V_net.state_dict(), './model_parameter/v_net_weight0123.pth')
+        torch.save(self.actor.state_dict(), './model_parameter/actor_weight0131.pth')
+        torch.save(self.critic.state_dict(), './model_parameter/critic_weight0131.pth')
+        torch.save(self.V_net.state_dict(), './model_parameter/v_net_weight0131.pth')
 
 
     def load_model(self):
@@ -216,13 +258,13 @@ class COMA_withV:
                 next_state = next_obs_tensor
                 next_posi = next_position_tensor
 
-                self.replay_buffer.add(i, state, posi, actions[i], actions_onehot, reward, next_state, next_posi)
+                self.replay_buffer.add(i, state, posi, actions_onehot, actions, reward, next_state, next_posi)
 
         if len(self.replay_buffer) < self.buffer_size:
             return
 
         # オプティマイザーの設定
-        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-2)
+        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
         V_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
 
@@ -235,6 +277,8 @@ class COMA_withV:
 
         V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
 
+        print(f"V_net_loss = {V_net_loss}")
+
         V_net_optimizer.zero_grad()
         V_net_loss.backward(retain_graph=True)
         V_net_optimizer.step()
@@ -245,6 +289,8 @@ class COMA_withV:
         # critic ネットワークの更新
         critic_loss = self.critic_loss_fn(V_target.detach(), Q)
 
+        print(f"critic_loss = {critic_loss}")
+
         critic_optimizer.zero_grad()
         critic_loss.backward(retain_graph=True)
         critic_optimizer.step()
@@ -252,11 +298,11 @@ class COMA_withV:
         actor_loss = torch.FloatTensor([0.0])
         actor_loss = actor_loss.to(self.device)
 
-        critic_obs = obs_tensor[0][1:].unsqueeze(0)
+        critic_obs = obs_tensor.unsqueeze(0)
         critic_action = actions_onehot.unsqueeze(0)
 
         for i in range(1, self.num_agent):
-            critic_obs = torch.cat([critic_obs, obs_tensor[i][1:].unsqueeze(0)], dim=0)
+            critic_obs = torch.cat([critic_obs, obs_tensor.unsqueeze(0)], dim=0)
             critic_action = torch.cat([critic_action, actions_onehot.unsqueeze(0)], dim=0)
         
         Q2 = self.critic.get_value(critic_obs, critic_action)

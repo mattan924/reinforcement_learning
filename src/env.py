@@ -173,7 +173,7 @@ class Env:
             if block_index_y == obs_size:
                 block_index_y = obs_size-1
 
-            distribution[block_index_x][block_index_y] += 1
+            distribution[block_index_y][block_index_x] += 1
         
         obs[0] = distribution
 
@@ -183,14 +183,14 @@ class Env:
             block_index_x = int(edge.x / block_len_x)
             block_index_y = int(edge.y / block_len_y)
 
-            storage_info[block_index_x][block_index_y] = edge.max_volume - edge.used_volume
-            cpu_info[block_index_x][block_index_y] = edge.cpu_power
+            storage_info[block_index_y][block_index_x] = edge.max_volume - edge.used_volume
+            cpu_info[block_index_y][block_index_x] = edge.cpu_power
 
         for i in range(self.num_client):
             obs[1] = storage_info
             obs[2] = cpu_info
 
-        position_info = np.zeros((self.num_client, obs_size, obs_channel))
+        position_info = np.zeros((self.num_client, obs_size, obs_size))
 
         for i in range(self.num_client):
             client = self.clients[i]
@@ -203,7 +203,7 @@ class Env:
             if block_index_y == obs_size:
                 block_index_y = obs_size-1
                 
-            position_info[i][block_index_x][block_index_y] = 1
+            position_info[i][block_index_y][block_index_x] = 100
 
         return position_info, obs
         
