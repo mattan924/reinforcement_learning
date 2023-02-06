@@ -64,27 +64,27 @@ class Actor(nn.Module):
 
     def get_action(self, obs, position):
         out1 = self.pool1(torch.tanh(self.conv1(obs)))
-        out2 = self.pool2(F.relu(self.conv2(out1)))
+        out2 = self.pool2(F.selu(self.conv2(out1)))
         out3 = out2.view(-1, 2*9*9)
-        out4 = F.relu(self.fc1(out3))
+        out4 = F.selu(self.fc1(out3))
 
         out_p1 = self.pool_p1(torch.tanh(self.conv_p1(position)))
         print(f"position = {position[0]}")
         print(f"out_p1_1 = {self.conv_p1(position)[0]}")
         print(f"out_p1_2 = {torch.tanh(self.conv_p1(position))[0]}")
         print(f"out_p1_3 = {out_p1[0]}")
-        out_p2 = self.pool_p2(F.relu(self.conv_p2(out_p1)))
+        out_p2 = self.pool_p2(F.selu(self.conv_p2(out_p1)))
         print(f"out_p2_1 = {self.conv_p2(out_p1)[0]}")
-        print(f"out_p2_2 = {F.relu(self.conv_p2(out_p1))[0]}")
+        print(f"out_p2_2 = {F.selu(self.conv_p2(out_p1))[0]}")
         print(f"out_p2_3 = {out_p2[0]}")
         out_p3 = out_p2.view(-1, 2*9*9)
         print(f"out_p3 = {out_p3[0]}")
-        out_p4 = F.relu(self.fc2(out_p3))
+        out_p4 = F.selu(self.fc2(out_p3))
         print(f"out_p4_1 = {self.fc2(out_p3)[0]}")
         print(f"out_p4_2 = {out_p4[0]}")
 
         out5 = torch.cat([out4, out_p4], dim=1)
-        out6 = F.relu(self.fc3(out5))
+        out6 = F.selu(self.fc3(out5))
         out7 = self.fc4(out6)
         out8 = F.softmax(out7, dim=1)
 
