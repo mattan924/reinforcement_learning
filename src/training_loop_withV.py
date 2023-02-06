@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
     env = Env(learning_data_index)
 
-    max_epi_itr = 30
+    max_epi_itr = 10
     N_action = 9
     buffer_size = 3000
     batch_size = 500

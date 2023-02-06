@@ -203,7 +203,7 @@ class Env:
             if block_index_y == obs_size:
                 block_index_y = obs_size-1
                 
-            position_info[i][block_index_y][block_index_x] = 100
+            position_info[i][block_index_y][block_index_x] = 1
 
         return position_info, obs
         
