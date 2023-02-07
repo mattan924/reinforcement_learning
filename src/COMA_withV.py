@@ -46,49 +46,44 @@ class Actor(nn.Module):
     def __init__(self, N_action):
         super(Actor, self).__init__()
         self.N_action = N_action
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=4, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv1.bias)
         self.pool1 = nn.MaxPool2d(3)
-        self.conv2 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=3, out_channels=1, kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv2.bias)
         self.pool2 = nn.MaxPool2d(3)
 
         self.conv_p1 = nn.Conv2d(in_channels=1, out_channels=2 , kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv_p1.bias)
         self.pool_p1 = nn.MaxPool2d(3)
-        self.conv_p2 = nn.Conv2d(in_channels=2, out_channels=2, kernel_size=3, padding=1)
+        self.conv_p2 = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv_p2.bias)
         self.pool_p2 = nn.MaxPool2d(3)
 
-        self.fc1 = nn.Linear(2*9*9, 3*3)
-        self.fc2 = nn.Linear(2*9*9, 3*3)
-        self.fc3 = nn.Linear(9 + 9, 18)
-        self.fc4 = nn.Linear(18, self.N_action)
+        self.fc1 = nn.Linear(9*9, 3*3)
+        nn.init.zeros_(self.fc1.bias)
+        self.fc2 = nn.Linear(9*9, 3*3)
+        nn.init.zeros_(self.fc2.bias)
+        self.fc3 = nn.Linear(9 + 9, self.N_action)
+        nn.init.zeros_(self.fc3.bias)
     
 
     def get_action(self, obs, position):
         out1 = self.pool1(torch.tanh(self.conv1(obs)))
         out2 = self.pool2(F.selu(self.conv2(out1)))
-        out3 = out2.view(-1, 2*9*9)
+        out3 = out2.view(-1, 9*9)
         out4 = F.selu(self.fc1(out3))
 
-        out_p1 = self.pool_p1(torch.tanh(self.conv_p1(position)))
-        print(f"position = {position[0]}")
-        print(f"out_p1_1 = {self.conv_p1(position)[0]}")
-        print(f"out_p1_2 = {torch.tanh(self.conv_p1(position))[0]}")
-        print(f"out_p1_3 = {out_p1[0]}")
+        out_p1 = self.pool_p1(F.selu(self.conv_p1(position)))
         out_p2 = self.pool_p2(F.selu(self.conv_p2(out_p1)))
-        print(f"out_p2_1 = {self.conv_p2(out_p1)[0]}")
-        print(f"out_p2_2 = {F.selu(self.conv_p2(out_p1))[0]}")
-        print(f"out_p2_3 = {out_p2[0]}")
-        out_p3 = out_p2.view(-1, 2*9*9)
-        print(f"out_p3 = {out_p3[0]}")
+        out_p3 = out_p2.view(-1, 9*9)
         out_p4 = F.selu(self.fc2(out_p3))
-        print(f"out_p4_1 = {self.fc2(out_p3)[0]}")
-        print(f"out_p4_2 = {out_p4[0]}")
 
         out5 = torch.cat([out4, out_p4], dim=1)
         out6 = F.selu(self.fc3(out5))
-        out7 = self.fc4(out6)
-        out8 = F.softmax(out7, dim=1)
-
-        return out8
+        out7 = F.softmax(out6, dim=1)
+        
+        return out7
 
 
 class Critic(nn.Module):
@@ -229,16 +224,16 @@ class COMA_withV:
         return actions, pi
 
     
-    def save_model(self):
-        torch.save(self.actor.state_dict(), './model_parameter/actor_weight0131.pth')
-        torch.save(self.critic.state_dict(), './model_parameter/critic_weight0131.pth')
-        torch.save(self.V_net.state_dict(), './model_parameter/v_net_weight0131.pth')
+    def save_model(self, dir_path, date, iter):
+        torch.save(self.actor.state_dict(), dir_path + 'actor_weight' + date + '_' + str(iter) + '.pth')
+        torch.save(self.critic.state_dict(), dir_path + 'critic_weight' + date + '_' + str(iter) + '.pth')
+        torch.save(self.V_net.state_dict(), dir_path + 'v_net_weight' + date + '_' + str(iter) + '.pth')
 
 
-    def load_model(self):
-        self.actor.load_state_dict(torch.load('./model_parameter/actor_weight.pth'))
-        self.critic.load_state_dict(torch.load('./model_parameter/critic_weight.pth'))
-        self.V_net.load_state_dict(torch.load('./model_parameter/v_net_weight.pth'))
+    def load_model(self, dir_path, date, iter):
+        self.actor.load_state_dict(torch.load(dir_path + 'actor_weight' + date + '_' + str(iter) + '.pth'))
+        self.critic.load_state_dict(torch.load(dir_path + 'critic_weight' + date + '_' + str(iter) + '.pth'))
+        self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + date + '_' + str(iter) + '.pth'))
 
 
     def train(self, position, obs, actions, pi, reward, next_position, next_obs):

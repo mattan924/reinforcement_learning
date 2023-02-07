@@ -2,6 +2,7 @@ from env import Env
 from COMA_withV import COMA_withV
 import matplotlib.pyplot as plt
 import time as time_modu
+import datetime
 
 if __name__ == '__main__':
     start_time = time_modu.time()
@@ -21,6 +22,7 @@ if __name__ == '__main__':
     with open(pi_dist_file, "w") as f:
         pass
 
+    """
     with open(actor_file, 'w') as f:
         pass
 
@@ -38,28 +40,33 @@ if __name__ == '__main__':
 
     with open(v_net_grad_file, 'w') as f:
         pass
+    """
 
     env = Env(learning_data_index)
 
-    max_epi_itr = 10
+    max_epi_itr = 100
     N_action = 9
     buffer_size = 3000
     batch_size = 500
     device = 'cuda'
     train_flag = True
-    pretrain_flag = True
+    pretrain_flag = False
     load_flag = False
+    pre_train_iter = 10
+    backup_iter = 10
+
+    dt_now = datetime.datetime.now()
+    date = dt_now.strftime('%m%d')
 
     agent = COMA_withV(N_action, env.num_client, buffer_size, batch_size, device)
-
-    if load_flag:
-        agent.load_model()
 
     reward_history = []
     train_curve = []
 
     # 学習ループ
     for epi_iter in range(max_epi_itr):
+        if load_flag and epi_iter % backup_iter == 1:
+            agent.load_model('./model_parameter/', date, epi_iter-1)
         
         # 環境のリセット
         env.reset()
@@ -71,6 +78,11 @@ if __name__ == '__main__':
         for time in range(0, env.simulation_time, env.time_step):
 
             # 行動
+            if epi_iter % pre_train_iter == 0 and epi_iter < 1000:
+                pretrain_flag = True
+            else:
+                pretrain_flag = False
+
             actions, pi = agent.get_acction(position, obs, env, train_flag, pretrain_flag)
 
             # 報酬の受け取り
@@ -98,6 +110,7 @@ if __name__ == '__main__':
                 for i in range(10):
                     f.write(f"agent {i} pi = {pi[i]}\n")
 
+            """
             with open(actor_grad_file, 'a') as f:
                 f.write(f"===========================================================\n")
                 f.write(f"iter = {epi_iter}\n")
@@ -133,8 +146,14 @@ if __name__ == '__main__':
                 f.write(f"iter = {epi_iter}\n")
                 for para in agent.V_net.parameters():
                     f.write(f"{para}\n")
+            """
 
-            train_curve.append(-sum(reward_history))
+            if epi_iter % pre_train_iter != 0:
+                train_curve.append(-sum(reward_history))
+
+        if epi_iter % backup_iter == 0:
+            agent.save_model('./model_parameter/', date, epi_iter)
+            load_flag = True
 
     end_time = time_modu.time()
 
@@ -145,5 +164,3 @@ if __name__ == '__main__':
 
     plt.plot(train_curve, linewidth=1, label='COMA')
     plt.savefig("../result/result.png")
-
-    agent.save_model()
