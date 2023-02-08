@@ -3,6 +3,7 @@ from COMA_withV import COMA_withV
 import matplotlib.pyplot as plt
 import time as time_modu
 import datetime
+import sys
 
 if __name__ == '__main__':
     start_time = time_modu.time()
@@ -15,6 +16,8 @@ if __name__ == '__main__':
     actor_file = "./model_parameter/actor.log"
     critic_file = "./model_parameter/critic.log"
     v_net_file = "./model_parameter/v_net.log"
+
+    sys.stderr = open('../result/err.log', 'w')
 
     with open(log_file, 'w') as f:
         pass
@@ -44,7 +47,7 @@ if __name__ == '__main__':
 
     env = Env(learning_data_index)
 
-    max_epi_itr = 100
+    max_epi_itr = 5000
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -52,8 +55,9 @@ if __name__ == '__main__':
     train_flag = True
     pretrain_flag = False
     load_flag = False
+    start_epi_itr = 0
     pre_train_iter = 10
-    backup_iter = 10
+    backup_iter = 1000
 
     dt_now = datetime.datetime.now()
     date = dt_now.strftime('%m%d')
@@ -64,7 +68,7 @@ if __name__ == '__main__':
     train_curve = []
 
     # 学習ループ
-    for epi_iter in range(max_epi_itr):
+    for epi_iter in range(start_epi_itr, max_epi_itr):
         if load_flag and epi_iter % backup_iter == 1:
             agent.load_model('./model_parameter/', date, epi_iter-1)
         
@@ -164,3 +168,7 @@ if __name__ == '__main__':
 
     plt.plot(train_curve, linewidth=1, label='COMA')
     plt.savefig("../result/result.png")
+
+    agent.save_model('./model_parameter/', date, epi_iter+1)
+
+    sys.stderr = sys.__stderr__

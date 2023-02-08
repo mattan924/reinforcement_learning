@@ -69,7 +69,7 @@ class Actor(nn.Module):
     
 
     def get_action(self, obs, position):
-        out1 = self.pool1(torch.tanh(self.conv1(obs)))
+        out1 = self.pool1(F.selu(self.conv1(obs)))
         out2 = self.pool2(F.selu(self.conv2(out1)))
         out3 = out2.view(-1, 9*9)
         out4 = F.selu(self.fc1(out3))
@@ -109,18 +109,18 @@ class Critic(nn.Module):
         
 
     def get_value(self, S, A):
-        out1_s = self.pool1(F.relu(self.conv1(S)))
-        out2_s = self.pool2(F.relu(self.conv2(out1_s)))
-        out3_s = self.pool3(F.relu(self.conv3(out2_s)))
+        out1_s = self.pool1(F.selu(self.conv1(S)))
+        out2_s = self.pool2(F.selu(self.conv2(out1_s)))
+        out3_s = self.pool3(F.selu(self.conv3(out2_s)))
         out4_s = out3_s.view(-1, 2*3*3)
         
-        out1_a = F.relu(self.fc1(A))
-        out2_a = F.relu(self.fc2(out1_a))
-        out3_a = F.relu(self.fc3(out2_a))
+        out1_a = F.selu(self.fc1(A))
+        out2_a = F.selu(self.fc2(out1_a))
+        out3_a = F.selu(self.fc3(out2_a))
 
         out4 = torch.cat([out4_s, out3_a], 1)
-        out5 = F.relu(self.fc4(out4))
-        out6 = F.relu(self.fc5(out5))
+        out5 = F.selu(self.fc4(out4))
+        out6 = F.selu(self.fc5(out5))
         out7 = self.fc6(out6)
 
         return out7
@@ -143,13 +143,13 @@ class V_Net(nn.Module):
 
 
     def get_value(self, S):
-        out1 = self.pool1(F.relu(self.conv1(S)))
-        out2 = self.pool2(F.relu(self.conv2(out1)))
-        out3 = self.pool3(F.relu(self.conv3(out2)))
+        out1 = self.pool1(F.selu(self.conv1(S)))
+        out2 = self.pool2(F.selu(self.conv2(out1)))
+        out3 = self.pool3(F.selu(self.conv3(out2)))
         out4 = out3.view(-1, 2*3*3)
 
-        out5 = F.relu(self.fc1(out4))
-        out6 = F.relu(self.fc2(out5))
+        out5 = F.selu(self.fc1(out4))
+        out6 = F.selu(self.fc2(out5))
         out7 = self.fc3(out6)
 
         return out7
@@ -273,7 +273,7 @@ class COMA_withV:
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
 
-        V_target = reward_exp + self.gamma*self.V_net.get_value(next_obs_exp)
+        V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp)
         V = self.V_net.get_value(obs_exp)
 
         V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
@@ -332,6 +332,8 @@ class COMA_withV:
                 cnt += 1
 
         actor_loss = - actor_loss / cnt
+        actor_loss = actor_loss + 1e-16
+        print(f"actor_loss = {actor_loss.item()}")
 
         actor_optimizer.zero_grad()
         actor_loss.backward()

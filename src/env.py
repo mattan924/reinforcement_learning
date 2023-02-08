@@ -183,8 +183,8 @@ class Env:
             block_index_x = int(edge.x / block_len_x)
             block_index_y = int(edge.y / block_len_y)
 
-            storage_info[block_index_y][block_index_x] = edge.max_volume - edge.used_volume
-            cpu_info[block_index_y][block_index_x] = edge.cpu_power
+            storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.used_volume) / 1e5
+            cpu_info[block_index_y][block_index_x] = edge.cpu_power / 1e8
 
         for i in range(self.num_client):
             obs[1] = storage_info
@@ -232,7 +232,13 @@ class Env:
             if block_index_y == 3:
                 block_index_y = 2
 
-            subscriber.sub_edge[0] = block_index_x*3+block_index_y
+            subscriber.sub_edge[0] = block_index_y*3+block_index_x
+
+        for edge in self.all_edge:
+            edge.used_volume = 0
+            for i in range(self.num_topic):
+                if len(edge.used_publishers[i]) > 0:
+                    edge.used_volume += self.all_topic[i].volume
             
         # 報酬の計算
         reward = self.cal_reward()
