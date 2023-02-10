@@ -184,7 +184,7 @@ class Env:
             block_index_y = int(edge.y / block_len_y)
 
             storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.used_volume) / 1e5
-            cpu_info[block_index_y][block_index_x] = edge.cpu_power / 1e8
+            cpu_info[block_index_y][block_index_x] = edge.power_allocation[0] / 1e8
 
         for i in range(self.num_client):
             obs[1] = storage_info
@@ -236,9 +236,18 @@ class Env:
 
         for edge in self.all_edge:
             edge.used_volume = 0
+            tmp = 0
+
             for i in range(self.num_topic):
                 if len(edge.used_publishers[i]) > 0:
                     edge.used_volume += self.all_topic[i].volume
+                    tmp += 1
+                
+            for i in range(self.num_topic):
+                if tmp != 0:
+                    edge.power_allocation[i] = (edge.cpu_power / tmp) / len(edge.used_publishers[i])
+                else:
+                    edge.power_allocation[i] = edge.cpu_power
             
         # 報酬の計算
         reward = self.cal_reward()
@@ -272,8 +281,11 @@ class Env:
         reward = 0
         for publisher in self.publishers[0]:
             for subscriber in self.subscribers[0]:
-                reward = reward + self.cal_delay(publisher, subscriber)
-
+                delay, compute_time = self.cal_delay(publisher, subscriber)
+                reward = reward + delay
+        
+        print(f"(delay, compute_time) = ({delay}, {compute_time})")
+        
         return reward
 
 
@@ -284,18 +296,19 @@ class Env:
         delay = 0
 
         delay += 0.1*self.cal_distance(publisher.x, publisher.y, pub_edge.x, pub_edge.y)
-        delay += self.cal_compute_time(pub_edge)
+        compute_time = self.cal_compute_time(pub_edge)
+        delay += compute_time
         delay += 0.1*self.cal_distance(pub_edge.x, pub_edge.y, sub_edge.x, sub_edge.y)
         delay += 0.1*self.cal_distance(sub_edge.x, sub_edge.y, subscriber.x, subscriber.y)
 
-        return delay
+        return delay, compute_time
 
     
     # 1topic用
     def cal_compute_time(self, edge):
         topic = self.all_topic[0]
 
-        delay = (topic.require_cycle*(topic.volume / topic.data_size)) / (edge.cpu_power / len(edge.used_publishers[0]))
+        delay = (topic.require_cycle*(topic.volume / topic.data_size)) / edge.power_allocation[0]
 
         return delay
     

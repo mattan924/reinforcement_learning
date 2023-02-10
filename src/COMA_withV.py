@@ -224,16 +224,16 @@ class COMA_withV:
         return actions, pi
 
     
-    def save_model(self, dir_path, date, iter):
-        torch.save(self.actor.state_dict(), dir_path + 'actor_weight' + date + '_' + str(iter) + '.pth')
-        torch.save(self.critic.state_dict(), dir_path + 'critic_weight' + date + '_' + str(iter) + '.pth')
-        torch.save(self.V_net.state_dict(), dir_path + 'v_net_weight' + date + '_' + str(iter) + '.pth')
+    def save_model(self, dir_path, iter):
+        torch.save(self.actor.state_dict(), dir_path + 'actor_weight' + '_' + str(iter) + '.pth')
+        torch.save(self.critic.state_dict(), dir_path + 'critic_weight' + '_' + str(iter) + '.pth')
+        torch.save(self.V_net.state_dict(), dir_path + 'v_net_weight' + '_' + str(iter) + '.pth')
 
 
-    def load_model(self, dir_path, date, iter):
-        self.actor.load_state_dict(torch.load(dir_path + 'actor_weight' + date + '_' + str(iter) + '.pth'))
-        self.critic.load_state_dict(torch.load(dir_path + 'critic_weight' + date + '_' + str(iter) + '.pth'))
-        self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + date + '_' + str(iter) + '.pth'))
+    def load_model(self, dir_path, iter):
+        self.actor.load_state_dict(torch.load(dir_path + 'actor_weight' + '_' + str(iter) + '.pth'))
+        self.critic.load_state_dict(torch.load(dir_path + 'critic_weight' + '_' + str(iter) + '.pth'))
+        self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
 
 
     def train(self, position, obs, actions, pi, reward, next_position, next_obs):
@@ -328,7 +328,7 @@ class COMA_withV:
         cnt = 0
         for i in range(self.num_agent):
             if actions[i] != -1:
-                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]])
+                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]] + 1e-16)
                 cnt += 1
 
         actor_loss = - actor_loss / cnt

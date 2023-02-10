@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import time as time_modu
 import datetime
 import sys
+import os
 
 if __name__ == '__main__':
     start_time = time_modu.time()
@@ -47,7 +48,7 @@ if __name__ == '__main__':
 
     env = Env(learning_data_index)
 
-    max_epi_itr = 5000
+    max_epi_itr = 4000
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -61,6 +62,9 @@ if __name__ == '__main__':
 
     dt_now = datetime.datetime.now()
     date = dt_now.strftime('%m%d')
+    result_dir = "../result/" + date
+
+    os.makedirs(result_dir + "/model_parameter")
 
     agent = COMA_withV(N_action, env.num_client, buffer_size, batch_size, device)
 
@@ -70,7 +74,7 @@ if __name__ == '__main__':
     # 学習ループ
     for epi_iter in range(start_epi_itr, max_epi_itr):
         if load_flag and epi_iter % backup_iter == 1:
-            agent.load_model('./model_parameter/', date, epi_iter-1)
+            agent.load_model(result_dir + "/model_parameter/", date, epi_iter-1)
         
         # 環境のリセット
         env.reset()
