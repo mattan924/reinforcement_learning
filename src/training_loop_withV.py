@@ -48,7 +48,7 @@ if __name__ == '__main__':
 
     env = Env(learning_data_index)
 
-    max_epi_itr = 4000
+    max_epi_itr = 5
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     load_flag = False
     start_epi_itr = 0
     pre_train_iter = 10
-    backup_iter = 1000
+    backup_iter = 1
 
     dt_now = datetime.datetime.now()
     date = dt_now.strftime('%m%d')
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     # 学習ループ
     for epi_iter in range(start_epi_itr, max_epi_itr):
         if load_flag and epi_iter % backup_iter == 1:
-            agent.load_model(result_dir + "/model_parameter/", date, epi_iter-1)
+            agent.load_model(result_dir + "/model_parameter/", epi_iter-1)
         
         # 環境のリセット
         env.reset()
@@ -160,7 +160,7 @@ if __name__ == '__main__':
                 train_curve.append(-sum(reward_history))
 
         if epi_iter % backup_iter == 0:
-            agent.save_model('./model_parameter/', date, epi_iter)
+            agent.save_model(result_dir + '/model_parameter/', epi_iter)
             load_flag = True
 
     end_time = time_modu.time()
@@ -171,8 +171,8 @@ if __name__ == '__main__':
         f.write(f"実行時間: {end_time-start_time}s\n")
 
     plt.plot(train_curve, linewidth=1, label='COMA')
-    plt.savefig("../result/result.png")
+    plt.savefig(result_dir)
 
-    agent.save_model('./model_parameter/', date, epi_iter+1)
+    agent.save_model(result_dir + '/model_parameter/', epi_iter+1)
 
     sys.stderr = sys.__stderr__
