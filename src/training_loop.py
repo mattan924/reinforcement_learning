@@ -2,57 +2,112 @@ from env import Env
 from COMA import COMA
 import matplotlib.pyplot as plt
 import time as time_modu
+import datetime
+import sys
+import os
 
 if __name__ == '__main__':
     start_time = time_modu.time()
+
+    dt_now = datetime.datetime.now()
+    date = dt_now.strftime('%m%d')
+    result_dir = "../result/" + date + "/"
+
+    if not os.path.isdir(result_dir + "model_parameter"):
+        sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
+
+    sys.stderr = open(result_dir + "err.log", 'w')
+
+    log_file = result_dir + "out.log"
     learning_data_index = "../dataset/learning_data/index/index.csv"
-    log_file = "out.log"
+    pi_dist_file = result_dir + "pi_dist.log"
+    actor_grad_file = "./model_parameter/actor_grad.log"
+    critic_grad_file = "./model_parameter/critic_grad.log"
+    v_net_grad_file = "./model_parameter/v_net_grad.log"
+    actor_file = "./model_parameter/actor.log"
+    critic_file = "./model_parameter/critic.log"
+    v_net_file = "./model_parameter/v_net.log"
+
     with open(log_file, 'w') as f:
         pass
 
+    with open(pi_dist_file, "w") as f:
+        pass
+
+    """
+    with open(actor_file, 'w') as f:
+        pass
+
+    with open(critic_file, 'w') as f:
+        pass
+
+    with open(v_net_file, 'w') as f:
+        pass
+
+    with open(actor_grad_file, 'w') as f:
+        pass
+
+    with open(critic_grad_file, 'w') as f:
+        pass
+
+    with open(v_net_grad_file, 'w') as f:
+        pass
+    """
+
     env = Env(learning_data_index)
 
-    max_epi_itr = 10000
+    max_epi_itr = 5
     N_action = 9
-    device = 'cpu'
+    buffer_size = 3000
+    batch_size = 500
+    device = 'cuda'
+    train_flag = True
+    pretrain_flag = False
+    load_flag = False
+    start_epi_itr = 0
+    pre_train_iter = 10
+    backup_iter = 100
 
-    agent = COMA(N_action, env.num_client, device)
+    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
 
+    reward_history = []
     train_curve = []
 
     # 学習ループ
-    for epi_iter in range(max_epi_itr):
+    for epi_iter in range(start_epi_itr, max_epi_itr):
+        if load_flag and epi_iter % backup_iter == 1:
+            agent.load_model(result_dir + "/model_parameter/", epi_iter-1)
+        
         # 環境のリセット
         env.reset()
+        position, obs = env.get_observation()
+        next_obs = None
 
-        obs_history = []
-        actions_history = []
-        pi_history = []
         reward_history = []
 
         for time in range(0, env.simulation_time, env.time_step):
-            # 状態の観測
-            start_getobs = time_modu.time()
-            obs = env.get_observation()
-            obs_history.append(obs)
-            end_getobs = time_modu.time()
 
             # 行動
-            start_getaction = time_modu.time()
-            actions, pi = agent.get_acction(obs, env.clients)
-            actions_history.append(actions)
-            pi_history.append(pi)
-            end_getaction = time_modu.time()
+            if epi_iter % pre_train_iter == 0 and epi_iter < 1000:
+                pretrain_flag = True
+            else:
+                pretrain_flag = False
+
+            actions, pi = agent.get_acction(position, obs, env, train_flag, pretrain_flag)
 
             # 報酬の受け取り
-            start_step = time_modu.time()
             reward = env.step(actions, time)
-            reward = -reward
             reward_history.append(reward)
-            end_step = time_modu.time()
+            reward = -reward
 
-        # 学習
-        agent.train(obs_history, actions_history, pi_history, reward_history)
+            # 状態の観測
+            next_position, next_obs = env.get_observation()
+
+            # 学習
+            agent.train(position, obs, actions, pi, reward, next_position, next_obs)
+
+            obs = next_obs
+            position = next_position
 
         if epi_iter % 1 == 0:
             print(f"total_reward = {sum(reward_history)}")
@@ -61,7 +116,54 @@ if __name__ == '__main__':
                 f.write(f"total_reward = {sum(reward_history)}\n")
                 f.write(f"train is {(epi_iter/max_epi_itr)*100}% complited.\n")
 
-            train_curve.append(-sum(reward_history))
+            with open(pi_dist_file, "a") as f:
+                for i in range(10):
+                    f.write(f"agent {i} pi = {pi[i]}\n")
+
+            """
+            with open(actor_grad_file, 'a') as f:
+                f.write(f"===========================================================\n")
+                f.write(f"iter = {epi_iter}\n")
+                for para in agent.actor.parameters():
+                    f.write(f"{para.grad}\n")
+
+            with open(critic_grad_file, 'a') as f:
+                f.write(f"===========================================================\n")
+                f.write(f"iter = {epi_iter}\n")
+                for para in agent.critic.parameters():
+                    f.write(f"{para.grad}\n")
+
+            with open(v_net_grad_file, 'a') as f:
+                f.write(f"===========================================================\n")
+                f.write(f"iter = {epi_iter}\n")
+                for para in agent.V_net.parameters():
+                    f.write(f"{para.grad}\n")
+
+            with open(actor_file, 'a') as f:
+                f.write(f"===========================================================\n")
+                f.write(f"iter = {epi_iter}\n")
+                for para in agent.actor.parameters():
+                    f.write(f"{para}\n")
+
+            with open(critic_file, 'a') as f:
+                f.write(f"===========================================================\n")
+                f.write(f"iter = {epi_iter}\n")
+                for para in agent.critic.parameters():
+                    f.write(f"{para}\n")
+
+            with open(v_net_file, 'a') as f:
+                f.write(f"===========================================================\n")
+                f.write(f"iter = {epi_iter}\n")
+                for para in agent.V_net.parameters():
+                    f.write(f"{para}\n")
+            """
+
+            if epi_iter % pre_train_iter != 0:
+                train_curve.append(-sum(reward_history))
+
+        if epi_iter % backup_iter == 0:
+            agent.save_model(result_dir + 'model_parameter/', epi_iter)
+            load_flag = True
 
     end_time = time_modu.time()
 
@@ -71,5 +173,8 @@ if __name__ == '__main__':
         f.write(f"実行時間: {end_time-start_time}s\n")
 
     plt.plot(train_curve, linewidth=1, label='COMA')
-    plt.savefig("result.png")
-    #plt.show()
+    plt.savefig(result_dir + "reward_history.png")
+
+    agent.save_model(result_dir + 'model_parameter/', epi_iter+1)
+
+    sys.stderr = sys.__stderr__

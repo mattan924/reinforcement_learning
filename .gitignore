@@ -129,5 +129,4 @@ dmypy.json
 .pyre/
 
 # my-ignore
-/src/model_parameter/
 /result/
