@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     env = Env(learning_data_index)
 
-    max_epi_itr = 5
+    max_epi_itr = 15000
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     load_flag = False
     start_epi_itr = 0
     pre_train_iter = 10
-    backup_iter = 100
+    backup_iter = 1000
 
     agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
 
@@ -80,7 +80,7 @@ if __name__ == '__main__':
         
         # 環境のリセット
         env.reset()
-        position, obs = env.get_observation()
+        obs = env.get_observation()
         next_obs = None
 
         reward_history = []
@@ -88,12 +88,12 @@ if __name__ == '__main__':
         for time in range(0, env.simulation_time, env.time_step):
 
             # 行動
-            if epi_iter % pre_train_iter == 0 and epi_iter < 1000:
+            if epi_iter % pre_train_iter == 0:
                 pretrain_flag = True
             else:
                 pretrain_flag = False
 
-            actions, pi = agent.get_acction(position, obs, env, train_flag, pretrain_flag)
+            actions, pi = agent.get_acction(obs, env, train_flag, pretrain_flag)
 
             # 報酬の受け取り
             reward = env.step(actions, time)
@@ -101,13 +101,12 @@ if __name__ == '__main__':
             reward = -reward
 
             # 状態の観測
-            next_position, next_obs = env.get_observation()
+            next_obs = env.get_observation()
 
             # 学習
-            agent.train(position, obs, actions, pi, reward, next_position, next_obs)
+            agent.train(obs, actions, pi, reward, next_obs)
 
             obs = next_obs
-            position = next_position
 
         if epi_iter % 1 == 0:
             print(f"total_reward = {sum(reward_history)}")
