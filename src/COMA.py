@@ -18,8 +18,8 @@ class ReplayBuffer:
         self.device = device
 
     
-    def add(self, id, state, posi, actions, action_number, reward, next_state, next_posi):
-        data = (id, state, posi, actions, action_number, reward, next_state, next_posi)
+    def add(self, id, state, actions, action_number, reward, next_state):
+        data = (id, state,  actions, action_number, reward, next_state)
         self.buffer.append(data)
 
     
@@ -32,58 +32,40 @@ class ReplayBuffer:
 
         id = np.stack([x[0] for x in data])
         state = torch.cat([x[1].unsqueeze(0) for x in data], dim=0)
-        posi = torch.cat([x[2].unsqueeze(0) for x in data], dim=0)
-        actions = torch.cat([x[3].unsqueeze(0) for x in data], dim=0)
-        action_number = np.stack([x[4] for x in data])
-        reward = np.stack([x[5] for x in data])
-        next_state = torch.cat([x[6].unsqueeze(0) for x in data], dim=0)
-        next_posi = torch.cat([x[7].unsqueeze(0) for x in data], dim=0)
+        actions = torch.cat([x[2].unsqueeze(0) for x in data], dim=0)
+        action_number = np.stack([x[3] for x in data])
+        reward = np.stack([x[4] for x in data])
+        next_state = torch.cat([x[5].unsqueeze(0) for x in data], dim=0)
 
-        return id, state, posi, actions, action_number, reward, next_state, next_posi
+        return id, state, actions, action_number, reward, next_state
 
 class Actor(nn.Module):
     
     def __init__(self, N_action):
         super(Actor, self).__init__()
         self.N_action = N_action
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=4, out_channels=4, kernel_size=3, padding=1)
         nn.init.zeros_(self.conv1.bias)
         self.pool1 = nn.MaxPool2d(3)
-        self.conv2 = nn.Conv2d(in_channels=3, out_channels=1, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=4, out_channels=1, kernel_size=3, padding=1)
         nn.init.zeros_(self.conv2.bias)
         self.pool2 = nn.MaxPool2d(3)
 
-        self.conv_p1 = nn.Conv2d(in_channels=1, out_channels=2 , kernel_size=3, padding=1)
-        nn.init.zeros_(self.conv_p1.bias)
-        self.pool_p1 = nn.MaxPool2d(3)
-        self.conv_p2 = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=3, padding=1)
-        nn.init.zeros_(self.conv_p2.bias)
-        self.pool_p2 = nn.MaxPool2d(3)
-
-        self.fc1 = nn.Linear(9*9, 3*3)
+        self.fc1 = nn.Linear(9*9, 9)
         nn.init.zeros_(self.fc1.bias)
-        self.fc2 = nn.Linear(9*9, 3*3)
+        self.fc2 = nn.Linear(9, self.N_action)
         nn.init.zeros_(self.fc2.bias)
-        self.fc3 = nn.Linear(9 + 9, self.N_action)
-        nn.init.zeros_(self.fc3.bias)
     
 
-    def get_action(self, obs, position):
+    def get_action(self, obs):
         out1 = self.pool1(F.selu(self.conv1(obs)))
         out2 = self.pool2(F.selu(self.conv2(out1)))
         out3 = out2.view(-1, 9*9)
         out4 = F.selu(self.fc1(out3))
-
-        out_p1 = self.pool_p1(F.selu(self.conv_p1(position)))
-        out_p2 = self.pool_p2(F.selu(self.conv_p2(out_p1)))
-        out_p3 = out_p2.view(-1, 9*9)
-        out_p4 = F.selu(self.fc2(out_p3))
-
-        out5 = torch.cat([out4, out_p4], dim=1)
-        out6 = F.selu(self.fc3(out5))
-        out7 = F.softmax(out6, dim=1)
+        out5 = self.fc2(out4)
+        out6 = F.softmax(out5, dim=1)
         
-        return out7
+        return out6
 
 
 class Critic(nn.Module):
@@ -179,17 +161,11 @@ class COMA:
         self.V_net_loff_fn = torch.nn.MSELoss()
 
 
-    def get_acction(self, position, obs, env, train_flag, pretrain_flag):        
-        obs_tensor = torch.FloatTensor(obs).unsqueeze(0)
-        for i in range(1, self.num_agent):
-            obs_tensor = torch.cat([obs_tensor, torch.FloatTensor(obs).unsqueeze(0)], dim=0)
-
+    def get_acction(self, obs, env, train_flag, pretrain_flag):        
+        obs_tensor = torch.FloatTensor(obs)
         obs_tensor = obs_tensor.to(self.device)
 
-        position_tensor = torch.FloatTensor(position).to(self.device)
-        position_tensor = position_tensor.unsqueeze(1)
-
-        pi = self.actor.get_action(obs_tensor, position_tensor)
+        pi = self.actor.get_action(obs_tensor)
 
         if train_flag:
             clients = env.clients
@@ -236,7 +212,7 @@ class COMA:
         self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
 
 
-    def train(self, position, obs, actions, pi, reward, next_position, next_obs):
+    def train(self, obs, actions, pi, reward, next_obs):
        
         # 行動のtensor化
         actions_onehot = torch.zeros(self.num_agent*self.N_action, device=self.device)
@@ -247,19 +223,15 @@ class COMA:
                 actions_onehot[i*self.N_action + action] = 1
         
         # 経験再生用バッファへの追加
-        obs_tensor = torch.FloatTensor(obs).to(self.device)
-        position_tensor = torch.FloatTensor(position).to(self.device).view(-1, 81*81)
-        next_obs_tensor = torch.FloatTensor(next_obs).to(self.device)
-        next_position_tensor = torch.FloatTensor(next_position).to(self.device).view(-1, 81*81)
+        obs_tensor = torch.FloatTensor(obs[0][1:]).to(self.device)
+        next_obs_tensor = torch.FloatTensor(next_obs[0][1:]).to(self.device)
 
         for i in range(self.num_agent):
             if actions[i] != -1:
                 state = obs_tensor
-                posi = position_tensor
                 next_state = next_obs_tensor
-                next_posi = next_position_tensor
 
-                self.replay_buffer.add(i, state, posi, actions_onehot, actions, reward, next_state, next_posi)
+                self.replay_buffer.add(i, state, actions_onehot, actions, reward, next_state)
 
         if len(self.replay_buffer) < self.buffer_size:
             return
@@ -269,7 +241,7 @@ class COMA:
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
         V_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
 
-        id_exp, obs_exp, position_exp, actions_exp, action_number_exp, reward_exp, next_obs_exp, next_position_exp = self.replay_buffer.get_batch()
+        id_exp, obs_exp, actions_exp, action_number_exp, reward_exp, next_obs_exp = self.replay_buffer.get_batch()
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
 

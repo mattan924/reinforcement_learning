@@ -155,9 +155,9 @@ class Env:
         
     # 状態の観測
     def get_observation(self):
-        obs_channel = 3
+        obs_channel = 4
         obs_size = 81
-        obs = np.zeros((obs_channel, obs_size, obs_size))
+        obs = np.zeros((self.num_client, obs_channel, obs_size, obs_size))
 
         block_len_x = (self.max_x-self.min_x)/obs_size
         block_len_y = (self.max_y-self.min_y)/obs_size
@@ -175,10 +175,9 @@ class Env:
 
             distribution[block_index_y][block_index_x] += 1
         
-        obs[0] = distribution
-
         storage_info = np.zeros((obs_size, obs_size))
         cpu_info = np.zeros((obs_size, obs_size))
+
         for edge in self.all_edge:
             block_index_x = int(edge.x / block_len_x)
             block_index_y = int(edge.y / block_len_y)
@@ -186,13 +185,9 @@ class Env:
             storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.used_volume) / 1e5
             cpu_info[block_index_y][block_index_x] = edge.power_allocation[0] / 1e8
 
-        for i in range(self.num_client):
-            obs[1] = storage_info
-            obs[2] = cpu_info
-
-        position_info = np.zeros((self.num_client, obs_size, obs_size))
 
         for i in range(self.num_client):
+            position_info = np.zeros((obs_size, obs_size))
             client = self.clients[i]
 
             block_index_x = int(client.x / block_len_x)
@@ -203,9 +198,13 @@ class Env:
             if block_index_y == obs_size:
                 block_index_y = obs_size-1
                 
-            position_info[i][block_index_y][block_index_x] = 100
+            position_info[block_index_y][block_index_x] = 100
+            obs[i][0] = position_info
+            obs[i][1] = distribution
+            obs[i][2] = storage_info
+            obs[i][3] = cpu_info
 
-        return position_info, obs
+        return obs
         
  
     # 環境を進める
@@ -284,7 +283,7 @@ class Env:
                 delay, compute_time = self.cal_delay(publisher, subscriber)
                 reward = reward + delay
         
-        print(f"(delay, compute_time) = ({delay}, {compute_time})")
+        #print(f"(delay, compute_time) = ({delay}, {compute_time})")
         
         return reward
 
