@@ -9,5 +9,7 @@ num_topic,1
 num_edge,9
 volume, 5000000
 cpu_power,3000000000
+cloud_time, 200
+cloud_cycle, 30000000000
 save_period,30
 speed,40

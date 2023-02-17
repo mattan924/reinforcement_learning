@@ -293,12 +293,13 @@ class Env:
         sub_edge = self.all_edge[int(subscriber.sub_edge[0])]
 
         delay = 0
+        gamma = 0.1
 
-        delay += 0.1*self.cal_distance(publisher.x, publisher.y, pub_edge.x, pub_edge.y)
+        delay += gamma*self.cal_distance(publisher.x, publisher.y, pub_edge.x, pub_edge.y)
         compute_time = self.cal_compute_time(pub_edge)
         delay += compute_time
-        delay += 0.1*self.cal_distance(pub_edge.x, pub_edge.y, sub_edge.x, sub_edge.y)
-        delay += 0.1*self.cal_distance(sub_edge.x, sub_edge.y, subscriber.x, subscriber.y)
+        delay += gamma*self.cal_distance(pub_edge.x, pub_edge.y, sub_edge.x, sub_edge.y)
+        delay += gamma*self.cal_distance(sub_edge.x, sub_edge.y, subscriber.x, subscriber.y)
 
         return delay, compute_time
 
@@ -313,4 +314,4 @@ class Env:
     
 
     def cal_distance(self, x1, y1, x2, y2):
-        return math.sqrt(pow(x1-x2, 2) + pow(y1-y2, 2))
+        return ((int)(math.sqrt(pow(x1-x2, 2) + pow(y1-y2, 2))*100) / 100)
