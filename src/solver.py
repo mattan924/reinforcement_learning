@@ -217,18 +217,12 @@ class Solver:
         num_user = {}
         for l in range(self.num_edge):
             num_user[l] = model.addVar(vtype=grb.GRB.CONTINUOUS, name=f"num_user({l})")
-
-        compute_time_front = {}
-        for m in range(self.num_client):
-            for n in p[m]:
-                for l in range(self.num_edge):
-                    compute_time_front[m, n, l] = model.addVar(vtype=grb.GRB.CONTINUOUS, name=f"compute_fime_front({m}, {n}, {l})")
         
-        compute_time_back = {}
+        compute_time = {}
         for m in range(self.num_client):
             for n in p[m]:
                 for l in range(self.num_edge):
-                    compute_time_back[m, n, l] = model.addVar(vtype=grb.GRB.CONTINUOUS, name=f"compute_fime_back({m}, {n}, {l})")
+                    compute_time[m, n, l] = model.addVar(vtype=grb.GRB.CONTINUOUS, name=f"compute_fime({m}, {n}, {l})")
         
         model.update()
 
@@ -261,12 +255,7 @@ class Solver:
         for m in range(self.num_client):
             for n in p[m]:
                 for l in range(self.num_edge):
-                    model.addConstr(compute_time_front[m, n, l] == x[m, n, l]*self.all_topic[n].require_cycle*num_data[n], name=f"compute_time_front({m}, {n}, {l})")
-        
-        for m in range(self.num_client):
-            for n in p[m]:
-                for l in range(self.num_edge):
-                    model.addConstr(compute_time_back[m, n, l] == v[m, n, l]*num_user[l] * self.all_edge[l].cpu_power_gain + ((1 - z[l, n])*x[m, n, l])*self.cloud_cycle_gain, name=f"compute_time_back({m}, {n}, {l})")
+                    model.addConstr(compute_time[m, n, l] == self.all_topic[n].require_cycle*num_data[n]*v[m, n, l]*num_user[l]*self.all_edge[l].cpu_power_gain + self.all_topic[n].require_cycle*num_data[n]*(1 - z[l, n])*x[m, n, l]*self.cloud_cycle_gain, name=f"compute_time({m}, {n}, {l})")
 
         model.update()
 
@@ -274,7 +263,7 @@ class Solver:
         obj = grb.LinExpr()
 
         obj += grb.quicksum(grb.quicksum(d[m][l]*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(compute_time_front[m, n, l]*compute_time_back[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum(compute_time[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
         obj += grb.quicksum(grb.quicksum(2*self.cloud_time*(1-z[l, n])*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
         obj += grb.quicksum(grb.quicksum(z[l, n]*d_s[l][l2]*w[m, n, m2, l ,l2] for l in range(self.num_edge) for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
         obj += grb.quicksum(grb.quicksum(d[m2][l2]*y[m2, l2] for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
@@ -309,7 +298,6 @@ class Solver:
                 for n in p[m]:
                     for l in range(self.num_edge):
                         x_opt[m][n][l] = opt.pop(0)
-                        print(f"x_opt({m},{n},{l}) = {x_opt[m][n][l]}")
             
             for m in range(self.num_client):
                 for l in range(self.num_edge):
@@ -318,7 +306,6 @@ class Solver:
             for l in range(self.num_edge):
                 for n in range(self.num_topic):
                     z_opt[l][n] = opt.pop(0)
-                    print(f"z_opt({l},{n}) = {z_opt[l][n]}")
             
             for m in range(self.num_client):
                 for n in p[m]:
@@ -333,35 +320,17 @@ class Solver:
                 for n in p[m]:
                     for l in range(self.num_edge):
                         v_opt[m][n][l] = opt.pop(0)
-                        print(f"v_opt({m},{n},{l}) = {v_opt[m][n][l]}")
             
             num_user = np.zeros(self.num_edge)
             for l in range(self.num_edge):
                 num_user[l] = opt.pop(0)
-                print(f"num_user({l}) = {num_user[l]}")
-
-            compute_time_front_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
+            
+            compute_time_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
             for m in range(self.num_client):
                 for n in p[m]:
                     for l in range(self.num_edge):
-                        compute_time_front_opt[m][n][l] = opt.pop(0)
-                        print(f"time_front_opt({m},{n},{l}) = {compute_time_front_opt[m][n][l]}")
-            
-            compute_time_back_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
-            for m in range(self.num_client):
-                for n in p[m]:
-                    for l in range(self.num_edge):
-                        compute_time_back_opt[m][n][l] = opt.pop(0)
-                        print(f"time_back_opt({m},{n},{l}) = {compute_time_back_opt[m][n][l]}")
-
-            print(f"x_opt(0,0,4) = {x_opt[0][0][4]}")
-            print(f"z_opt(4,0) = {z_opt[4][0]}")
-            print(f"v_opt(0,0,4) = {v_opt[0][0][4]}")
-            print(f"num_user(4) = {num_user[4]}")
-            print(f"time_front_opt(0,0,4) = {compute_time_front_opt[0][0][4]}")
-            print(f"time_back_opt(0,0,4) = {compute_time_back_opt[0][0][4]}")
-            
-
+                        compute_time_opt[m][n][l] = opt.pop(0)
+                        
             # 遅延を格納する変数
             delay = np.zeros((self.num_topic, self.num_client, self.num_client))
             num_user = np.zeros(self.num_edge)
@@ -397,7 +366,6 @@ def calmyModeltime(m, m2, n, x, y, z, d, d_s, num_user, all_topic, all_edge, clo
         if x[m][n][l] == 1:
             time_front = (x[m][n][l]*topic.require_cycle * num_data)
             time_back = (x[m][n][l]*z[l][n]*(num_user[l]/all_edge[l].cpu_power) + (1 - z[l][n])*x[m][n][l]/cloud_cycle)
-            #print(f"({m}, {n}) : time_front = {time_front}, time_back = {time_back}")
             time += time_front*time_back
 
     for l in range(len(all_edge)):

@@ -1,11 +1,11 @@
 from solver import Solver
 
 if __name__ == '__main__':
-    index_file = "../dataset/learning_data/index/index_debug.csv"
+    index_file = "../dataset/learning_data/index/index_test.csv"
 
     solver = Solver(index_file)
 
-    for time in range(0, 1, solver.time_step):
+    for time in range(0, solver.simulation_time, solver.time_step):
         d, d_s = solver.set_delay()
 
         if time != 0:
