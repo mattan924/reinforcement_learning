@@ -14,5 +14,5 @@ if __name__ == '__main__':
         p, s = solver.set_pub_sub()
             
         print("\n----------start solve----------\n")
-        solver.solve(time, d, d_s, p, s)
+        solver.solve_y_fix(time, d, d_s, p, s)
         print("\n----------end solve----------\n")
