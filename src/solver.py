@@ -28,7 +28,9 @@ class Edge:
         self.max_volume = volume
         self.used_volume = 0
         self.cpu_power = cpu_power
+        self.cpu_power_gain = 1/self.cpu_power
         self.power_allocation = np.zeros(num_topic)
+        self.power_gain = np.zeros(num_topic)
         self.used_publisers = [[] for _ in range(num_topic)]
 
 
@@ -82,6 +84,7 @@ class Solver:
         self.num_topic = parameter['num_topic']
         self.cloud_time = parameter['cloud_time']
         self.cloud_cycle = parameter['cloud_cycle']
+        self.cloud_cycle_gain = 1/self.cloud_cycle
 
         #  0.1 (ms/km)
         self.gamma = 0.1
@@ -101,18 +104,36 @@ class Solver:
         self.data_set = util.read_data_set_topic(self.data_file, self.num_topic)
 
         self.all_client = []
+        num_publisher = np.zeros(self.num_topic)
         for _ in range(self.num_client):
             c = self.data_set.pop(0)
             client = Client(c.id, c.x, c.y, c.pub_topic, c.sub_topic, self.num_topic)
             self.all_client.append(client)
+
+            for n in range(self.num_topic):
+                if client.pub_topic[n] == 1:
+                    num_publisher[n] += 1
+
+        for topic in self.all_topic:
+            topic.update_client(num_publisher[n], self.time_step)
+            topic.cal_volume(self.time_step)
     
 
     def update_client(self):
         self.all_client = []
+        num_publisher = np.zeros(self.num_topic)
         for _ in range(self.num_client):
             c = self.data_set.pop(0)
             client = Client(c.id, c.x, c.y, c.pub_topic, c.sub_topic, self.num_topic)
             self.all_client.append(client)
+
+            for n in range(self.num_topic):
+                if client.pub_topic[n] == 1:
+                    num_publisher[n] += 1
+
+        for topic in self.all_topic:
+            topic.update_client(num_publisher[n], self.time_step)
+            topic.cal_volume(self.time_step)
 
 
     def set_delay(self):
@@ -149,18 +170,23 @@ class Solver:
             for n in range(self.num_topic):
                 if self.all_client[m].sub_topic[n] == 1:
                     s[n].append(m)
-        
+                
         return p, s
 
 
-    def solve(self, d, d_s, p, s):
+    def solve(self, time, d, d_s, p, s):
+        num_data = np.zeros(self.num_topic)
+        for n in range(self.num_topic):
+            topic = self.all_topic[n]
+            num_data[n] = topic.volume/topic.data_size
+        
         #  最適化問題の定式化
-        model = grb.Model("model")
+        model = grb.Model("model_" + str(time))
 
         #  変数の定式化
         x = {}
         for m in range(self.num_client):
-            for n in self.p[m]:
+            for n in p[m]:
                 for l in range(self.num_edge):
                     x[m, n, l] = model.addVar(vtype=grb.GRB.BINARY, name=f"x({m}, {n}, {l})")
 
@@ -176,17 +202,39 @@ class Solver:
 
         w = {}
         for m in range(self.num_client):
-            for n in self.p[m]:
-                for m2 in self.s[n]:
+            for n in p[m]:
+                for m2 in s[n]:
                     for l in range(self.num_edge):
                         for l2 in range(self.num_edge):
                             w[m, n, m2, l, l2] = model.addVar(vtype=grb.GRB.BINARY, name=f"w({m}, {n}, {m2}, {l}, {l2})")
+        
+        v = {}
+        for m in range(self.num_client):
+            for n in p[m]:
+                for l in range(self.num_edge):
+                    v[m, n, l] = model.addVar(vtype=grb.GRB.BINARY, name=f"v({m}, {n}, {l})")
+        
+        num_user = {}
+        for l in range(self.num_edge):
+            num_user[l] = model.addVar(vtype=grb.GRB.CONTINUOUS, name=f"num_user({l})")
+
+        compute_time_front = {}
+        for m in range(self.num_client):
+            for n in p[m]:
+                for l in range(self.num_edge):
+                    compute_time_front[m, n, l] = model.addVar(vtype=grb.GRB.CONTINUOUS, name=f"compute_fime_front({m}, {n}, {l})")
+        
+        compute_time_back = {}
+        for m in range(self.num_client):
+            for n in p[m]:
+                for l in range(self.num_edge):
+                    compute_time_back[m, n, l] = model.addVar(vtype=grb.GRB.CONTINUOUS, name=f"compute_fime_back({m}, {n}, {l})")
         
         model.update()
 
         #  制約式の定義
         for m in range(self.num_client):
-            for n in self.p[m]:
+            for n in p[m]:
                 model.addConstr(grb.quicksum(x[m, n, l] for l in range(self.num_edge)) == 1, name=f"con_x({m}, {n})")
 
         for m in range(self.num_client):
@@ -196,34 +244,47 @@ class Solver:
             model.addConstr(grb.quicksum(z[l, n]*self.all_topic[n].volume for n in range(self.num_topic)) <= self.all_edge[l].max_volume, name=f"con_z({l})")
 
         for m in range(self.num_client):
-            for n in self.p[m]:
-                for m2 in self.s[n]:
+            for n in p[m]:
+                for m2 in s[n]:
                     for l in range(self.num_edge):
                         for l2 in range(self.num_edge):
                             model.addConstr(w[m, n, m2, l, l2] == x[m, n, l]*y[m2, l2], name=f"con_w({m}, {n}, {m2}, {l}, {l2})")
 
-        model.update()
+        for m in range(self.num_client):
+            for n in p[m]:
+                for l in range(self.num_edge):
+                    model.addConstr(v[m, n, l] == x[m, n, l]*z[l, n], name=f"con_v({m, n, l})")
 
-        num_data = np.zeros(self.num_topic)
-        for n in range(self.num_topic):
-            topic = self.all_topic[n]
-            num_data[n] = topic.volume/topic.data_size
+        for l in range(self.num_edge):
+            model.addConstr(num_user[l] == grb.quicksum(x[m ,n, l] for m in range(self.num_client) for n in p[m]), name=f"con_num_user({n}, {l})")
+
+        for m in range(self.num_client):
+            for n in p[m]:
+                for l in range(self.num_edge):
+                    model.addConstr(compute_time_front[m, n, l] == x[m, n, l]*self.all_topic[n].require_cycle*num_data[n], name=f"compute_time_front({m}, {n}, {l})")
+        
+        for m in range(self.num_client):
+            for n in p[m]:
+                for l in range(self.num_edge):
+                    model.addConstr(compute_time_back[m, n, l] == v[m, n, l]*num_user[l] * self.all_edge[l].cpu_power_gain + ((1 - z[l, n])*x[m, n, l])*self.cloud_cycle_gain, name=f"compute_time_back({m}, {n}, {l})")
+
+        model.update()
 
         #  目的関数の定義
         obj = grb.LinExpr()
 
-        obj += grb.quicksum(grb.quicksum(self.d[m][l]*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        #  修正及び、間違いがないかのチェックが必要
-        obj += grb.quicksum((self.all_topic[n].require_cycle*num_data[n])/(grb.quicksum(x[m, n, l]*z[l, n]*self.all_edge[l].power_allocation[n] for l in range(self.num_edge)) + (1 - grb.quicksum(x[m, n, l]*z[l, n] for l in range(self.num_edge)))*self.cloud_cycle) for m in range(self.num_client) for n in self.p[m] for m2 in self.s[n])
-        obj += grb.quicksum(grb.quicksum(2*self.cloud_time*(1-z[l, n])*x[m, n, l] for l in range(num_edge)) for m in range(num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(z[l, n]*d_s[l][l2]*w[m, n, m2, l ,l2] for l in range(num_edge) for l2 in range(num_edge)) for m in range(num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(d[m2][l2]*y[m2, l2] for l2 in range(num_edge)) for m in range(num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum(d[m][l]*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum(compute_time_front[m, n, l]*compute_time_back[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum(2*self.cloud_time*(1-z[l, n])*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum(z[l, n]*d_s[l][l2]*w[m, n, m2, l ,l2] for l in range(self.num_edge) for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum(d[m2][l2]*y[m2, l2] for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
 
         model.setObjective(obj, sense=grb.GRB.MINIMIZE)
 
         model.update()
 
         # 求解
+        model.Params.NonConvex = 2
         model.optimize()
 
         self.output_solution(model, d, d_s, p, s)
@@ -231,7 +292,7 @@ class Solver:
 
     #  出力形式を決定し、追記する必要あり
     def output_solution(self, model, d, d_s, p, s):
-        v_opt = []
+        opt = []
         x_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
         y_opt = np.zeros((self.num_client, self.num_edge))
         z_opt = np.zeros((self.num_edge, self.num_topic))
@@ -241,44 +302,90 @@ class Solver:
             print(model.ObjVal)
             for v in model.getVars():
                 #print(v.VarName, v.X)
-                v_opt.append(v.X)
+                opt.append(v.X)
             
             # 最適解の取り出し
             for m in range(self.num_client):
                 for n in p[m]:
                     for l in range(self.num_edge):
-                        x_opt[m][n][l] = v_opt.pop(0)
-
+                        x_opt[m][n][l] = opt.pop(0)
+                        print(f"x_opt({m},{n},{l}) = {x_opt[m][n][l]}")
+            
             for m in range(self.num_client):
                 for l in range(self.num_edge):
-                    y_opt[m][l] = v_opt.pop(0)
+                    y_opt[m][l] = opt.pop(0)
 
             for l in range(self.num_edge):
                 for n in range(self.num_topic):
-                    z_opt[l][n] = v_opt.pop(0)
-
-            # 遅延を格納する変数
-            delay = np.zeros((self.num_topic, self.num_client, self.num_client))
-
-            # 平均遅延の計算
-            ave_time = 0.0
-            cnt = 0
+                    z_opt[l][n] = opt.pop(0)
+                    print(f"z_opt({l},{n}) = {z_opt[l][n]}")
+            
             for m in range(self.num_client):
                 for n in p[m]:
                     for m2 in s[n]:
-                        delay[n][m][m2] = calmyModeltime(m, m2, n, x_opt, y_opt, z_opt, d, d_s, self.all_topic, self.all_edge, self.cloud_time, self.cloud_cycle)
-                        ave_time += delay[n][m][m2]
-                        cnt += 1
+                        for l in range(self.num_edge):
+                            for l2 in range(self.num_edge):
+                                #  wの取り出し
+                                opt.pop(0)
             
-            ave_time = ave_time/cnt
-            print("average time = ")
-            print(ave_time)
+            v_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
+            for m in range(self.num_client):
+                for n in p[m]:
+                    for l in range(self.num_edge):
+                        v_opt[m][n][l] = opt.pop(0)
+                        print(f"v_opt({m},{n},{l}) = {v_opt[m][n][l]}")
+            
+            num_user = np.zeros(self.num_edge)
+            for l in range(self.num_edge):
+                num_user[l] = opt.pop(0)
+                print(f"num_user({l}) = {num_user[l]}")
+
+            compute_time_front_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
+            for m in range(self.num_client):
+                for n in p[m]:
+                    for l in range(self.num_edge):
+                        compute_time_front_opt[m][n][l] = opt.pop(0)
+                        print(f"time_front_opt({m},{n},{l}) = {compute_time_front_opt[m][n][l]}")
+            
+            compute_time_back_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
+            for m in range(self.num_client):
+                for n in p[m]:
+                    for l in range(self.num_edge):
+                        compute_time_back_opt[m][n][l] = opt.pop(0)
+                        print(f"time_back_opt({m},{n},{l}) = {compute_time_back_opt[m][n][l]}")
+
+            print(f"x_opt(0,0,4) = {x_opt[0][0][4]}")
+            print(f"z_opt(4,0) = {z_opt[4][0]}")
+            print(f"v_opt(0,0,4) = {v_opt[0][0][4]}")
+            print(f"num_user(4) = {num_user[4]}")
+            print(f"time_front_opt(0,0,4) = {compute_time_front_opt[0][0][4]}")
+            print(f"time_back_opt(0,0,4) = {compute_time_back_opt[0][0][4]}")
+            
+
+            # 遅延を格納する変数
+            delay = np.zeros((self.num_topic, self.num_client, self.num_client))
+            num_user = np.zeros(self.num_edge)
+            for l in range(self.num_edge):
+                for m in range(self.num_client):
+                    for n in p[m]:
+                        num_user[l] += x_opt[m][n][l]
+
+            # 平均遅延の計算
+            total_delay = 0.0
+            for m in range(self.num_client):
+                for n in p[m]:
+                    for m2 in s[n]:
+                        delay[n][m][m2] = calmyModeltime(m, m2, n, x_opt, y_opt, z_opt, d, d_s, num_user, self.all_topic, self.all_edge, self.cloud_time, self.cloud_cycle)
+                        total_delay += delay[n][m][m2]
+            
+            print("total delay = ")
+            print(total_delay)
         else:
             print("実行不可能")
 
 
 # 提案モデルの遅延の合計を計算
-def calmyModeltime(m, m2, n, x, y, z, d, d_s, all_topic, all_edge, cloud_time, cloud_cycle):
+def calmyModeltime(m, m2, n, x, y, z, d, d_s, num_user, all_topic, all_edge, cloud_time, cloud_cycle):
     time = 0.0
     topic = all_topic[n]
     num_data = topic.volume/topic.data_size
@@ -287,7 +394,11 @@ def calmyModeltime(m, m2, n, x, y, z, d, d_s, all_topic, all_edge, cloud_time, c
         time += d[m][l]*x[m][n][l]
 
     for l in range(len(all_edge)):
-        time += (x[m][n][l]*topic.require_cycle * num_data) / (x[m][n][l]*z[l][n]*all_edge[l].power_allocation[n] + (1- z[l][n])*x[m][n][l]*cloud_cycle)
+        if x[m][n][l] == 1:
+            time_front = (x[m][n][l]*topic.require_cycle * num_data)
+            time_back = (x[m][n][l]*z[l][n]*(num_user[l]/all_edge[l].cpu_power) + (1 - z[l][n])*x[m][n][l]/cloud_cycle)
+            #print(f"({m}, {n}) : time_front = {time_front}, time_back = {time_back}")
+            time += time_front*time_back
 
     for l in range(len(all_edge)):
         time += 2*cloud_time*(1-z[l][n])*x[m][n][l]

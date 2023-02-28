@@ -1,0 +1,2 @@
+,config_file,edge_file,topic_file,traking_file,traking_seed,assign_file,assign_seed,solve_file
+data,../../reinforcement_learning/dataset/learning_data/config/config_debug.csv,../../reinforcement_learning/dataset/learning_data/edge/edge_debug.csv,../../reinforcement_learning/dataset/learning_data/topic/topic_debug.csv,../../reinforcement_learning/dataset/learning_data/traking/traking_debug.csv,30304483.0,../../reinforcement_learning/dataset/learning_data/assign/assign_debug.csv,50502513.0,

@@ -80,6 +80,8 @@ class Env:
         self.num_client = parameter['num_client']
         self.num_edge = parameter['num_edge']
         self.num_topic = parameter['num_topic']
+        self.cloud_time = parameter['cloud_time']
+        self.cloud_cycle = parameter['cloud_cycle']
 
         edges = util.read_edge(self.edge_file)
         self.all_edge = []
@@ -298,7 +300,10 @@ class Env:
         delay += gamma*self.cal_distance(publisher.x, publisher.y, pub_edge.x, pub_edge.y)
         compute_time = self.cal_compute_time(pub_edge)
         delay += compute_time
-        delay += gamma*self.cal_distance(pub_edge.x, pub_edge.y, sub_edge.x, sub_edge.y)
+        if pub_edge.used_volume <= pub_edge.max_volume:
+            delay += gamma*self.cal_distance(pub_edge.x, pub_edge.y, sub_edge.x, sub_edge.y)
+        else:
+            delay += 2*self.cloud_time
         delay += gamma*self.cal_distance(sub_edge.x, sub_edge.y, subscriber.x, subscriber.y)
 
         return delay, compute_time
@@ -308,7 +313,10 @@ class Env:
     def cal_compute_time(self, edge):
         topic = self.all_topic[0]
 
-        delay = (topic.require_cycle*(topic.volume / topic.data_size)) / edge.power_allocation[0]
+        if edge.used_volume <= edge.max_volume:
+            delay = (topic.require_cycle*(topic.volume / topic.data_size)) / edge.power_allocation[0]
+        else:
+            delay = (topic.require_cycle*(topic.volume / topic.data_size)) / self.cloud_cycle
 
         return delay
     
