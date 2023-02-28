@@ -103,6 +103,7 @@ class Solver:
 
         self.data_set = util.read_data_set_topic(self.data_file, self.num_topic)
 
+        """
         self.all_client = []
         num_publisher = np.zeros(self.num_topic)
         for _ in range(self.num_client):
@@ -117,6 +118,7 @@ class Solver:
         for topic in self.all_topic:
             topic.update_client(num_publisher[n], self.time_step)
             topic.cal_volume(self.time_step)
+        """
     
 
     def update_client(self):
@@ -174,7 +176,7 @@ class Solver:
         return p, s
 
 
-    def solve(self, time, d, d_s, p, s):
+    def solve(self, time, d, d_s, p, s, output_file):
         num_data = np.zeros(self.num_topic)
         for n in range(self.num_topic):
             topic = self.all_topic[n]
@@ -276,10 +278,12 @@ class Solver:
         model.Params.NonConvex = 2
         model.optimize()
 
-        self.output_solution(model, d, d_s, p, s)
+        delay = self.output_solution(time, model, d, d_s, p, s, output_file)
+
+        return delay
 
     
-    def solve_y_fix(self, time, d, d_s, p, s):
+    def solve_y_fix(self, time, d, d_s, p, s, output_file):
         num_data = np.zeros(self.num_topic)
         for n in range(self.num_topic):
             topic = self.all_topic[n]
@@ -296,18 +300,19 @@ class Solver:
                     x[m, n, l] = model.addVar(vtype=grb.GRB.BINARY, name=f"x({m}, {n}, {l})")
 
         y = np.zeros((self.num_client, self.num_edge))
-        for m in range(self.num_client):
-            client = self.all_client[m]
-            min_idx = -1
-            min_dis = 1000000000
-            for l in range(self.num_edge):
-                edge = self.all_edge[l]
-                distance = util.cal_distance(client.x, client.y, edge.x, edge.y)
-                if distance < min_dis:
-                    min_idx = l
-                    min_dis = distance
-            
-            y[m][min_idx] = 1
+        for n in range(self.num_topic):
+            for m in s[n]:
+                client = self.all_client[m]
+                min_idx = -1
+                min_dis = 1000000000
+                for l in range(self.num_edge):
+                    edge = self.all_edge[l]
+                    distance = util.cal_distance(client.x, client.y, edge.x, edge.y)
+                    if distance < min_dis:
+                        min_idx = l
+                        min_dis = distance
+                
+                y[m][min_idx] = 1
 
         z = {}
         for l in range(self.num_edge):
@@ -387,15 +392,18 @@ class Solver:
         model.Params.NonConvex = 2
         model.optimize()
 
-        self.output_solution_y_fix(model, d, d_s, p, s, y)
+        delay = self.output_solution_y_fix(time, model, d, d_s, p, s, y, output_file)
+
+        return delay
 
 
     #  出力形式を決定し、追記する必要あり
-    def output_solution(self, model, d, d_s, p, s):
+    def output_solution(self, time, model, d, d_s, p, s, output_file):
         opt = []
         x_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
         y_opt = np.zeros((self.num_client, self.num_edge))
         z_opt = np.zeros((self.num_edge, self.num_topic))
+        total_delay = 0.0
 
         if model.Status == grb.GRB.OPTIMAL:
             print(" 最適解 ")
@@ -450,8 +458,28 @@ class Solver:
                     for n in p[m]:
                         num_user[l] += x_opt[m][n][l]
 
-            # 平均遅延の計算
-            total_delay = 0.0
+            x_opt_output = np.ones((self.num_client, self.num_topic))*-1
+            y_opt_output = np.ones((self.num_client))*-1
+            for m in range(self.num_client):
+                for n in range(self.num_topic):
+                    for l in range(self.num_edge):
+                        if x_opt[m][n][l] == 1:
+                            x_opt_output[m][n] = l
+                
+                for l in range(self.num_edge):
+                        if y_opt[m][l] == 1:
+                            y_opt_output[m] = l
+            
+            with open(output_file, "a") as f:
+                for m in range(self.num_client):
+                    f.write(f"{m},{time}")
+
+                    for n in range(self.num_topic):
+                        f.write(f",{x_opt_output[m][n]}")
+
+                    f.write(f",{y_opt_output[m]}\n")
+
+            # 総遅延の計算
             for m in range(self.num_client):
                 for n in p[m]:
                     for m2 in s[n]:
@@ -460,15 +488,19 @@ class Solver:
             
             print("total delay = ")
             print(total_delay)
+
         else:
             print("実行不可能")
 
+        return total_delay
+
 
 #  出力形式を決定し、追記する必要あり
-    def output_solution_y_fix(self, model, d, d_s, p, s, y_opt):
+    def output_solution_y_fix(self, time, model, d, d_s, p, s, y_opt, output_file):
         opt = []
         x_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
         z_opt = np.zeros((self.num_edge, self.num_topic))
+        total_delay = 0.0
 
         if model.Status == grb.GRB.OPTIMAL:
             print(" 最適解 ")
@@ -519,8 +551,28 @@ class Solver:
                     for n in p[m]:
                         num_user[l] += x_opt[m][n][l]
 
-            # 平均遅延の計算
-            total_delay = 0.0
+            x_opt_output = np.ones((self.num_client, self.num_topic))*-1
+            y_opt_output = np.ones((self.num_client))*-1
+            for m in range(self.num_client):
+                for n in range(self.num_topic):
+                    for l in range(self.num_edge):
+                        if x_opt[m][n][l] == 1:
+                            x_opt_output[m][n] = l
+                
+                for l in range(self.num_edge):
+                        if y_opt[m][l] == 1:
+                            y_opt_output[m] = l
+            
+            with open(output_file, "a") as f:
+                for m in range(self.num_client):
+                    f.write(f"{m},{time}")
+
+                    for n in range(self.num_topic):
+                        f.write(f",{x_opt_output[m][n]}")
+
+                    f.write(f",{y_opt_output[m]}\n")
+
+            # 総遅延の計算
             for m in range(self.num_client):
                 for n in p[m]:
                     for m2 in s[n]:
@@ -531,6 +583,8 @@ class Solver:
             print(total_delay)
         else:
             print("実行不可能")
+
+        return total_delay
 
 
 # 提案モデルの遅延の合計を計算
