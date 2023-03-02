@@ -1,4 +1,5 @@
 from solver import Solver
+import pandas as pd
 
 if __name__ == '__main__':
     index_file = "../dataset/learning_data/index/index_test.csv"
@@ -30,3 +31,8 @@ if __name__ == '__main__':
         print("\n----------end solve----------\n")
 
     print(f"total_delay = {total_delay}")
+
+    df_index = pd.read_csv(index_file, index_col=0)
+    df_index.at['data', 'opt'] = total_delay
+
+    df_index.to_csv(index_file)
