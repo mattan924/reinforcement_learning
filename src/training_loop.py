@@ -20,7 +20,7 @@ if __name__ == '__main__':
     sys.stderr = open(result_dir + "err.log", 'w')
 
     log_file = result_dir + "out.log"
-    learning_data_index = "../dataset/learning_data/index/index_test.csv"
+    learning_data_index = "../dataset/learning_data/index/index_single.csv"
     pi_dist_file = result_dir + "pi_dist.log"
 
     with open(log_file, 'w') as f:
@@ -43,8 +43,8 @@ if __name__ == '__main__':
     pre_train_iter = 10
     backup_iter = 1000
 
-    #agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
-    agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
+    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
+    #agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
 
     reward_history = []
     train_curve = []
@@ -92,7 +92,7 @@ if __name__ == '__main__':
                 f.write(f"train is {(epi_iter/max_epi_itr)*100}% complited.\n")
 
             with open(pi_dist_file, "a") as f:
-                for i in range(10):
+                for i in range(1):
                     f.write(f"agent {i} pi = {pi[i]}\n")
 
             if epi_iter % pre_train_iter != 0:
