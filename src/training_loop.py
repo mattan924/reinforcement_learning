@@ -19,18 +19,6 @@ if __name__ == '__main__':
 
     sys.stderr = open(result_dir + "err.log", 'w')
 
-    max_epi_itr = 15000
-    N_action = 9
-    buffer_size = 3000
-    batch_size = 500
-    device = 'cuda'
-    train_flag = True
-    pretrain_flag = False
-    load_flag = False
-    start_epi_itr = 0
-    pre_train_iter = 10
-    backup_iter = 1000
-
     log_file = result_dir + "out.log"
     learning_data_index = "../dataset/learning_data/index/index_test.csv"
     pi_dist_file = result_dir + "pi_dist.log"
@@ -43,7 +31,7 @@ if __name__ == '__main__':
 
     env = Env(learning_data_index)
 
-    max_epi_itr = 10
+    max_epi_itr = 1000
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -55,7 +43,8 @@ if __name__ == '__main__':
     pre_train_iter = 10
     backup_iter = 1000
 
-    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
+    #agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
+    agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
 
     reward_history = []
     train_curve = []
