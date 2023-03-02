@@ -1,5 +1,5 @@
 from env import Env
-from COMA import COMA
+from COMA import COMA, ActorCritic
 import matplotlib.pyplot as plt
 import time as time_modu
 import datetime
@@ -18,8 +18,20 @@ if __name__ == '__main__':
 
     sys.stderr = open(result_dir + "err.log", 'w')
 
+    max_epi_itr = 15000
+    N_action = 9
+    buffer_size = 3000
+    batch_size = 500
+    device = 'cuda'
+    train_flag = True
+    pretrain_flag = False
+    load_flag = False
+    start_epi_itr = 0
+    pre_train_iter = 10
+    backup_iter = 1000
+
     log_file = result_dir + "out.log"
-    learning_data_index = "../dataset/learning_data/index/index.csv"
+    learning_data_index = "../dataset/learning_data/index/index_test.csv"
     pi_dist_file = result_dir + "pi_dist.log"
     actor_grad_file = "./model_parameter/actor_grad.log"
     critic_grad_file = "./model_parameter/critic_grad.log"
@@ -34,39 +46,7 @@ if __name__ == '__main__':
     with open(pi_dist_file, "w") as f:
         pass
 
-    """
-    with open(actor_file, 'w') as f:
-        pass
-
-    with open(critic_file, 'w') as f:
-        pass
-
-    with open(v_net_file, 'w') as f:
-        pass
-
-    with open(actor_grad_file, 'w') as f:
-        pass
-
-    with open(critic_grad_file, 'w') as f:
-        pass
-
-    with open(v_net_grad_file, 'w') as f:
-        pass
-    """
-
     env = Env(learning_data_index)
-
-    max_epi_itr = 15000
-    N_action = 9
-    buffer_size = 3000
-    batch_size = 500
-    device = 'cuda'
-    train_flag = True
-    pretrain_flag = False
-    load_flag = False
-    start_epi_itr = 0
-    pre_train_iter = 10
-    backup_iter = 1000
 
     agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
 
@@ -75,7 +55,7 @@ if __name__ == '__main__':
 
     # 学習ループ
     for epi_iter in range(start_epi_itr, max_epi_itr):
-        if load_flag and epi_iter % backup_iter == 1:
+        if load_flag and (epi_iter-1) % backup_iter == 0:
             agent.load_model(result_dir + "/model_parameter/", epi_iter-1)
         
         # 環境のリセット
@@ -118,44 +98,6 @@ if __name__ == '__main__':
             with open(pi_dist_file, "a") as f:
                 for i in range(10):
                     f.write(f"agent {i} pi = {pi[i]}\n")
-
-            """
-            with open(actor_grad_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.actor.parameters():
-                    f.write(f"{para.grad}\n")
-
-            with open(critic_grad_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.critic.parameters():
-                    f.write(f"{para.grad}\n")
-
-            with open(v_net_grad_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.V_net.parameters():
-                    f.write(f"{para.grad}\n")
-
-            with open(actor_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.actor.parameters():
-                    f.write(f"{para}\n")
-
-            with open(critic_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.critic.parameters():
-                    f.write(f"{para}\n")
-
-            with open(v_net_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.V_net.parameters():
-                    f.write(f"{para}\n")
-            """
 
             if epi_iter % pre_train_iter != 0:
                 train_curve.append(-sum(reward_history))

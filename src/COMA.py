@@ -39,6 +39,7 @@ class ReplayBuffer:
 
         return id, state, actions, action_number, reward, next_state
 
+
 class Actor(nn.Module):
     
     def __init__(self, N_action):
@@ -250,8 +251,6 @@ class COMA:
 
         V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
 
-        #print(f"V_net_loss = {V_net_loss}")
-
         V_net_optimizer.zero_grad()
         V_net_loss.backward(retain_graph=True)
         V_net_optimizer.step()
@@ -261,8 +260,6 @@ class COMA:
 
         # critic ネットワークの更新
         critic_loss = self.critic_loss_fn(V_target.detach(), Q)
-
-        #print(f"critic_loss = {critic_loss}")
 
         critic_optimizer.zero_grad()
         critic_loss.backward(retain_graph=True)
@@ -280,7 +277,7 @@ class COMA:
         
         Q2 = self.critic.get_value(critic_obs, critic_action)
 
-        Q_tmp = torch.zeros(9, 50, device=self.device)
+        Q_tmp = torch.zeros(self.N_action, self.num_agent, device=self.device)
                 
         for a in range(self.N_action):
             critic_action_copy = critic_action.clone()
@@ -304,8 +301,141 @@ class COMA:
                 cnt += 1
 
         actor_loss = - actor_loss / cnt
-        actor_loss = actor_loss + 1e-16
-        print(f"actor_loss = {actor_loss.item()}")
+
+        actor_optimizer.zero_grad()
+        actor_loss.backward()
+        actor_optimizer.step()
+        
+
+class ActorCritic:
+    
+    def __init__(self, N_action, num_agent, buffer_size, batch_size, device):
+        self.N_action = N_action
+        self.num_agent = num_agent
+        self.buffer_size = buffer_size
+        self.batch_size = batch_size
+        self.device = device
+        self.actor = Actor(self.N_action)
+        self.V_net = V_Net()
+        self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
+
+
+        if self.device == 'cuda':
+            self.actor.cuda()
+            self.V_net.cuda()
+
+        self.gamma = 0.95
+        self.V_net_loff_fn = torch.nn.MSELoss()
+
+
+    def get_acction(self, obs, env, train_flag, pretrain_flag):        
+        obs_tensor = torch.FloatTensor(obs)
+        obs_tensor = obs_tensor.to(self.device)
+
+        pi = self.actor.get_action(obs_tensor)
+
+        if train_flag:
+            clients = env.clients
+            actions = []
+            if pretrain_flag:
+                edges = env.all_edge
+
+                for i in range(self.num_agent):
+                    client = clients[i]
+                    min_idx = 0
+                    min_distance = 100000000
+                    if client.pub_topic[0] == 1:
+                        for j in range(len(edges)):
+                            edge = edges[j]
+                            distance = math.sqrt(pow(client.x - edge.x, 2) + pow(client.y - edge.y, 2))
+                            if distance < min_distance:
+                                min_distance = distance
+                                min_idx = j
+                        
+                        actions.append(min_idx)
+                    else:
+                        actions.append(-1)
+
+            else:
+                for i in range(self.num_agent):
+                    client = clients[i]
+                    if client.pub_topic[0] == 1:
+                        actions.append(Categorical(pi[i]).sample().item())
+                    else:
+                        actions.append(-1)
+        
+        return actions, pi
+
+    
+    def save_model(self, dir_path, iter):
+        torch.save(self.actor.state_dict(), dir_path + 'actor_weight' + '_' + str(iter) + '.pth')
+        torch.save(self.V_net.state_dict(), dir_path + 'v_net_weight' + '_' + str(iter) + '.pth')
+
+
+    def load_model(self, dir_path, iter):
+        self.actor.load_state_dict(torch.load(dir_path + 'actor_weight' + '_' + str(iter) + '.pth'))
+        self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
+
+
+    def train(self, obs, actions, pi, reward, next_obs):
+       
+        # 行動のtensor化
+        actions_onehot = torch.zeros(self.num_agent*self.N_action, device=self.device)
+         
+        for i in range(self.num_agent):
+            action = actions[i]
+            if action != -1:
+                actions_onehot[i*self.N_action + action] = 1
+        
+        # 経験再生用バッファへの追加
+        obs_tensor = torch.FloatTensor(obs[0][1:]).to(self.device)
+        next_obs_tensor = torch.FloatTensor(next_obs[0][1:]).to(self.device)
+
+        for i in range(self.num_agent):
+            if actions[i] != -1:
+                state = obs_tensor
+                next_state = next_obs_tensor
+
+                self.replay_buffer.add(i, state, actions_onehot, actions, reward, next_state)
+
+        if len(self.replay_buffer) < self.buffer_size:
+            return
+
+        # オプティマイザーの設定
+        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
+        V_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
+
+        id_exp, obs_exp, actions_exp, action_number_exp, reward_exp, next_obs_exp = self.replay_buffer.get_batch()
+
+        reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
+
+        V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp)
+        V = self.V_net.get_value(obs_exp)
+
+        V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
+
+        V_net_optimizer.zero_grad()
+        V_net_loss.backward(retain_graph=True)
+        V_net_optimizer.step()
+
+        actor_loss = torch.FloatTensor([0.0])
+        actor_loss = actor_loss.to(self.device)
+
+        v_obs = obs_tensor.unsqueeze(0)
+        v_next_obs = next_obs_tensor.unsqueeze(0)
+
+        V_target = reward_exp/100 + self.gamma*self.V_net.get_value(v_next_obs)
+        V = self.V_net.get_value(v_obs)
+
+        A = V_target - V
+
+        cnt = 0
+        for i in range(self.num_agent):
+            if actions[i] != -1:
+                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]] + 1e-16)
+                cnt += 1
+
+        actor_loss = - actor_loss / cnt
 
         actor_optimizer.zero_grad()
         actor_loss.backward()
