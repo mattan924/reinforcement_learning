@@ -1,6 +1,7 @@
 from env import Env
 from COMA import COMA
 import matplotlib.pyplot as plt
+import pandas as pd
 import time as time_modu
 import datetime
 import sys
@@ -21,12 +22,6 @@ if __name__ == '__main__':
     log_file = result_dir + "out.log"
     learning_data_index = "../dataset/learning_data/index/index.csv"
     pi_dist_file = result_dir + "pi_dist.log"
-    actor_grad_file = "./model_parameter/actor_grad.log"
-    critic_grad_file = "./model_parameter/critic_grad.log"
-    v_net_grad_file = "./model_parameter/v_net_grad.log"
-    actor_file = "./model_parameter/actor.log"
-    critic_file = "./model_parameter/critic.log"
-    v_net_file = "./model_parameter/v_net.log"
 
     with open(log_file, 'w') as f:
         pass
@@ -34,29 +29,9 @@ if __name__ == '__main__':
     with open(pi_dist_file, "w") as f:
         pass
 
-    """
-    with open(actor_file, 'w') as f:
-        pass
-
-    with open(critic_file, 'w') as f:
-        pass
-
-    with open(v_net_file, 'w') as f:
-        pass
-
-    with open(actor_grad_file, 'w') as f:
-        pass
-
-    with open(critic_grad_file, 'w') as f:
-        pass
-
-    with open(v_net_grad_file, 'w') as f:
-        pass
-    """
-
     env = Env(learning_data_index)
 
-    max_epi_itr = 15000
+    max_epi_itr = 10
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -119,44 +94,6 @@ if __name__ == '__main__':
                 for i in range(10):
                     f.write(f"agent {i} pi = {pi[i]}\n")
 
-            """
-            with open(actor_grad_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.actor.parameters():
-                    f.write(f"{para.grad}\n")
-
-            with open(critic_grad_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.critic.parameters():
-                    f.write(f"{para.grad}\n")
-
-            with open(v_net_grad_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.V_net.parameters():
-                    f.write(f"{para.grad}\n")
-
-            with open(actor_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.actor.parameters():
-                    f.write(f"{para}\n")
-
-            with open(critic_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.critic.parameters():
-                    f.write(f"{para}\n")
-
-            with open(v_net_file, 'a') as f:
-                f.write(f"===========================================================\n")
-                f.write(f"iter = {epi_iter}\n")
-                for para in agent.V_net.parameters():
-                    f.write(f"{para}\n")
-            """
-
             if epi_iter % pre_train_iter != 0:
                 train_curve.append(-sum(reward_history))
 
@@ -171,7 +108,11 @@ if __name__ == '__main__':
     with open(log_file, 'a') as f:
         f.write(f"実行時間: {end_time-start_time}s\n")
 
+    df_index = pd.read_csv(learning_data_index, index_col=0)
+    opt = df_index.at['data', 'opt']
+
     plt.plot(train_curve, linewidth=1, label='COMA')
+    plt.axhline(y=opt)
     plt.savefig(result_dir + "reward_history.png")
 
     agent.save_model(result_dir + 'model_parameter/', epi_iter+1)
