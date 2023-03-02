@@ -124,7 +124,7 @@ if __name__ == '__main__':
     opt = df_index.at['data', 'opt']
 
     plt.plot(train_curve, linewidth=1, label='COMA')
-    plt.axhline(y=opt)
+    plt.axhline(y=-opt, c='r')
     plt.savefig(result_dir + "reward_history.png")
 
     agent.save_model(result_dir + 'model_parameter/', epi_iter+1)
