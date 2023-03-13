@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     env = Env(learning_data_index)
 
-    max_epi_itr = 1000
+    max_epi_itr = 3000
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -43,8 +43,8 @@ if __name__ == '__main__':
     pre_train_iter = 10
     backup_iter = 1000
 
-    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
-    #agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
+    #agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
+    agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
 
     reward_history = []
     train_curve = []
@@ -80,7 +80,7 @@ if __name__ == '__main__':
             next_obs = env.get_observation()
 
             # 学習
-            agent.train(obs, actions, pi, reward, next_obs)
+            agent.train(obs, actions, pi, reward, next_obs, epi_iter)
 
             obs = next_obs
 

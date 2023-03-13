@@ -76,10 +76,13 @@ class Critic(nn.Module):
         self.N_action = N_action
         self.N_client = num_clinet
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv1.bias)
         self.pool1 = nn.MaxPool2d(3)
         self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv2.bias)
         self.pool2 = nn.MaxPool2d(3)
         self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv3.bias)
         self.pool3 = nn.MaxPool2d(3)
 
         self.fc1 = nn.Linear(num_clinet*N_action, 512)
@@ -114,10 +117,13 @@ class V_Net(nn.Module):
     def __init__(self):
         super(V_Net, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv1.bias)
         self.pool1 = nn.MaxPool2d(3)
         self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv2.bias)
         self.pool2 = nn.MaxPool2d(3)
         self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
+        nn.init.zeros_(self.conv3.bias)
         self.pool3 = nn.MaxPool2d(3)
 
         self.fc1 = nn.Linear(2*3*3, 32)
@@ -377,7 +383,7 @@ class ActorCritic:
         self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
 
 
-    def train(self, obs, actions, pi, reward, next_obs):
+    def train(self, obs, actions, pi, reward, next_obs, epi_iter):
        
         # 行動のtensor化
         actions_onehot = torch.zeros(self.num_agent*self.N_action, device=self.device)
@@ -418,26 +424,28 @@ class ActorCritic:
         V_net_loss.backward(retain_graph=True)
         V_net_optimizer.step()
 
-        actor_loss = torch.FloatTensor([0.0])
-        actor_loss = actor_loss.to(self.device)
 
-        v_obs = obs_tensor.unsqueeze(0)
-        v_next_obs = next_obs_tensor.unsqueeze(0)
+        if epi_iter > 1000:
+            actor_loss = torch.FloatTensor([0.0])
+            actor_loss = actor_loss.to(self.device)
 
-        V_target = reward_exp/100 + self.gamma*self.V_net.get_value(v_next_obs)
-        V = self.V_net.get_value(v_obs)
+            v_obs = obs_tensor.unsqueeze(0)
+            v_next_obs = next_obs_tensor.unsqueeze(0)
 
-        A = V_target - V
+            V_target = reward_exp/100 + self.gamma*self.V_net.get_value(v_next_obs)
+            V = self.V_net.get_value(v_obs)
 
-        cnt = 0
-        for i in range(self.num_agent):
-            if actions[i] != -1:
-                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]] + 1e-16)
-                cnt += 1
+            A = V_target - V
 
-        actor_loss = - actor_loss / cnt
+            cnt = 0
+            for i in range(self.num_agent):
+                if actions[i] != -1:
+                    actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]] + 1e-16)
+                    cnt += 1
 
-        actor_optimizer.zero_grad()
-        actor_loss.backward()
-        actor_optimizer.step()
+            actor_loss = - actor_loss / cnt
+
+            actor_optimizer.zero_grad()
+            actor_loss.backward()
+            actor_optimizer.step()
         
