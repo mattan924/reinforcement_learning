@@ -2,8 +2,8 @@ from solver import Solver
 import pandas as pd
 
 if __name__ == '__main__':
-    index_file = "../dataset/learning_data/index/index_multi.csv"
-    output_file = "../dataset/learning_data/solution/solution_multi.csv"
+    index_file = "../dataset/learning_data/index/index_single2.csv"
+    output_file = "../dataset/learning_data/solution/solution_single2.csv"
 
     solver = Solver(index_file)
 
