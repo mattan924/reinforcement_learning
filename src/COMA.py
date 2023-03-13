@@ -146,9 +146,10 @@ class V_Net(nn.Module):
 
 class COMA:
     
-    def __init__(self, N_action, num_agent, buffer_size, batch_size, device):
+    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, device):
         self.N_action = N_action
         self.num_agent = num_agent
+        self.num_topic = num_topic
         self.buffer_size = buffer_size
         self.batch_size = batch_size
         self.device = device
@@ -173,10 +174,11 @@ class COMA:
         obs_tensor = obs_tensor.to(self.device)
 
         pi = self.actor.get_action(obs_tensor)
+        # pi を pi.shape = {self.num_agent, self.num_topic, self.N_action} の形にする必要がある
 
         if train_flag:
             clients = env.clients
-            actions = []
+            actions = np.ones((self.num_agent, self.num_topic))*-1
             if pretrain_flag:
                 edges = env.all_edge
 
@@ -184,26 +186,25 @@ class COMA:
                     client = clients[i]
                     min_idx = 0
                     min_distance = 100000000
-                    if client.pub_topic[0] == 1:
-                        for j in range(len(edges)):
-                            edge = edges[j]
-                            distance = math.sqrt(pow(client.x - edge.x, 2) + pow(client.y - edge.y, 2))
-                            if distance < min_distance:
-                                min_distance = distance
-                                min_idx = j
-                        
-                        actions.append(min_idx)
-                    else:
-                        actions.append(-1)
-
+                
+                    for j in range(len(edges)):
+                                edge = edges[j]
+                                distance = math.sqrt(pow(client.x - edge.x, 2) + pow(client.y - edge.y, 2))
+                                if distance < min_distance:
+                                    min_distance = distance
+                                    min_idx = j
+                    
+                    for n in range(self.num_topic):
+                        if client.pub_topic[n] == 1:
+                            actions.append(min_idx)
+                            actions[i][n] = min_idx
             else:
                 for i in range(self.num_agent):
                     client = clients[i]
-                    if client.pub_topic[0] == 1:
-                        actions.append(Categorical(pi[i]).sample().item())
-                    else:
-                        actions.append(-1)
-        
+                    for n in range(self.num_topic):
+                        if client.pub_topic[0] == 1:
+                            actions[i][n] = Categorical(pi[i][n]).sample().item()
+                        
         return actions, pi
 
     

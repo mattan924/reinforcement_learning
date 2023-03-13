@@ -20,7 +20,7 @@ if __name__ == '__main__':
     sys.stderr = open(result_dir + "err.log", 'w')
 
     log_file = result_dir + "out.log"
-    learning_data_index = "../dataset/learning_data/index/index_single.csv"
+    learning_data_index = "../dataset/learning_data/index/index_single2.csv"
     pi_dist_file = result_dir + "pi_dist.log"
 
     with open(log_file, 'w') as f:
