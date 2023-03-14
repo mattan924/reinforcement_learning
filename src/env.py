@@ -228,7 +228,7 @@ class Env:
 
         for n in range(self.num_topic):
             for publisher in self.publishers[n]:
-                publisher.pub_edge[n] = actions[publisher.id][n]
+                publisher.pub_edge[n] = actions[n][publisher.id]
 
                 edge = self.all_edge[int(publisher.pub_edge[n])]
                 edge.used_publishers[n].append(publisher)
@@ -254,11 +254,14 @@ class Env:
                     edge.used_volume += self.all_topic[n].volume
                     tmp += 1
                 
-            for n in range(self.num_topic):
-                if tmp != 0:
-                    edge.power_allocation[n] = (edge.cpu_power / tmp) / len(edge.used_publishers[n])
-                else:
-                    edge.power_allocation[n] = edge.cpu_power
+            if tmp != 0:
+                for n in range(self.num_topic):
+                    if len(edge.used_publishers[n]) != 0:
+                        edge.power_allocation[n] = (edge.cpu_power / tmp) / len(edge.used_publishers[n])
+                    else:
+                        edge.power_allocation[n] = edge.cpu_power / tmp
+            else:
+                edge.power_allocation[n] = edge.cpu_power
             
         # 報酬の計算
         reward = self.cal_reward()
@@ -302,7 +305,7 @@ class Env:
     # topic n に関してある publisher からある subscriber までの遅延
     def cal_delay(self, publisher, subscriber, n):
         pub_edge = self.all_edge[int(publisher.pub_edge[n])]
-        sub_edge = self.all_edge[int(subscriber.sub_edge[n])]
+        sub_edge = self.all_edge[int(subscriber.sub_edge)]
 
         delay = 0
         gamma = 0.1
