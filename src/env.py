@@ -226,42 +226,38 @@ class Env:
         block_len_x = (self.max_x-self.min_x)/3
         block_len_y = (self.max_y-self.min_y)/3
 
-        for n in range(self.num_topic):
-            for publisher in self.publishers[n]:
-                publisher.pub_edge[n] = actions[n][publisher.id]
+        for publisher in self.publishers[0]:
+            publisher.pub_edge[0] = actions[publisher.id]
 
-                edge = self.all_edge[int(publisher.pub_edge[n])]
-                edge.used_publishers[n].append(publisher)
+            edge = self.all_edge[int(publisher.pub_edge[0])]
+            edge.used_publishers[0].append(publisher)
 
-        for n in range(self.num_topic):
-            for subscriber in self.subscribers[n]:
-                block_index_x = int(subscriber.x / block_len_x)
-                block_index_y = int(subscriber.y / block_len_y)
+        for subscriber in self.subscribers[0]:
+            block_index_x = int(subscriber.x / block_len_x)
+            block_index_y = int(subscriber.y / block_len_y)
 
-                if block_index_x == 3:
-                    block_index_x = 2
-                if block_index_y == 3:
-                    block_index_y = 2
+            if block_index_x == 3:
+                block_index_x = 2
+            if block_index_y == 3:
+                block_index_y = 2
 
-                subscriber.sub_edge = block_index_y*3+block_index_x
+            subscriber.sub_edge = block_index_y*3+block_index_x
 
         for edge in self.all_edge:
             edge.used_volume = 0
             tmp = 0
 
-            for n in range(self.num_topic):
-                if len(edge.used_publishers[n]) > 0:
-                    edge.used_volume += self.all_topic[n].volume
-                    tmp += 1
+            if len(edge.used_publishers[0]) > 0:
+                edge.used_volume += self.all_topic[0].volume
+                tmp += 1
                 
             if tmp != 0:
-                for n in range(self.num_topic):
-                    if len(edge.used_publishers[n]) != 0:
-                        edge.power_allocation[n] = (edge.cpu_power / tmp) / len(edge.used_publishers[n])
-                    else:
-                        edge.power_allocation[n] = edge.cpu_power / tmp
+                if len(edge.used_publishers[0]) != 0:
+                    edge.power_allocation[0] = (edge.cpu_power / tmp) / len(edge.used_publishers[0])
+                else:
+                    edge.power_allocation[0] = edge.cpu_power / tmp
             else:
-                edge.power_allocation[n] = edge.cpu_power
+                edge.power_allocation[0] = edge.cpu_power
             
         # 報酬の計算
         reward = self.cal_reward()
@@ -293,11 +289,10 @@ class Env:
     # 報酬(総遅延)の計算
     def cal_reward(self):
         reward = 0
-        for n in range(self.num_topic):
-            for publisher in self.publishers[n]:
-                for subscriber in self.subscribers[n]:
-                    delay = self.cal_delay(publisher, subscriber, n)
-                    reward = reward + delay
+        for publisher in self.publishers[0]:
+            for subscriber in self.subscribers[0]:
+                delay = self.cal_delay(publisher, subscriber, 0)
+                reward = reward + delay
                 
         return reward
 

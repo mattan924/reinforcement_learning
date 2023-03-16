@@ -20,7 +20,7 @@ if __name__ == '__main__':
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
     #  標準エラー出力先の変更
-    sys.stderr = open(result_dir + "err.log", 'w')
+    #sys.stderr = open(result_dir + "err.log", 'w')
 
     #  各種ログの出力先ファイルの指定
     log_file = result_dir + "out.log"
@@ -33,7 +33,7 @@ if __name__ == '__main__':
         pass
 
     #  学習に使用するデータの指定
-    learning_data_index = "../dataset/learning_data/index/index_multi.csv"
+    learning_data_index = "../dataset/learning_data/index/index_single2.csv"
 
     #  環境のインスタンスの生成
     env = Env(learning_data_index)
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     backup_iter = 1000
 
     #  学習モデルの指定
-    agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, device)
+    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
     #agent = ActorCritic(N_action, env.num_client, env.num_topic, buffer_size, batch_size, device)
 
     #  学習による total_reward の推移を保存
