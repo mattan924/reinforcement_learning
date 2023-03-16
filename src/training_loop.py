@@ -20,7 +20,7 @@ if __name__ == '__main__':
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
     #  標準エラー出力先の変更
-    sys.stderr = open(result_dir + "err.log", 'w')
+    #sys.stderr = open(result_dir + "err.log", 'w')
 
     #  各種ログの出力先ファイルの指定
     log_file = result_dir + "out.log"
@@ -33,7 +33,7 @@ if __name__ == '__main__':
         pass
 
     #  学習に使用するデータの指定
-    learning_data_index = "../dataset/learning_data/index/index_multi.csv"
+    learning_data_index = "../dataset/learning_data/index/index_single2.csv"
 
     #  環境のインスタンスの生成
     env = Env(learning_data_index)
