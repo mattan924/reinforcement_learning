@@ -39,7 +39,7 @@ if __name__ == '__main__':
     env = Env(learning_data_index)
 
     # 各種パラメーター
-    max_epi_itr = 1000
+    max_epi_itr = 500
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -54,13 +54,13 @@ if __name__ == '__main__':
     #  学習開始時のエピソード数を指定
     start_epi_itr = 0
     #  pre_trainを行うエピソードの周期 (pre_train_iter = 10の時10回に一回 pre_train を実行)
-    pre_train_iter = 10
+    pre_train_iter = 3
     #  重みのバックアップを行うエピソードの周期 (backup_iter = 1000 の時1000回に一回バックアップを実行)
     backup_iter = 1000
 
     #  学習モデルの指定
-    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
-    #agent = ActorCritic(N_action, env.num_client, env.num_topic, buffer_size, batch_size, device)
+    #agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
+    agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
 
     #  学習による total_reward の推移を保存
     train_curve = []

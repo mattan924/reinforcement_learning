@@ -1,10 +1,13 @@
+import sys
+sys.path.append("../../dataset_visualization/src")
+import util
+import animation
 from env import Env
 from COMA import COMA, ActorCritic
 import matplotlib.pyplot as plt
 import pandas as pd
 import time as time_modu
 import datetime
-import sys
 import os
 
 if __name__ == '__main__':
@@ -12,7 +15,20 @@ if __name__ == '__main__':
     data_index = "../dataset/learning_data/index/index_single2.csv"
 
     #  読み込む重みパラメータ
-    load_parameter = "../result/0316/model_parameter/"
+    load_parameter = "../result/Actor_Critic_single2/model_parameter/"
+
+    #  結果出力先ファイル
+    output_file = "../dataset/execution_data/solution/single2.csv"
+
+    #  結果確認用アニメーション
+    output_animation = "../dataset/execution_data/animation/single2.gif"
+
+    df_index = pd.read_csv(data_index, index_col=0, dtype=str)
+    df_index.at['data', 'solve_file'] = output_file
+    df_index.to_csv(data_index)
+
+    with open(output_file, "w") as f:
+        pass
 
     #  環境のインスタンスの生成
     env = Env(data_index)
@@ -31,11 +47,11 @@ if __name__ == '__main__':
     pretrain_flag = False
 
     #  学習モデルの指定
-    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
-    #agent = ActorCritic(N_action, env.num_client, env.num_topic, buffer_size, batch_size, device)
+    #agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
+    agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
 
     #  重みパラメータの読み込み
-    agent.load_model(load_parameter, 0)
+    agent.load_model(load_parameter, 500)
         
     #  状態の観測
     obs = env.get_observation()
@@ -59,5 +75,8 @@ if __name__ == '__main__':
 
         obs = next_obs
 
-    print(f"total_reward = {sum(reward_history)}")
+        for i in range(env.num_client):
+            client = env.pre_time_clients[i]
+            util.writeSolutionCSV(output_file, client.id, time, client.x, client.y, client.pub_edge, client.sub_edge, 1)
 
+    animation.create_single_assign_animation(data_index, output_animation, 20)

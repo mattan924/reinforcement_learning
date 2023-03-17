@@ -105,6 +105,7 @@ class Env:
         self.learning_data = util.read_data_set_topic(self.data_file, self.num_topic)
 
         self.clients = []
+        self.pre_time_clients = []
         self.publishers = [[] for _ in range(self.num_topic)]
         self.subscribers = [[] for _ in range(self.num_topic)]
         for _ in range(self.num_client):
@@ -261,6 +262,8 @@ class Env:
             
         # 報酬の計算
         reward = self.cal_reward()
+
+        self.pre_time_clients = self.clients
     
         if time != self.simulation_time-self.time_step:
             self.clients = []

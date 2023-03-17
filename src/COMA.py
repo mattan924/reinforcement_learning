@@ -247,7 +247,7 @@ class COMA:
             return
 
         # オプティマイザーの設定
-        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
+        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-3)
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
         V_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
 
@@ -318,10 +318,9 @@ class COMA:
 
 class ActorCritic:
     
-    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, device):
+    def __init__(self, N_action, num_agent, buffer_size, batch_size, device):
         self.N_action = N_action
         self.num_agent = num_agent
-        self.num_topic = num_topic
         self.buffer_size = buffer_size
         self.batch_size = batch_size
         self.device = device
@@ -342,10 +341,7 @@ class ActorCritic:
         obs_tensor = torch.FloatTensor(obs)
         obs_tensor = obs_tensor.to(self.device)
 
-        # pi を pi.shape = {self.num_agent, self.num_topic, self.N_action} の形にする必要がある
-        for n in range(self.num_topic):
-            pi = self.actor.get_action(obs_tensor)
-        print(f"pi.shape = {pi.shape}")
+        pi = self.actor.get_action(obs_tensor)
 
         if train_flag:
             clients = env.clients
@@ -368,7 +364,6 @@ class ActorCritic:
                         actions.append(min_idx)
                     else:
                         actions.append(-1)
-
             else:
                 for i in range(self.num_agent):
                     client = clients[i]
@@ -376,6 +371,14 @@ class ActorCritic:
                         actions.append(Categorical(pi[i]).sample().item())
                     else:
                         actions.append(-1)
+        else:
+            clients = env.clients
+            actions = np.ones(self.num_agent)*-1
+
+            for i in range(self.num_agent):
+                    client = clients[i]
+                    if client.pub_topic[0] == 1:
+                        actions[i] = torch.argmax(pi[i])
         
         return actions, pi
 
