@@ -158,10 +158,10 @@ class COMA:
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
 
 
-        if self.device == 'cuda':
-            self.actor.cuda()
-            self.critic.cuda()
-            self.V_net.cuda()
+        if self.device != 'cpu':
+            self.actor.cuda(self.device)
+            self.critic.cuda(self.device)
+            self.V_net.cuda(self.device)
 
         self.gamma = 0.95
         self.critic_loss_fn = torch.nn.MSELoss()
@@ -329,9 +329,9 @@ class ActorCritic:
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
 
 
-        if self.device == 'cuda':
-            self.actor.cuda()
-            self.V_net.cuda()
+        if self.device != 'cpu':
+            self.actor.cuda(self.device)
+            self.V_net.cuda(self.device)
 
         self.gamma = 0.95
         self.V_net_loff_fn = torch.nn.MSELoss()
@@ -393,7 +393,7 @@ class ActorCritic:
         self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
 
 
-    def train(self, obs, actions, pi, reward, next_obs):
+    def train(self, obs, actions, pi, reward, next_obs, fix_net_flag):
        
         # 行動のtensor化
         actions_onehot = torch.zeros(self.num_agent*self.N_action, device=self.device)
@@ -425,35 +425,36 @@ class ActorCritic:
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
 
-        V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp)
-        V = self.V_net.get_value(obs_exp)
+        if fix_net_flag:
+            V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp)
+            V = self.V_net.get_value(obs_exp)
 
-        V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
+            V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
 
-        V_net_optimizer.zero_grad()
-        V_net_loss.backward(retain_graph=True)
-        V_net_optimizer.step()
+            V_net_optimizer.zero_grad()
+            V_net_loss.backward(retain_graph=True)
+            V_net_optimizer.step()
+        else:
+            actor_loss = torch.FloatTensor([0.0])
+            actor_loss = actor_loss.to(self.device)
 
-        actor_loss = torch.FloatTensor([0.0])
-        actor_loss = actor_loss.to(self.device)
+            v_obs = obs_tensor.unsqueeze(0)
+            v_next_obs = next_obs_tensor.unsqueeze(0)
 
-        v_obs = obs_tensor.unsqueeze(0)
-        v_next_obs = next_obs_tensor.unsqueeze(0)
+            V_target = reward_exp/100 + self.gamma*self.V_net.get_value(v_next_obs)
+            V = self.V_net.get_value(v_obs)
 
-        V_target = reward_exp/100 + self.gamma*self.V_net.get_value(v_next_obs)
-        V = self.V_net.get_value(v_obs)
+            A = V_target - V
 
-        A = V_target - V
+            cnt = 0
+            for i in range(self.num_agent):
+                if actions[i] != -1:
+                    actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]] + 1e-16)
+                    cnt += 1
 
-        cnt = 0
-        for i in range(self.num_agent):
-            if actions[i] != -1:
-                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]] + 1e-16)
-                cnt += 1
+            actor_loss = - actor_loss / cnt
 
-        actor_loss = - actor_loss / cnt
-
-        actor_optimizer.zero_grad()
-        actor_loss.backward()
-        actor_optimizer.step()
+            actor_optimizer.zero_grad()
+            actor_loss.backward()
+            actor_optimizer.step()
         

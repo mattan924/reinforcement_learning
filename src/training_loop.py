@@ -2,48 +2,32 @@ from env import Env
 from COMA import COMA, ActorCritic
 import matplotlib.pyplot as plt
 import pandas as pd
-import time as time_modu
-import datetime
 import sys
 import os
 
+
+def read_train_curve(log_path, pre_train_iter):
+    reward_history = []
+    tmp = 0
+
+    with open(log_path, "r") as f:
+        for line in f:
+            line = line.split(",")
+
+            if tmp % pre_train_iter != 0:
+                reward_history.append(float(line[1]))
+
+            tmp += 1
+    
+    return reward_history
+
 if __name__ == '__main__':
-    #  プログラムの実行時間の計測の開始
-    start_time = time_modu.time()
-
-    #  重みパラメータ、学習結果を保存するディレクトリの確認
-    dt_now = datetime.datetime.now()
-    date = dt_now.strftime('%m%d')
-    result_dir = "../result/" + date + "/"
-
-    if not os.path.isdir(result_dir + "model_parameter"):
-        sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
-
-    #  標準エラー出力先の変更
-    #sys.stderr = open(result_dir + "err.log", 'w')
-
-    #  各種ログの出力先ファイルの指定
-    log_file = result_dir + "out.log"
-    pi_dist_file = result_dir + "pi_dist.log"
-
-    with open(log_file, 'w') as f:
-        pass
-
-    with open(pi_dist_file, "w") as f:
-        pass
-
-    #  学習に使用するデータの指定
-    learning_data_index = "../dataset/learning_data/index/index_single2.csv"
-
-    #  環境のインスタンスの生成
-    env = Env(learning_data_index)
-
     # 各種パラメーター
-    max_epi_itr = 500
+    max_epi_itr = 4000
     N_action = 9
     buffer_size = 3000
     batch_size = 500
-    device = 'cuda'
+    device = 'cuda:0'
 
     #  train_flag = True: 学習モード, False: 実行モード
     train_flag = True
@@ -57,6 +41,37 @@ if __name__ == '__main__':
     pre_train_iter = 3
     #  重みのバックアップを行うエピソードの周期 (backup_iter = 1000 の時1000回に一回バックアップを実行)
     backup_iter = 1000
+    #  価値関数とActor ネットワークを交互に固定して学習するためのフラグ
+    fix_net_flag = False
+    #  何エピソードごとに固定する方を変えるか
+    fix_net_iter = 10
+
+    #  重みパラメータ、学習結果を保存するディレクトリの確認
+    specified_dir_name = "Actor_Critic_single"
+    result_dir = "../result/" + specified_dir_name + "/"
+
+    if not os.path.isdir(result_dir + "model_parameter"):
+        sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
+
+    #  標準エラー出力先の変更
+    sys.stderr = open(result_dir + "err.log", 'w')
+
+    #  各種ログの出力先ファイルの指定
+    log_file = result_dir + "out.log"
+    pi_dist_file = result_dir + "pi_dist.log"
+
+    if load_flag == False:
+        with open(log_file, 'w') as f:
+            pass
+
+        with open(pi_dist_file, "w") as f:
+            pass
+
+    #  学習に使用するデータの指定
+    learning_data_index = "../dataset/learning_data/index/index_single.csv"
+
+    #  環境のインスタンスの生成
+    env = Env(learning_data_index)
 
     #  学習モデルの指定
     #agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
@@ -68,8 +83,13 @@ if __name__ == '__main__':
     # 学習ループ
     for epi_iter in range(start_epi_itr, max_epi_itr):
         #  重みパラメータの読み込み
-        if load_flag and (epi_iter-1) % backup_iter == 0:
+        if load_flag and epi_iter == start_epi_itr:
+            agent.load_model(result_dir + "/model_parameter/", start_epi_itr)
+        elif load_flag and (epi_iter-1) % backup_iter == 0:
             agent.load_model(result_dir + "/model_parameter/", epi_iter-1)
+
+        if epi_iter % fix_net_iter == 0:
+            fix_net_flag = not fix_net_flag
         
         #  環境のリセット
         env.reset()
@@ -101,7 +121,7 @@ if __name__ == '__main__':
             next_obs = env.get_observation()
 
             # 学習
-            agent.train(obs, actions, pi, reward, next_obs)
+            agent.train(obs, actions, pi, reward, next_obs, fix_net_flag)
 
             obs = next_obs
 
@@ -110,33 +130,22 @@ if __name__ == '__main__':
             print(f"total_reward = {sum(reward_history)}")
             print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
             with open(log_file, 'a') as f:
-                f.write(f"total_reward = {sum(reward_history)}\n")
-                f.write(f"train is {(epi_iter/max_epi_itr)*100}% complited.\n")
+                f.write(f"{(epi_iter/max_epi_itr)*100}%, {-sum(reward_history)}\n")
 
             with open(pi_dist_file, "a") as f:
                 for i in range(1):
                     f.write(f"agent {i} pi = {pi[i]}\n")
-
-            if epi_iter % pre_train_iter != 0:
-                train_curve.append(-sum(reward_history))
 
         #  重みパラメータのバックアップ
         if epi_iter % backup_iter == 0:
             agent.save_model(result_dir + 'model_parameter/', epi_iter)
             load_flag = True
 
-    #  学習終了時の時間
-    end_time = time_modu.time()
-
-    #  計算時間の出力
-    print(f"実行時間: {end_time-start_time}s")
-
-    with open(log_file, 'a') as f:
-        f.write(f"実行時間: {end_time-start_time}s\n")
-
     #  最適解の取り出し
     df_index = pd.read_csv(learning_data_index, index_col=0)
     opt = df_index.at['data', 'opt']
+
+    train_curve = read_train_curve(log_file, pre_train_iter)
 
     #  学習曲線の描画
     plt.plot(train_curve, linewidth=1, label='COMA')
