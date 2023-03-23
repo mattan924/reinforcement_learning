@@ -147,10 +147,9 @@ class V_Net(nn.Module):
 
 class COMA:
     
-    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, device):
+    def __init__(self, N_action, num_agent, buffer_size, batch_size, device):
         self.N_action = N_action
         self.num_agent = num_agent
-        self.num_topic = num_topic
         self.buffer_size = buffer_size
         self.batch_size = batch_size
         self.device = device
@@ -160,10 +159,10 @@ class COMA:
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
 
 
-        if self.device == 'cuda':
-            self.actor.cuda()
-            self.critic.cuda()
-            self.V_net.cuda()
+        if self.device != 'cpu':
+            self.actor.cuda(self.device)
+            self.critic.cuda(self.device)
+            self.V_net.cuda(self.device)
 
         self.gamma = 0.95
         self.critic_loss_fn = torch.nn.MSELoss()
@@ -174,15 +173,11 @@ class COMA:
         obs_tensor = torch.FloatTensor(obs)
         obs_tensor = obs_tensor.to(self.device)
 
-        pi = self.actor.get_action(obs_tensor).unsqueeze(0)
-        for n in range(1, self.num_topic):
-            pi_tmp = self.actor.get_action(obs_tensor).unsqueeze(0)
-            pi = torch.cat([pi, pi_tmp], dim=0)
-        # pi を pi.shape = {self.num_topic, self.num_agent, self.N_action} の形にする必要がある
-
+        pi = self.actor.get_action(obs_tensor)
+        
         if train_flag:
             clients = env.clients
-            actions = np.ones((self.num_topic, self.num_agent))*-1
+            actions = np.ones(self.num_agent)*-1
             if pretrain_flag:
                 edges = env.all_edge
 
@@ -198,16 +193,22 @@ class COMA:
                                     min_distance = distance
                                     min_idx = j
                     
-                    for n in range(self.num_topic):
-                        if client.pub_topic[n] == 1:
-                            actions[n][i] = min_idx
+                    if client.pub_topic[0] == 1:
+                        actions[i] = min_idx
             else:
                 for i in range(self.num_agent):
                     client = clients[i]
-                    for n in range(self.num_topic):
-                        if client.pub_topic[0] == 1:
-                            actions[n][i] = Categorical(pi[n][i]).sample().item()
-                        
+                    if client.pub_topic[0] == 1:
+                        actions[i] = Categorical(pi[i]).sample().item()
+        else:
+            clients = env.clients
+            actions = np.ones(self.num_agent)*-1
+
+            for i in range(self.num_agent):
+                    client = clients[i]
+                    if client.pub_topic[0] == 1:
+                        actions[i] = torch.argmax(pi[i])
+
         return actions, pi
 
     
@@ -223,33 +224,31 @@ class COMA:
         self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
 
 
-    def train(self, obs, actions, pi, reward, next_obs):
+    def train(self, obs, actions, pi, reward, next_obs, fix_net_flag):
         # 行動のtensor化
-        actions_onehot = torch.zeros(self.num_topic*self.num_agent*self.N_action, device=self.device)
+        actions_onehot = torch.zeros(self.num_agent*self.N_action, device=self.device)
         
         for i in range(self.num_agent):
-            for n in range(self.num_topic):
-                action = int(actions[n][i])
-                if action != -1:
-                    actions_onehot[n*self.num_agent*self.N_action + i*self.N_action + action] = 1
+            action = int(actions[i])
+            if action != -1:
+                actions_onehot[i*self.N_action + action] = 1
         
         # 経験再生用バッファへの追加
         obs_tensor = torch.FloatTensor(obs[0][1:]).to(self.device)
         next_obs_tensor = torch.FloatTensor(next_obs[0][1:]).to(self.device)
 
         for i in range(self.num_agent):
-            for n in range(self.num_topic):
-                if actions[n][i] != -1:
-                    state = obs_tensor
-                    next_state = next_obs_tensor
+            if actions[i] != -1:
+                state = obs_tensor
+                next_state = next_obs_tensor
 
-                    self.replay_buffer.add(i, state, actions_onehot, actions, reward, next_state)
+                self.replay_buffer.add(i, state, actions_onehot, actions, reward, next_state)
 
         if len(self.replay_buffer) < self.buffer_size:
             return
 
         # オプティマイザーの設定
-        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
+        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-3)
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
         V_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
 
@@ -285,34 +284,30 @@ class COMA:
         for i in range(1, self.num_agent):
             critic_obs = torch.cat([critic_obs, obs_tensor.unsqueeze(0)], dim=0)
             critic_action = torch.cat([critic_action, actions_onehot.unsqueeze(0)], dim=0)
-        
+                
         Q2 = self.critic.get_value(critic_obs, critic_action)
 
         Q_tmp = torch.zeros(self.N_action, self.num_agent, device=self.device)
-                
+                        
         for a in range(self.N_action):
             critic_action_copy = critic_action.clone()
 
-            for n in range(self.num_topic):
-                for i in range(self.num_agent):
-                    for j in range(self.N_action):
-                        critic_action_copy[i][n*self.num_agent*self.N_action + i*self.N_action+j] = 0
-                        
-                    critic_action_copy[i][i*self.N_action + a] = 1
-            
+            for i in range(self.num_agent):
+                for j in range(self.N_action):
+                    critic_action_copy[i][i*self.N_action+j] = 0
+                            
+                critic_action_copy[i][i*self.N_action + a] = 1
+                    
             Q_tmp[a] = self.critic.get_value(critic_obs, critic_action_copy).squeeze(1)
-        
+                
         Q_tmp = torch.permute(Q_tmp, (1, 0))
-        
-        #A = torch.zeros((self.num_topic, self.))
-        for n in range(self.num_topic):
-            A = Q2.squeeze(1) - torch.sum(pi[n]*Q_tmp, 1)
-            print(f"A = {A.shape}")
-    
+            
+        A = Q2.squeeze(1) - torch.sum(pi*Q_tmp, 1)
+            
         cnt = 0
         for i in range(self.num_agent):
             if actions[i] != -1:
-                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]] + 1e-16)
+                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][int(actions[i])] + 1e-16)
                 cnt += 1
 
         actor_loss = - actor_loss / cnt
@@ -326,10 +321,9 @@ class COMA:
 
 class ActorCritic:
     
-    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, device):
+    def __init__(self, N_action, num_agent, buffer_size, batch_size, device):
         self.N_action = N_action
         self.num_agent = num_agent
-        self.num_topic = num_topic
         self.buffer_size = buffer_size
         self.batch_size = batch_size
         self.device = device
@@ -338,9 +332,9 @@ class ActorCritic:
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
 
 
-        if self.device == 'cuda':
-            self.actor.cuda()
-            self.V_net.cuda()
+        if self.device != 'cpu':
+            self.actor.cuda(self.device)
+            self.V_net.cuda(self.device)
 
         self.gamma = 0.95
         self.V_net_loff_fn = torch.nn.MSELoss()
@@ -350,10 +344,7 @@ class ActorCritic:
         obs_tensor = torch.FloatTensor(obs)
         obs_tensor = obs_tensor.to(self.device)
 
-        # pi を pi.shape = {self.num_agent, self.num_topic, self.N_action} の形にする必要がある
-        for n in range(self.num_topic):
-            pi = self.actor.get_action(obs_tensor)
-        print(f"pi.shape = {pi.shape}")
+        pi = self.actor.get_action(obs_tensor)
 
         if train_flag:
             clients = env.clients
@@ -376,7 +367,6 @@ class ActorCritic:
                         actions.append(min_idx)
                     else:
                         actions.append(-1)
-
             else:
                 for i in range(self.num_agent):
                     client = clients[i]
@@ -384,6 +374,14 @@ class ActorCritic:
                         actions.append(Categorical(pi[i]).sample().item())
                     else:
                         actions.append(-1)
+        else:
+            clients = env.clients
+            actions = np.ones(self.num_agent)*-1
+
+            for i in range(self.num_agent):
+                    client = clients[i]
+                    if client.pub_topic[0] == 1:
+                        actions[i] = torch.argmax(pi[i])
         
         return actions, pi
 
@@ -398,7 +396,7 @@ class ActorCritic:
         self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
 
 
-    def train(self, obs, actions, pi, reward, next_obs):
+    def train(self, obs, actions, pi, reward, next_obs, fix_net_flag):
        
         # 行動のtensor化
         actions_onehot = torch.zeros(self.num_agent*self.N_action, device=self.device)
@@ -430,35 +428,36 @@ class ActorCritic:
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
 
-        V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp)
-        V = self.V_net.get_value(obs_exp)
+        if fix_net_flag:
+            V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp)
+            V = self.V_net.get_value(obs_exp)
 
-        V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
+            V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
 
-        V_net_optimizer.zero_grad()
-        V_net_loss.backward(retain_graph=True)
-        V_net_optimizer.step()
+            V_net_optimizer.zero_grad()
+            V_net_loss.backward(retain_graph=True)
+            V_net_optimizer.step()
+        else:
+            actor_loss = torch.FloatTensor([0.0])
+            actor_loss = actor_loss.to(self.device)
 
-        actor_loss = torch.FloatTensor([0.0])
-        actor_loss = actor_loss.to(self.device)
+            v_obs = obs_tensor.unsqueeze(0)
+            v_next_obs = next_obs_tensor.unsqueeze(0)
 
-        v_obs = obs_tensor.unsqueeze(0)
-        v_next_obs = next_obs_tensor.unsqueeze(0)
+            V_target = reward_exp/100 + self.gamma*self.V_net.get_value(v_next_obs)
+            V = self.V_net.get_value(v_obs)
 
-        V_target = reward_exp/100 + self.gamma*self.V_net.get_value(v_next_obs)
-        V = self.V_net.get_value(v_obs)
+            A = V_target - V
 
-        A = V_target - V
+            cnt = 0
+            for i in range(self.num_agent):
+                if actions[i] != -1:
+                    actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]] + 1e-16)
+                    cnt += 1
 
-        cnt = 0
-        for i in range(self.num_agent):
-            if actions[i] != -1:
-                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][actions[i]] + 1e-16)
-                cnt += 1
+            actor_loss = - actor_loss / cnt
 
-        actor_loss = - actor_loss / cnt
-
-        actor_optimizer.zero_grad()
-        actor_loss.backward()
-        actor_optimizer.step()
+            actor_optimizer.zero_grad()
+            actor_loss.backward()
+            actor_optimizer.step()
         

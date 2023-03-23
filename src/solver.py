@@ -477,7 +477,8 @@ class Solver:
                     for n in range(self.num_topic):
                         f.write(f",{x_opt_output[m][n]}")
 
-                    f.write(f",{y_opt_output[m]}\n")
+                    for n in range(self.num_topic):
+                        f.write(f",{y_opt_output[m]}\n")
 
             # 総遅延の計算
             for m in range(self.num_client):
@@ -565,7 +566,7 @@ class Solver:
             
             with open(output_file, "a") as f:
                 for m in range(self.num_client):
-                    f.write(f"{m},{time}")
+                    f.write(f"{m},{time},{self.all_client[m].x},{self.all_client[m].y}")
 
                     for n in range(self.num_topic):
                         f.write(f",{x_opt_output[m][n]}")
