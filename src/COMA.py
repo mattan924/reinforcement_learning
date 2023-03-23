@@ -223,7 +223,7 @@ class COMA:
         self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
 
 
-    def train(self, obs, actions, pi, reward, next_obs):
+    def train(self, obs, actions, pi, reward, next_obs, fix_net_flag):
         # 行動のtensor化
         actions_onehot = torch.zeros(self.num_agent*self.N_action, device=self.device)
         
@@ -283,26 +283,26 @@ class COMA:
         for i in range(1, self.num_agent):
             critic_obs = torch.cat([critic_obs, obs_tensor.unsqueeze(0)], dim=0)
             critic_action = torch.cat([critic_action, actions_onehot.unsqueeze(0)], dim=0)
-        
+                
         Q2 = self.critic.get_value(critic_obs, critic_action)
 
         Q_tmp = torch.zeros(self.N_action, self.num_agent, device=self.device)
-                
+                        
         for a in range(self.N_action):
             critic_action_copy = critic_action.clone()
 
             for i in range(self.num_agent):
                 for j in range(self.N_action):
                     critic_action_copy[i][i*self.N_action+j] = 0
-                    
+                            
                 critic_action_copy[i][i*self.N_action + a] = 1
-            
+                    
             Q_tmp[a] = self.critic.get_value(critic_obs, critic_action_copy).squeeze(1)
-        
+                
         Q_tmp = torch.permute(Q_tmp, (1, 0))
-        
+            
         A = Q2.squeeze(1) - torch.sum(pi*Q_tmp, 1)
-    
+            
         cnt = 0
         for i in range(self.num_agent):
             if actions[i] != -1:

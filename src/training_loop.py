@@ -23,7 +23,7 @@ def read_train_curve(log_path, pre_train_iter):
 
 if __name__ == '__main__':
     # 各種パラメーター
-    max_epi_itr = 4000
+    max_epi_itr = 1000
     N_action = 9
     buffer_size = 3000
     batch_size = 500
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     #  学習開始時のエピソード数を指定
     start_epi_itr = 0
     #  pre_trainを行うエピソードの周期 (pre_train_iter = 10の時10回に一回 pre_train を実行)
-    pre_train_iter = 3
+    pre_train_iter = 10
     #  重みのバックアップを行うエピソードの周期 (backup_iter = 1000 の時1000回に一回バックアップを実行)
     backup_iter = 1000
     #  価値関数とActor ネットワークを交互に固定して学習するためのフラグ
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     fix_net_iter = 10
 
     #  重みパラメータ、学習結果を保存するディレクトリの確認
-    specified_dir_name = "Actor_Critic_single"
+    specified_dir_name = "COMA_fix_test/no_fix"
     result_dir = "../result/" + specified_dir_name + "/"
 
     if not os.path.isdir(result_dir + "model_parameter"):
@@ -68,14 +68,14 @@ if __name__ == '__main__':
             pass
 
     #  学習に使用するデータの指定
-    learning_data_index = "../dataset/learning_data/index/index_single.csv"
+    learning_data_index = "../dataset/learning_data/index/index_test.csv"
 
     #  環境のインスタンスの生成
     env = Env(learning_data_index)
 
     #  学習モデルの指定
-    #agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
-    agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
+    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
+    #agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
 
     #  学習による total_reward の推移を保存
     train_curve = []
@@ -127,8 +127,8 @@ if __name__ == '__main__':
 
         if epi_iter % 1 == 0:
             #  ログの出力
-            print(f"total_reward = {sum(reward_history)}")
-            print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
+            #print(f"total_reward = {sum(reward_history)}")
+            #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
             with open(log_file, 'a') as f:
                 f.write(f"{(epi_iter/max_epi_itr)*100}%, {-sum(reward_history)}\n")
 

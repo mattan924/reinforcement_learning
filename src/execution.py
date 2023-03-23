@@ -12,16 +12,16 @@ import os
 
 if __name__ == '__main__':
     #  学習に使用するデータの指定
-    data_index = "../dataset/learning_data/index/index_single.csv"
+    data_index = "../dataset/learning_data/index/index_test.csv"
 
     #  読み込む重みパラメータ
-    load_parameter = "../result/Actor_Critic_single/model_parameter/"
+    load_parameter = "../result/COMA_test/model_parameter/"
 
     #  結果出力先ファイル
-    output_file = "../dataset/execution_data/solution/Actor_Critic_single5000.csv"
+    output_file = "../dataset/execution_data/solution/COMA_test1000.csv"
 
     #  結果確認用アニメーション
-    output_animation = "../dataset/execution_data/animation/Actor_Critic5000.gif"
+    output_animation = "../dataset/execution_data/animation/COMA_test1000.gif"
 
     df_index = pd.read_csv(data_index, index_col=0, dtype=str)
     df_index.at['data', 'solve_file'] = output_file
@@ -47,11 +47,11 @@ if __name__ == '__main__':
     pretrain_flag = False
 
     #  学習モデルの指定
-    #agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
-    agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
+    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
+    #agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
 
     #  重みパラメータの読み込み
-    agent.load_model(load_parameter, 5000)
+    agent.load_model(load_parameter, 1000)
         
     #  状態の観測
     obs = env.get_observation()
