@@ -312,11 +312,10 @@ class COMA:
 
             actor_loss = - actor_loss / cnt
 
-            print(f"actor_loss.shape = {actor_loss.shape}")
-
             actor_optimizer.zero_grad()
             actor_loss.backward()
             actor_optimizer.step()
+
 
     def train(self, obs, actions, pi, reward, next_obs):
         # 行動のtensor化
@@ -405,8 +404,6 @@ class COMA:
                 cnt += 1
 
         actor_loss = - actor_loss / cnt
-
-        print(f"actor_loss.shape = {actor_loss.shape}")
 
         actor_optimizer.zero_grad()
         actor_loss.backward()
