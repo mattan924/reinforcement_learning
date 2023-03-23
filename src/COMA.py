@@ -71,8 +71,9 @@ class Actor(nn.Module):
 
 class Critic(nn.Module):
 
-    def __init__(self, N_action, num_clinet):
+    def __init__(self, num_topic, N_action, num_clinet):
         super(Critic, self).__init__()
+        self.num_topic = num_topic
         self.N_action = N_action
         self.N_client = num_clinet
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
@@ -85,7 +86,7 @@ class Critic(nn.Module):
         nn.init.zeros_(self.conv3.bias)
         self.pool3 = nn.MaxPool2d(3)
 
-        self.fc1 = nn.Linear(num_clinet*N_action, 512)
+        self.fc1 = nn.Linear(self.num_topic*num_clinet*N_action, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 64)
 
@@ -153,7 +154,7 @@ class COMA:
         self.batch_size = batch_size
         self.device = device
         self.actor = Actor(self.N_action)
-        self.critic = Critic(self.N_action, num_agent)
+        self.critic = Critic(self.num_topic, self.N_action, num_agent)
         self.V_net = V_Net()
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
 
@@ -310,6 +311,8 @@ class COMA:
                 cnt += 1
 
         actor_loss = - actor_loss / cnt
+
+        print(f"actor_loss.shape = {actor_loss.shape}")
 
         actor_optimizer.zero_grad()
         actor_loss.backward()
