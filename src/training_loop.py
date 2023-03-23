@@ -18,14 +18,13 @@ def read_train_curve(log_path, pre_train_iter):
                 reward_history.append(float(line[1]))
 
             tmp += 1
-    
+            
     return reward_history
 
-def train_loop_fix(max_epi_itr, device, result_dir, learning_data_index_path, output, err_file, start_epi_itr=0, load_parameter_path=None):
+def train_loop_fix(max_epi_itr, device, result_dir, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
-    #  load_flag = True: 重みパラメータを読み込む, False: 読み込まない
     if start_epi_itr != 0:
         if load_parameter_path == None:
             sys.exit("読み込む重みパラメータのパスを指定してください")
@@ -53,7 +52,7 @@ def train_loop_fix(max_epi_itr, device, result_dir, learning_data_index_path, ou
     fix_net_iter = 10
 
     #  標準エラー出力先の変更
-    sys.stderr = open(err_file, 'w')
+    sys.stderr = open(output + "_err.log", 'w')
 
     if load_flag == False:
         with open(output + ".log", 'w') as f:
@@ -64,9 +63,6 @@ def train_loop_fix(max_epi_itr, device, result_dir, learning_data_index_path, ou
 
     #  学習モデルの指定
     agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
-
-    #  学習による total_reward の推移を保存
-    train_curve = []
 
     # 学習ループ
     for epi_iter in range(start_epi_itr, max_epi_itr):
@@ -129,9 +125,12 @@ def train_loop_fix(max_epi_itr, device, result_dir, learning_data_index_path, ou
     train_curve = read_train_curve(output + ".log", pre_train_iter)
 
     #  学習曲線の描画
-    plt.plot(train_curve, linewidth=1, label='COMA')
-    plt.axhline(y=-opt, c='r')
-    plt.savefig(result_dir + output + ".png")
+    fig = plt.figure()
+    wind = fig.add_subplot(1, 1, 1)
+    wind.grid()
+    wind.plot(train_curve, linewidth=1, label='COMA')
+    wind.axhline(y=-opt, c='r')
+    fig.savefig(output + ".png")
 
     #  重みパラメータの保存
     agent.save_model(result_dir + 'model_parameter/', epi_iter+1)
@@ -140,11 +139,10 @@ def train_loop_fix(max_epi_itr, device, result_dir, learning_data_index_path, ou
     sys.stderr = sys.__stderr__
 
 
-def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output, err_file, start_epi_itr=0, load_parameter_path=None):
+def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
-    #  load_flag = True: 重みパラメータを読み込む, False: 読み込まない
     if start_epi_itr != 0:
         if load_parameter_path == None:
             sys.exit("読み込む重みパラメータのパスを指定してください")
@@ -172,7 +170,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     fix_net_iter = 10
 
     #  標準エラー出力先の変更
-    sys.stderr = open(err_file, 'w')
+    sys.stderr = open(output + "_err.log", 'w')
 
     if load_flag == False:
         with open(output + ".log", 'w') as f:
@@ -183,9 +181,6 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
 
     #  学習モデルの指定
     agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
-
-    #  学習による total_reward の推移を保存
-    train_curve = []
 
     # 学習ループ
     for epi_iter in range(start_epi_itr, max_epi_itr):
@@ -226,7 +221,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
             next_obs = env.get_observation()
 
             # 学習
-            agent.train(obs, actions, pi, reward, next_obs)
+            agent.train_fix(obs, actions, pi, reward, next_obs)
 
             obs = next_obs
 
@@ -248,9 +243,12 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     train_curve = read_train_curve(output + ".log", pre_train_iter)
 
     #  学習曲線の描画
-    plt.plot(train_curve, linewidth=1, label='COMA')
-    plt.axhline(y=-opt, c='r')
-    plt.savefig(result_dir + output + ".png")
+    fig = plt.figure()
+    wind = fig.add_subplot(1, 1, 1)
+    wind.grid()
+    wind.plot(train_curve, linewidth=1, label='COMA')
+    wind.axhline(y=-opt, c='r')
+    fig.savefig(output + ".png")
 
     #  重みパラメータの保存
     agent.save_model(result_dir + 'model_parameter/', epi_iter+1)
