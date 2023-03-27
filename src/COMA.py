@@ -71,11 +71,10 @@ class Actor(nn.Module):
 
 class Critic(nn.Module):
 
-    def __init__(self, num_topic, N_action, num_clinet):
+    def __init__(self, N_action, num_client):
         super(Critic, self).__init__()
-        self.num_topic = num_topic
         self.N_action = N_action
-        self.N_client = num_clinet
+        self.N_client = num_client
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
         nn.init.zeros_(self.conv1.bias)
         self.pool1 = nn.MaxPool2d(3)
@@ -86,7 +85,7 @@ class Critic(nn.Module):
         nn.init.zeros_(self.conv3.bias)
         self.pool3 = nn.MaxPool2d(3)
 
-        self.fc1 = nn.Linear(self.num_topic*num_clinet*N_action, 512)
+        self.fc1 = nn.Linear(self.N_client*self.N_action, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 64)
 
@@ -154,7 +153,7 @@ class COMA:
         self.batch_size = batch_size
         self.device = device
         self.actor = Actor(self.N_action)
-        self.critic = Critic(self.num_topic, self.N_action, num_agent)
+        self.critic = Critic(self.N_action, num_agent)
         self.V_net = V_Net()
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
 
@@ -256,67 +255,66 @@ class COMA:
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
 
-        V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp)
-        V = self.V_net.get_value(obs_exp)
+        if fix_net_flag:
+            V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp)
+            V = self.V_net.get_value(obs_exp)
 
-        V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
+            V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
 
-        V_net_optimizer.zero_grad()
-        V_net_loss.backward(retain_graph=True)
-        V_net_optimizer.step()
+            V_net_optimizer.zero_grad()
+            V_net_loss.backward(retain_graph=True)
+            V_net_optimizer.step()
 
-        # batch_size*1のQ値をtensorとして取得
-        Q = self.critic.get_value(obs_exp, actions_exp)
+            # batch_size*1のQ値をtensorとして取得
+            Q = self.critic.get_value(obs_exp, actions_exp)
 
-        # critic ネットワークの更新
-        critic_loss = self.critic_loss_fn(V_target.detach(), Q)
+            # critic ネットワークの更新
+            critic_loss = self.critic_loss_fn(V_target.detach(), Q)
 
-        critic_optimizer.zero_grad()
-        critic_loss.backward(retain_graph=True)
-        critic_optimizer.step()
+            critic_optimizer.zero_grad()
+            critic_loss.backward(retain_graph=True)
+            critic_optimizer.step()
+        else:
+            actor_loss = torch.FloatTensor([0.0])
+            actor_loss = actor_loss.to(self.device)
 
-        actor_loss = torch.FloatTensor([0.0])
-        actor_loss = actor_loss.to(self.device)
+            critic_obs = obs_tensor.unsqueeze(0)
+            critic_action = actions_onehot.unsqueeze(0)
 
-        critic_obs = obs_tensor.unsqueeze(0)
-        critic_action = actions_onehot.unsqueeze(0)
-
-        for i in range(1, self.num_agent):
-            critic_obs = torch.cat([critic_obs, obs_tensor.unsqueeze(0)], dim=0)
-            critic_action = torch.cat([critic_action, actions_onehot.unsqueeze(0)], dim=0)
-                
-        Q2 = self.critic.get_value(critic_obs, critic_action)
-
-        Q_tmp = torch.zeros(self.N_action, self.num_agent, device=self.device)
-                        
-        for a in range(self.N_action):
-            critic_action_copy = critic_action.clone()
-
-            for i in range(self.num_agent):
-                for j in range(self.N_action):
-                    critic_action_copy[i][i*self.N_action+j] = 0
-                            
-                critic_action_copy[i][i*self.N_action + a] = 1
+            for i in range(1, self.num_agent):
+                critic_obs = torch.cat([critic_obs, obs_tensor.unsqueeze(0)], dim=0)
+                critic_action = torch.cat([critic_action, actions_onehot.unsqueeze(0)], dim=0)
                     
-            Q_tmp[a] = self.critic.get_value(critic_obs, critic_action_copy).squeeze(1)
+            Q2 = self.critic.get_value(critic_obs, critic_action)
+
+            Q_tmp = torch.zeros(self.N_action, self.num_agent, device=self.device)
+                            
+            for a in range(self.N_action):
+                critic_action_copy = critic_action.clone()
+
+                for i in range(self.num_agent):
+                    for j in range(self.N_action):
+                        critic_action_copy[i][i*self.N_action+j] = 0
+                                
+                    critic_action_copy[i][i*self.N_action + a] = 1
+                        
+                Q_tmp[a] = self.critic.get_value(critic_obs, critic_action_copy).squeeze(1)
+                    
+            Q_tmp = torch.permute(Q_tmp, (1, 0))
                 
-        Q_tmp = torch.permute(Q_tmp, (1, 0))
-            
-        A = Q2.squeeze(1) - torch.sum(pi*Q_tmp, 1)
-            
-        cnt = 0
-        for i in range(self.num_agent):
-            if actions[i] != -1:
-                actor_loss = actor_loss + A[i].item() * torch.log(pi[i][int(actions[i])] + 1e-16)
-                cnt += 1
+            A = Q2.squeeze(1) - torch.sum(pi*Q_tmp, 1)
+                
+            cnt = 0
+            for i in range(self.num_agent):
+                if actions[i] != -1:
+                    actor_loss = actor_loss + A[i].item() * torch.log(pi[i][int(actions[i])] + 1e-16)
+                    cnt += 1
 
-        actor_loss = - actor_loss / cnt
+            actor_loss = - actor_loss / cnt
 
-        print(f"actor_loss.shape = {actor_loss.shape}")
-
-        actor_optimizer.zero_grad()
-        actor_loss.backward()
-        actor_optimizer.step()
+            actor_optimizer.zero_grad()
+            actor_loss.backward()
+            actor_optimizer.step()
         
 
 class ActorCritic:
