@@ -43,7 +43,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     pretrain_flag = False
 
     #  pre_trainを行うエピソードの周期 (pre_train_iter = 10の時10回に一回 pre_train を実行)
-    pre_train_iter = 5
+    pre_train_iter = 2
 
     #  価値関数とActor ネットワークを交互に固定して学習するためのフラグ
     fix_net_flag = False
@@ -81,6 +81,32 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
 
         #  1エピソード中の reward の保持
         reward_history = []
+
+        if epi_iter < 10:
+            pre_train_iter = 2
+        elif epi_iter < 50:
+            pre_train_iter = 3
+        elif epi_iter < 100:
+            pre_train_iter = 4
+        elif epi_iter < 200:
+            pre_train_iter = 5
+        elif epi_iter < 300:
+            pre_train_iter = 6
+        elif epi_iter < 400:
+            pre_train_iter = 7
+        elif epi_iter < 500:
+            pre_train_iter = 8
+        elif epi_iter < 600:
+            pre_train_iter = 10
+        elif epi_iter < 700:
+            pre_train_iter = 15
+        elif epi_iter < 800:
+            pre_train_iter = 20
+        elif epi_iter < 900:
+            pre_train_iter = 25
+        else:
+            pre_train_iter = 30
+        
 
         #  各エピソードにおける時間の推移
         for time in range(0, env.simulation_time, env.time_step):

@@ -23,23 +23,55 @@ def read_train_curve(log_path, pre_train_iter):
     return train_curve
 
 
+def read_train_curve_design(log_path):
+    reward_history = []
+    tmp = 0
+
+    with open(log_path, "r") as f:
+        for line in f:
+            line = line.split(",")
+
+            reward = float(line[1])
+
+            if reward != -26505.705801190405:
+                reward_history.append(reward)
+
+        train_curve = np.zeros(len(reward_history))
+        
+        for i in range(len(reward_history)):
+            train_curve[i] = reward_history[i]
+            
+    return train_curve
+
+
+
 learning_data_index_path = "../dataset/learning_data/index/index_test.csv"
 
 output_fix_base = "../result/COMA_fix_test/fix10/coma_fix"
 output_pretrain_base = "../result/COMA_pretrain_test/pretrain_5/pretrain"
+output_pretrain_design_base = "../result/COMA_pretrain_test/pretrain_design/pretrain"
+output_no_pretrain_base = "../result/COMA_pretrain_test/no_pretrain/no_pretrain"
 
 average_train_curve_fix = read_train_curve(output_fix_base + "0.log", 10)
 average_train_curve_pretrain = read_train_curve(output_pretrain_base + "0.log", 5)
+average_train_curve_pretrain_design = read_train_curve_design(output_pretrain_design_base + "0.log")
+average_train_curve_no_pretrain = read_train_curve(output_no_pretrain_base + "0.log", 1000)
 
 for i in range(1, 10):
     output_fix = output_fix_base + str(i) + ".log"
     output_pretrain = output_pretrain_base + str(i) + ".log"
+    output_pretrain_design = output_pretrain_design_base + str(i) + ".log"
+    output_no_pretrain = output_no_pretrain_base + str(i) + ".log"
 
     average_train_curve_fix = average_train_curve_fix + read_train_curve(output_fix, 10)
     average_train_curve_pretrain = average_train_curve_pretrain + read_train_curve(output_pretrain, 5)
+    average_train_curve_pretrain_design = average_train_curve_pretrain_design + read_train_curve_design(output_pretrain_design)
+    average_train_curve_no_pretrain = average_train_curve_no_pretrain + read_train_curve(output_no_pretrain, 1000)
 
 average_train_curve_fix = average_train_curve_fix / 10
 average_train_curve_pretrain = average_train_curve_pretrain / 10
+average_train_curve_pretrain_design = average_train_curve_pretrain_design / 10
+average_train_curve_no_pretrain = average_train_curve_no_pretrain / 10
 
 df_index = pd.read_csv(learning_data_index_path, index_col=0)
 opt = df_index.at['data', 'opt']
@@ -50,6 +82,8 @@ wind.set_ylim(ymin=-40000, ymax=-25000)
 wind.grid()
 wind.plot(average_train_curve_fix, linewidth=1, label='pretrain_10')
 wind.plot(average_train_curve_pretrain, linewidth=1, label='pretrain_5')
+wind.plot(average_train_curve_pretrain_design, linewidth=1, label='pretrain_design')
+wind.plot(average_train_curve_no_pretrain, linewidth=1, label='no_pretrain')
 wind.axhline(y=-opt, c='r', label="optimal")
 wind.legend()
 fig.savefig("../result/COMA_pretrain_test/average_curve.png")
