@@ -157,6 +157,10 @@ class COMA:
         self.V_net = V_Net()
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
 
+        # オプティマイザーの設定
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-3)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
+        self.V_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
 
         if self.device != 'cpu':
             self.actor.cuda(self.device)
@@ -246,10 +250,6 @@ class COMA:
         if len(self.replay_buffer) < self.buffer_size:
             return
 
-        # オプティマイザーの設定
-        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-3)
-        critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
-        V_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
 
         id_exp, obs_exp, actions_exp, action_number_exp, reward_exp, next_obs_exp = self.replay_buffer.get_batch()
 
@@ -261,9 +261,9 @@ class COMA:
 
             V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
 
-            V_net_optimizer.zero_grad()
+            self.V_net_optimizer.zero_grad()
             V_net_loss.backward(retain_graph=True)
-            V_net_optimizer.step()
+            self.V_net_optimizer.step()
 
             # batch_size*1のQ値をtensorとして取得
             Q = self.critic.get_value(obs_exp, actions_exp)
@@ -271,9 +271,9 @@ class COMA:
             # critic ネットワークの更新
             critic_loss = self.critic_loss_fn(V_target.detach(), Q)
 
-            critic_optimizer.zero_grad()
+            self.critic_optimizer.zero_grad()
             critic_loss.backward(retain_graph=True)
-            critic_optimizer.step()
+            self.critic_optimizer.step()
         else:
             actor_loss = torch.FloatTensor([0.0])
             actor_loss = actor_loss.to(self.device)
@@ -312,9 +312,9 @@ class COMA:
 
             actor_loss = - actor_loss / cnt
 
-            actor_optimizer.zero_grad()
+            self.actor_optimizer.zero_grad()
             actor_loss.backward()
-            actor_optimizer.step()
+            self.actor_optimizer.step()
         
 
 class ActorCritic:
