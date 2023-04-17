@@ -240,7 +240,16 @@ class Env:
                 obs[i][t][6] = cpu_info
                 obs[i][t][7] = cpu_used_client
 
-        return obs
+        obs_topic_channel = 3
+        obs_topic = np.zeros(self.num_topic, obs_topic_channel)
+
+        for t in range(self.num_topic):
+            topic = self.all_topic[t]
+            obs_topic[t][0] = topic.require_cycle
+            obs_topic[t][1] = topic.data_size
+            obs_topic[t][2] = topic.volume
+
+        return obs, obs_topic
         
  
     #  環境を進める
