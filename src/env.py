@@ -26,10 +26,15 @@ class Edge:
         self.x = x
         self.y = y
         self.max_volume = volume
-        self.used_volume = 0
+        self.used_volume = np.zeros(num_topic)
+        self.total_used_volume = 0
         self.cpu_power = cpu_power
         self.power_allocation = np.zeros(num_topic)
-        self.used_publisers = [[] for _ in range(num_topic)]
+        self.used_publisers = np.zeros(num_topic)
+
+    
+    def cal_used_volume(self):
+        self.total_used_volume = sum(self.used_volume)
 
 
 class Topic:
@@ -165,16 +170,23 @@ class Env:
         
         
     #  状態の観測
-    #  マルチトピックへ改修が必要
     def get_observation(self):
-        obs_channel = 4
+        obs_channel = 8
         obs_size = 81
-        obs = np.zeros((self.num_client, obs_channel, obs_size, obs_size))
+
+        #  観測値
+        obs = np.zeros((self.num_client, self.num_topic, obs_channel, obs_size, obs_size))
 
         block_len_x = (self.max_x-self.min_x)/obs_size
         block_len_y = (self.max_y-self.min_y)/obs_size
 
-        distribution = np.zeros((obs_size, obs_size))
+        #  各クライアントの位置
+        position_info = np.zeros((self.num_client, obs_size, obs_size))
+        #  クライアント全体の分布
+        total_distribution = np.zeros((obs_size, obs_size))
+        #  ある topic の publisher/subscriber の分布
+        publisher_distribution = np.zeros((self.num_topic, obs_size, obs_size))
+        subscriber_distribution = np.zeros((self.num_topic, obs_size, obs_size))
 
         for client in self.clients:
             block_index_x = int(client.x / block_len_x)
@@ -185,36 +197,47 @@ class Env:
             if block_index_y == obs_size:
                 block_index_y = obs_size-1
 
-            distribution[block_index_y][block_index_x] += 1
-        
+            position_info[client.id][block_index_y][block_index_x] = 100
+
+            for t in range(self.num_topic):
+                if client.pub_topic[t] == 1:
+                    publisher_distribution[t][block_index_y][block_index_x] += 1
+
+                if client.sub_topic[t] == 1:
+                    subscriber_distribution[t][block_index_y][block_index_x] += 1
+
+            total_distribution[block_index_y][block_index_x] += 1
+
+        #  ある topic が使用しているストレージ状況
+        topic_storage_info = np.zeros((self.num_topic, obs_size, obs_size))
+        #  ストレージの空き状況
         storage_info = np.zeros((obs_size, obs_size))
+        #  cpu の最大クロック数
         cpu_info = np.zeros((obs_size, obs_size))
+        #  使用中のクライアントの数
+        cpu_used_client = np.zeros((obs_size, obs_size))
 
         for edge in self.all_edge:
             block_index_x = int(edge.x / block_len_x)
             block_index_y = int(edge.y / block_len_y)
+                
+            storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.total_used_volume) / 1e5
+            cpu_info[block_index_y][block_index_x] = edge.cpu_power
+            cpu_used_client[block_index_y][block_index_x] = sum(edge.used_publishers)
 
-            storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.used_volume) / 1e5
-            cpu_info[block_index_y][block_index_x] = edge.power_allocation[0] / 1e8
-
+            for t in range(self.num_topic):
+                topic_storage_info[t][block_index_y][block_index_x] = edge.used_volume[t]
 
         for i in range(self.num_client):
-            position_info = np.zeros((obs_size, obs_size))
-            client = self.clients[i]
-
-            block_index_x = int(client.x / block_len_x)
-            block_index_y = int(client.y / block_len_y)
-
-            if block_index_x == obs_size:
-                block_index_x = obs_size-1
-            if block_index_y == obs_size:
-                block_index_y = obs_size-1
-                
-            position_info[block_index_y][block_index_x] = 100
-            obs[i][0] = position_info
-            obs[i][1] = distribution
-            obs[i][2] = storage_info
-            obs[i][3] = cpu_info
+            for t in range(self.num_topic):
+                obs[i][t][0] = position_info[i]
+                obs[i][t][1] = publisher_distribution[t]
+                obs[i][t][2] = subscriber_distribution[t]
+                obs[i][t][3] = total_distribution
+                obs[i][t][4] = topic_storage_info[t]
+                obs[i][t][5] = storage_info
+                obs[i][t][6] = cpu_info
+                obs[i][t][7] = cpu_used_client
 
         return obs
         
