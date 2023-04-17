@@ -76,8 +76,9 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
         #  環境のリセット
         env.reset()
         #  状態の観測
-        obs = env.get_observation()
+        obs, obs_topic = env.get_observation()
         next_obs = None
+        next_obs_topic = None
 
         #  1エピソード中の reward の保持
         reward_history = []        
@@ -93,7 +94,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
 
             #  行動と確率分布の取得
             #  actions.shape = (num_topic, num_client) にする
-            actions, pi = agent.get_acction(obs, env, True, pretrain_flag)
+            actions, pi = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
 
             # 報酬の受け取り
             reward = env.step(actions, time)

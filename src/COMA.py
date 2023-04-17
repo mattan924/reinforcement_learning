@@ -45,28 +45,47 @@ class Actor(nn.Module):
     def __init__(self, N_action):
         super(Actor, self).__init__()
         self.N_action = N_action
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=4, kernel_size=3, padding=1)
+        self.batch_norm2d_1 = nn.BatchNorm2d(8)
+        self.batch_norm2d_2 = nn.BatchNorm2d(8)
+        self.batch_norm2d_3 = nn.BatchNorm2d(4)
+        self.batch_norm2d_4 = nn.BatchNorm2d(1)
+        self.batch_norm1d_1 = nn.BatchNorm1d(3)
+        self.batch_norm1d_2 = nn.BatchNorm1d(9)
+
+        self.conv1 = nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=4, out_channels=1, kernel_size=3, padding=1)
+
         nn.init.zeros_(self.conv1.bias)
-        self.pool1 = nn.MaxPool2d(3)
-        self.conv2 = nn.Conv2d(in_channels=4, out_channels=1, kernel_size=3, padding=1)
         nn.init.zeros_(self.conv2.bias)
+        nn.init.zeros_(self.conv3.bias)
+
+        self.pool1 = nn.MaxPool2d(3)
         self.pool2 = nn.MaxPool2d(3)
 
-        self.fc1 = nn.Linear(9*9, 9)
-        nn.init.zeros_(self.fc1.bias)
+        self.fc1 = nn.Linear(9*9 + 3, 9)
         self.fc2 = nn.Linear(9, self.N_action)
+
+        nn.init.zeros_(self.fc1.bias)
         nn.init.zeros_(self.fc2.bias)
     
 
-    def get_action(self, obs):
-        out1 = self.pool1(F.selu(self.conv1(obs)))
-        out2 = self.pool2(F.selu(self.conv2(out1)))
-        out3 = out2.view(-1, 9*9)
-        out4 = F.selu(self.fc1(out3))
-        out5 = self.fc2(out4)
-        out6 = F.softmax(out5, dim=1)
+    def get_action(self, obs, obs_topic):
+        out1 = self.batch_norm2d_1(obs)
+        out2 = F.selu(self.batch_norm2d_2(self.conv1(out1)))
+        out3 = F.selu(self.batch_norm2d_3(self.conv2(out2)))
+        out4 = self.pool1(out3)
+        out5 = F.selu(self.batch_norm2d_4(self.conv3(out4)))
+        out6 = self.pool2(out5)
+        out7 = out6.view(-1, 9*9)
+
+        out8 = self.batch_norm1d_1(obs_topic)
+        out9 = torch.cat([out7, out8], 1)
+        out10 = F.selu(self.batch_norm1d_2(self.fc1(out9)))
+        out11 = self.fc2(out10)
+        out12 = F.softmax(out11, dim=1)
         
-        return out6
+        return out12
 
 
 class Critic(nn.Module):
@@ -172,12 +191,17 @@ class COMA:
         self.V_net_loff_fn = torch.nn.MSELoss()
 
 
-    def get_acction(self, obs, env, train_flag, pretrain_flag):        
-        obs_tensor = torch.FloatTensor(obs)
-        obs_tensor = obs_tensor.to(self.device)
+    def get_acction(self, obs, obs_topic, env, train_flag, pretrain_flag):        
+        obs_tensor = torch.FloatTensor(obs).to(self.device)
+        obs_topic_tensor = torch.FloatTensor(obs_topic).to(self.device)
 
-        pi = self.actor.get_action(obs_tensor)
+        obs_tensor = torch.permute(obs_tensor, (1, 0, 2, 3, 4))
+
+        pi = torch.zeros((env.num_topic, env.num_client, self.N_action))
+        for t in range(env.num_topic):
+            pi[t] = self.actor.get_action(obs_tensor[t], obs_topic_tensor[t])
         
+
         if train_flag:
             clients = env.clients
             actions = np.ones(self.num_agent)*-1
