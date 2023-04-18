@@ -18,8 +18,8 @@ class ReplayBuffer:
         self.device = device
 
     
-    def add(self, id, state, actions, action_number, reward, next_state):
-        data = (id, state,  actions, action_number, reward, next_state)
+    def add(self, state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic):
+        data = (state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic)
         self.buffer.append(data)
 
     
@@ -30,14 +30,15 @@ class ReplayBuffer:
     def get_batch(self):
         data = random.sample(self.buffer, self.batch_size)
 
-        id = np.stack([x[0] for x in data])
-        state = torch.cat([x[1].unsqueeze(0) for x in data], dim=0)
-        actions = torch.cat([x[2].unsqueeze(0) for x in data], dim=0)
-        action_number = np.stack([x[3] for x in data])
+        state = torch.cat([x[0].unsqueeze(0) for x in data], dim=0)
+        state_topic = torch.cat([x[1].unsqueeze(0) for x in data], dim=0)
+        actions = np.stack([x[2] for x in data])
+        actions_onehot = torch.cat([x[3].unsqueeze(0) for x in data], dim=0)
         reward = np.stack([x[4] for x in data])
         next_state = torch.cat([x[5].unsqueeze(0) for x in data], dim=0)
+        next_state_topic = torch.cat([x[6].unsqueeze(0) for x in data], dim=0)
 
-        return id, state, actions, action_number, reward, next_state
+        return state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic
 
 
 class Actor(nn.Module):
@@ -45,16 +46,17 @@ class Actor(nn.Module):
     def __init__(self, N_action):
         super(Actor, self).__init__()
         self.N_action = N_action
-        self.batch_norm2d_1 = nn.BatchNorm2d(8)
-        self.batch_norm2d_2 = nn.BatchNorm2d(8)
+        self.batch_norm2d_1 = nn.BatchNorm2d(9)
+        self.batch_norm2d_2 = nn.BatchNorm2d(9)
         self.batch_norm2d_3 = nn.BatchNorm2d(4)
-        self.batch_norm2d_4 = nn.BatchNorm2d(1)
+        self.batch_norm2d_4 = nn.BatchNorm2d(4)
         self.batch_norm1d_1 = nn.BatchNorm1d(3)
-        self.batch_norm1d_2 = nn.BatchNorm1d(9)
+        self.batch_norm1d_2 = nn.BatchNorm1d(126)
+        self.batch_norm1d_3 = nn.BatchNorm1d(64)
 
-        self.conv1 = nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(in_channels=4, out_channels=1, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=9, out_channels=9, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=9, out_channels=4, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=4, out_channels=4, kernel_size=3, padding=1)
 
         nn.init.zeros_(self.conv1.bias)
         nn.init.zeros_(self.conv2.bias)
@@ -63,11 +65,13 @@ class Actor(nn.Module):
         self.pool1 = nn.MaxPool2d(3)
         self.pool2 = nn.MaxPool2d(3)
 
-        self.fc1 = nn.Linear(9*9 + 3, 9)
-        self.fc2 = nn.Linear(9, self.N_action)
+        self.fc1 = nn.Linear(4*9*9 + 3, 126)
+        self.fc2 = nn.Linear(126, 64)
+        self.fc3 = nn.Linear(64, self.N_action)
 
         nn.init.zeros_(self.fc1.bias)
         nn.init.zeros_(self.fc2.bias)
+        nn.init.zeros_(self.fc3.bias)
     
 
     def get_action(self, obs, obs_topic):
@@ -77,55 +81,74 @@ class Actor(nn.Module):
         out4 = self.pool1(out3)
         out5 = F.selu(self.batch_norm2d_4(self.conv3(out4)))
         out6 = self.pool2(out5)
-        out7 = out6.view(-1, 9*9)
+        out7 = out6.view(-1, 4*9*9)
 
         out8 = self.batch_norm1d_1(obs_topic)
         out9 = torch.cat([out7, out8], 1)
         out10 = F.selu(self.batch_norm1d_2(self.fc1(out9)))
-        out11 = self.fc2(out10)
-        out12 = F.softmax(out11, dim=1)
+        out11 = F.selu(self.batch_norm1d_3(self.fc2(out10)))
+        out12 = self.fc3(out11)
+        out12 = F.softmax(out12, dim=1)
         
         return out12
 
 
 class Critic(nn.Module):
 
-    def __init__(self, N_action, num_client):
+    def __init__(self, N_action, num_client, num_topic):
         super(Critic, self).__init__()
         self.N_action = N_action
         self.N_client = num_client
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
-        nn.init.zeros_(self.conv1.bias)
-        self.pool1 = nn.MaxPool2d(3)
-        self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
-        nn.init.zeros_(self.conv2.bias)
-        self.pool2 = nn.MaxPool2d(3)
-        self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
-        nn.init.zeros_(self.conv3.bias)
-        self.pool3 = nn.MaxPool2d(3)
+        self.N_topic = num_topic
 
-        self.fc1 = nn.Linear(self.N_client*self.N_action, 512)
+        self.batch_norm2d_1 = nn.BatchNorm2d(self.N_topic*4 + 2)
+        self.batch_norm2d_2 = nn.BatchNorm2d(self.N_topic*4 + 2)
+        self.batch_norm2d_3 = nn.BatchNorm2d(4)
+        self.batch_norm2d_4 = nn.BatchNorm2d(2)
+        self.batch_norm_topic = nn.BatchNorm1d(3)
+        self.batch_norm_action1 = nn.BatchNorm1d(512)
+        self.batch_norm_action2 = nn.BatchNorm1d(256)
+        self.batch_norm_action3 = nn.BatchNorm1d(64)
+        self.batch_norm1d_1 = nn.BatchNorm1d(128)
+        self.batch_norm1d_2 = nn.BatchNorm1d(64)
+
+
+        self.conv1 = nn.Conv2d(in_channels=self.N_topic*4+2, out_channels=self.N_topic*4+2, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=self.N_topic*4+2, out_channels=4, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
+
+        nn.init.zeros_(self.conv1.bias)
+        nn.init.zeros_(self.conv2.bias)
+        nn.init.zeros_(self.conv3.bias)
+
+        self.pool1 = nn.MaxPool2d(3)
+        self.pool2 = nn.MaxPool2d(3)
+
+        self.fc1 = nn.Linear(self.N_topic*self.N_client*self.N_action, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 64)
 
-        self.fc4 = nn.Linear(2*3*3+64, 32)
-        self.fc5 = nn.Linear(32, 8)
-        self.fc6 = nn.Linear(8, 1)
+        self.fc4 = nn.Linear(2*9*9+3+64, 128)
+        self.fc5 = nn.Linear(128, 64)
+        self.fc6 = nn.Linear(64, 1)
         
 
-    def get_value(self, S, A):
-        out1_s = self.pool1(F.selu(self.conv1(S)))
-        out2_s = self.pool2(F.selu(self.conv2(out1_s)))
-        out3_s = self.pool3(F.selu(self.conv3(out2_s)))
-        out4_s = out3_s.view(-1, 2*3*3)
-        
-        out1_a = F.selu(self.fc1(A))
-        out2_a = F.selu(self.fc2(out1_a))
-        out3_a = F.selu(self.fc3(out2_a))
+    def get_value(self, S, S_topic, A):
+        out1_s = self.conv1(self.batch_norm2d_1(S))
+        out2_s = self.pool1(F.selu(self.batch_norm2d_2(out1_s)))
+        out3_s = self.pool2(F.selu(self.batch_norm2d_3(self.conv2(out2_s))))
+        out4_s = F.selu(self.batch_norm2d_4(self.conv3(out3_s)))
+        out5_s = out4_s.view(-1, 2*9*9)
 
-        out4 = torch.cat([out4_s, out3_a], 1)
-        out5 = F.selu(self.fc4(out4))
-        out6 = F.selu(self.fc5(out5))
+        out_topic = self.batch_norm_topic(S_topic)
+        
+        out1_a = F.selu(self.batch_norm_action1(self.fc1(A)))
+        out2_a = F.selu(self.batch_norm_action2(self.fc2(out1_a)))
+        out3_a = F.selu(self.batch_norm_action3(self.fc3(out2_a)))
+        
+        out4 = torch.cat([out5_s, out_topic, out3_a], 1)
+        out5 = F.selu(self.batch_norm1d_1(self.fc4(out4)))
+        out6 = F.selu(self.batch_norm1d_2(self.fc5(out5)))
         out7 = self.fc6(out6)
 
         return out7
@@ -133,47 +156,65 @@ class Critic(nn.Module):
 
 class V_Net(nn.Module):
 
-    def __init__(self):
+    def __init__(self, num_topic):
         super(V_Net, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1)
-        nn.init.zeros_(self.conv1.bias)
-        self.pool1 = nn.MaxPool2d(3)
-        self.conv2 = nn.Conv2d(in_channels=8, out_channels=4, kernel_size=3, padding=1)
-        nn.init.zeros_(self.conv2.bias)
-        self.pool2 = nn.MaxPool2d(3)
+        self.N_topic = num_topic
+
+        self.batch_norm2d_1 = nn.BatchNorm2d(self.N_topic*4 + 2)
+        self.batch_norm2d_2 = nn.BatchNorm2d(self.N_topic*4 + 2)
+        self.batch_norm2d_3 = nn.BatchNorm2d(4)
+        self.batch_norm2d_4 = nn.BatchNorm2d(2)
+        self.batch_norm_topic = nn.BatchNorm1d(3)
+        self.batch_norm1d_1 = nn.BatchNorm1d(64)
+        self.batch_norm1d_2 = nn.BatchNorm1d(16)
+
+        self.conv1 = nn.Conv2d(in_channels=self.N_topic*4+2, out_channels=self.N_topic*4+2, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=self.N_topic*4+2, out_channels=4, kernel_size=3, padding=1)
         self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
+
+        nn.init.zeros_(self.conv1.bias)
+        nn.init.zeros_(self.conv2.bias)
         nn.init.zeros_(self.conv3.bias)
-        self.pool3 = nn.MaxPool2d(3)
 
-        self.fc1 = nn.Linear(2*3*3, 32)
-        self.fc2 = nn.Linear(32, 8)
-        self.fc3 = nn.Linear(8, 1)
+        self.pool1 = nn.MaxPool2d(3)
+        self.pool2 = nn.MaxPool2d(3)
+
+        self.fc1 = nn.Linear(2*9*9 + 3, 64)
+        self.fc2 = nn.Linear(64, 16)
+        self.fc3 = nn.Linear(16, 1)
 
 
-    def get_value(self, S):
-        out1 = self.pool1(F.selu(self.conv1(S)))
-        out2 = self.pool2(F.selu(self.conv2(out1)))
-        out3 = self.pool3(F.selu(self.conv3(out2)))
-        out4 = out3.view(-1, 2*3*3)
+    def get_value(self, S, S_topic):
+        out1 = self.conv1(self.batch_norm2d_1(S))
+        out2 = self.pool1(F.selu(self.batch_norm2d_2(out1)))
+        out3 = self.pool2(F.selu(self.batch_norm2d_3(self.conv2(out2))))
+        out4 = F.selu(self.batch_norm2d_4(self.conv3(out3)))
 
-        out5 = F.selu(self.fc1(out4))
-        out6 = F.selu(self.fc2(out5))
-        out7 = self.fc3(out6)
+        out5 = out4.view(-1, 2*9*9)
 
-        return out7
+        out_topic = self.batch_norm_topic(S_topic)
+
+        out6 = torch.cat([out5, out_topic], dim=1)
+
+        out7 = F.selu(self.batch_norm1d_1(self.fc1(out6)))
+        out8 = F.selu(self.batch_norm1d_2(self.fc2(out7)))
+        out9 = self.fc3(out8)
+
+        return out9
 
 
 class COMA:
     
-    def __init__(self, N_action, num_agent, buffer_size, batch_size, device):
+    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, device):
         self.N_action = N_action
         self.num_agent = num_agent
+        self.num_topic = num_topic
         self.buffer_size = buffer_size
         self.batch_size = batch_size
         self.device = device
         self.actor = Actor(self.N_action)
-        self.critic = Critic(self.N_action, num_agent)
-        self.V_net = V_Net()
+        self.critic = Critic(self.N_action, num_agent, num_topic)
+        self.V_net = V_Net(num_topic)
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
 
         # オプティマイザーの設定
@@ -197,15 +238,15 @@ class COMA:
 
         obs_tensor = torch.permute(obs_tensor, (1, 0, 2, 3, 4))
 
-        pi = torch.zeros((env.num_topic, env.num_client, self.N_action))
-        for t in range(env.num_topic):
+        pi = torch.zeros((self.num_topic, self.num_agent, self.N_action))
+        for t in range(self.num_topic):
             obs_topic_tensor_tmp = obs_topic_tensor[t].unsqueeze(0)
             for _ in range(self.num_agent-1):
                 obs_topic_tensor_tmp = torch.cat([obs_topic_tensor_tmp, obs_topic_tensor[t].unsqueeze(0)], 0)
             
             pi[t] = self.actor.get_action(obs_tensor[t], obs_topic_tensor_tmp)
 
-        actions = np.ones((env.num_topic, self.num_agent))*-1
+        actions = np.ones((self.num_topic, self.num_agent))*-1
         
         if train_flag:
             clients = env.clients
@@ -224,13 +265,13 @@ class COMA:
                             min_distance = distance
                             min_idx = j
                     
-                    for t in range(env.num_topic):
+                    for t in range(self.num_topic):
                         if client.pub_topic[t] == 1:
                             actions[t][i] = min_idx
             else:
                 for i in range(self.num_agent):
                     client = clients[i]
-                    for t in range(env.num_topic):
+                    for t in range(self.num_topic):
                         if client.pub_topic[t] == 1:
                             actions[t][i] = Categorical(pi[t][i]).sample().item()
         else:
@@ -238,7 +279,7 @@ class COMA:
 
             for i in range(self.num_agent):
                 client = clients[i]
-                for t in range(env.num_topic):
+                for t in range(self.num_topic):
                     if client.pub_topic[t] == 1:
                         actions[t][i] = torch.argmax(pi[t][i])
 
@@ -257,37 +298,83 @@ class COMA:
         self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
 
 
-    def train(self, obs, actions, pi, reward, next_obs, fix_net_flag):
+    def train(self, obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, fix_net_flag):
+        #  obs.shape = (num_client, num_topic, channel=9, 81, 81)
+        #  obs_topic.shape = (num_topic, channel=3)
+        #  actions.shaoe = (num_topic, num_client)
+        #  pi.shape = (num_topic, num_client, N_action)
+        #  next_obs.shape = (num_client, num_topic, channel=8, 81, 81)
+        #  next_obs_topic = (num_topic, channel=3)
+
         # 行動のtensor化
-        actions_onehot = torch.zeros(self.num_agent*self.N_action, device=self.device)
+        actions_onehot = torch.zeros(self.num_topic*self.num_agent*self.N_action, device=self.device)
         
-        for i in range(self.num_agent):
-            action = int(actions[i])
-            if action != -1:
-                actions_onehot[i*self.N_action + action] = 1
+        for t in range(self.num_topic):
+            for i in range(self.num_agent):
+                action = int(actions[t][i])
+                if action != -1:
+                    actions_onehot[t*self.num_agent*self.N_action + i*self.N_action + action] = 1
         
         # 経験再生用バッファへの追加
-        obs_tensor = torch.FloatTensor(obs[0][1:]).to(self.device)
-        next_obs_tensor = torch.FloatTensor(next_obs[0][1:]).to(self.device)
+        obs_tensor = torch.FloatTensor(obs[0]).to(self.device)
+        state_topic = torch.FloatTensor(obs_topic).to(self.device).view(-1)
+        next_obs_tensor = torch.FloatTensor(next_obs[0]).to(self.device)
+        next_state_topic = torch.FloatTensor(next_obs_topic).to(self.device).view(-1)
 
-        for i in range(self.num_agent):
-            if actions[i] != -1:
-                state = obs_tensor
-                next_state = next_obs_tensor
 
-                self.replay_buffer.add(i, state, actions_onehot, actions, reward, next_state)
+        publisher_distribution = torch.zeros((self.num_topic, 81, 81))
+        subscriber_distribution = torch.zeros((self.num_topic, 81, 81))
+        topic_storage_info = torch.zeros((self.num_topic, 81, 81))
+        topic_cpu_info = torch.zeros((self.num_topic, 81, 81))
+
+        next_publisher_distribution = torch.zeros((self.num_topic, 81, 81))
+        next_subscriber_distribution = torch.zeros((self.num_topic, 81, 81))
+        next_topic_storage_info = torch.zeros((self.num_topic, 81, 81))
+        next_topic_cpu_info = torch.zeros((self.num_topic, 81, 81))
+
+        for t in range(self.num_topic):
+            publisher_distribution[t] = obs_tensor[t][1]
+            subscriber_distribution[t] = obs_tensor[t][2]
+            topic_storage_info[t] = obs_tensor[t][4]
+            topic_cpu_info[t] = obs_tensor[t][7]
+
+            next_publisher_distribution[t] = next_obs_tensor[t][1]
+            next_subscriber_distribution[t] = next_obs_tensor[t][2]
+            next_topic_storage_info[t] = next_obs_tensor[t][4]
+            next_topic_cpu_info[t] = next_obs_tensor[t][7]
+
+        state = torch.zeros((self.num_topic*4 + 2, 81, 81), device=self.device)
+        next_state = torch.zeros((self.num_topic*4 + 2, 81, 81), device=self.device)
+
+        state[0:self.num_topic] = publisher_distribution
+        state[self.num_topic:2*self.num_topic] = subscriber_distribution
+        state[2*self.num_topic:3*self.num_topic] = topic_storage_info
+        state[3*self.num_topic:4*self.num_topic] = topic_cpu_info
+        state[-2] = obs_tensor[0][5]
+        state[-1] = obs_tensor[0][6]
+
+        next_state[0:self.num_topic] = next_publisher_distribution
+        next_state[self.num_topic:2*self.num_topic] = next_subscriber_distribution
+        next_state[2*self.num_topic:3*self.num_topic] = next_topic_storage_info
+        next_state[3*self.num_topic:4*self.num_topic] = next_topic_cpu_info
+        next_state[-2] = next_obs_tensor[0][5]
+        next_state[-1] = next_obs_tensor[0][6]
+
+        self.replay_buffer.add(state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic)
+
+        print(f"replay_buffer add OK{len(self.replay_buffer)}")
 
         if len(self.replay_buffer) < self.buffer_size:
             return
 
-
-        id_exp, obs_exp, actions_exp, action_number_exp, reward_exp, next_obs_exp = self.replay_buffer.get_batch()
+        obs_exp, obs_topic_exp, actions_exp, actions_onehot_exp, reward_exp, next_obs_exp, next_obs_topic_exp = self.replay_buffer.get_batch()
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
 
-        if fix_net_flag:
-            V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp)
-            V = self.V_net.get_value(obs_exp)
+        #if fix_net_flag:
+        if True:
+            V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp, next_obs_topic_exp)
+            V = self.V_net.get_value(obs_exp, obs_topic_exp)
 
             V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
 
@@ -296,7 +383,7 @@ class COMA:
             self.V_net_optimizer.step()
 
             # batch_size*1のQ値をtensorとして取得
-            Q = self.critic.get_value(obs_exp, actions_exp)
+            Q = self.critic.get_value(obs_exp, obs_topic_exp, actions_onehot_exp)
 
             # critic ネットワークの更新
             critic_loss = self.critic_loss_fn(V_target.detach(), Q)
@@ -304,7 +391,7 @@ class COMA:
             self.critic_optimizer.zero_grad()
             critic_loss.backward(retain_graph=True)
             self.critic_optimizer.step()
-        else:
+        #else:
             actor_loss = torch.FloatTensor([0.0])
             actor_loss = actor_loss.to(self.device)
 

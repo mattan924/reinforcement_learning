@@ -172,7 +172,7 @@ class Env:
         
     #  状態の観測
     def get_observation(self):
-        obs_channel = 8
+        obs_channel = 9
         obs_size = 81
 
         #  観測値
@@ -216,6 +216,7 @@ class Env:
         #  cpu の最大クロック数
         cpu_info = np.zeros((obs_size, obs_size))
         #  使用中のクライアントの数
+        topic_cpu_used_client = np.zeros((self.num_client, obs_size, obs_size))
         cpu_used_client = np.zeros((obs_size, obs_size))
 
         for edge in self.all_edge:
@@ -228,6 +229,7 @@ class Env:
 
             for t in range(self.num_topic):
                 topic_storage_info[t][block_index_y][block_index_x] = edge.used_volume[t]
+                topic_cpu_used_client[t][block_index_y][block_index_x] = edge.used_publishers[t]
 
         for i in range(self.num_client):
             for t in range(self.num_topic):
@@ -238,7 +240,8 @@ class Env:
                 obs[i][t][4] = topic_storage_info[t]
                 obs[i][t][5] = storage_info
                 obs[i][t][6] = cpu_info
-                obs[i][t][7] = cpu_used_client
+                obs[i][t][7] = topic_cpu_used_client[t]
+                obs[i][t][8] = cpu_used_client
 
         obs_topic_channel = 3
         obs_topic = np.zeros((self.num_topic, obs_topic_channel))
