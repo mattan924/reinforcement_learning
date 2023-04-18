@@ -199,12 +199,16 @@ class COMA:
 
         pi = torch.zeros((env.num_topic, env.num_client, self.N_action))
         for t in range(env.num_topic):
-            pi[t] = self.actor.get_action(obs_tensor[t], obs_topic_tensor[t])
-        
+            obs_topic_tensor_tmp = obs_topic_tensor[t].unsqueeze(0)
+            for _ in range(self.num_agent-1):
+                obs_topic_tensor_tmp = torch.cat([obs_topic_tensor_tmp, obs_topic_tensor[t].unsqueeze(0)], 0)
+            
+            pi[t] = self.actor.get_action(obs_tensor[t], obs_topic_tensor_tmp)
 
+        actions = np.ones((env.num_topic, self.num_agent))*-1
+        
         if train_flag:
             clients = env.clients
-            actions = np.ones(self.num_agent)*-1
             if pretrain_flag:
                 edges = env.all_edge
 
@@ -214,27 +218,29 @@ class COMA:
                     min_distance = 100000000
                 
                     for j in range(len(edges)):
-                                edge = edges[j]
-                                distance = math.sqrt(pow(client.x - edge.x, 2) + pow(client.y - edge.y, 2))
-                                if distance < min_distance:
-                                    min_distance = distance
-                                    min_idx = j
+                        edge = edges[j]
+                        distance = math.sqrt(pow(client.x - edge.x, 2) + pow(client.y - edge.y, 2))
+                        if distance < min_distance:
+                            min_distance = distance
+                            min_idx = j
                     
-                    if client.pub_topic[0] == 1:
-                        actions[i] = min_idx
+                    for t in range(env.num_topic):
+                        if client.pub_topic[t] == 1:
+                            actions[t][i] = min_idx
             else:
                 for i in range(self.num_agent):
                     client = clients[i]
-                    if client.pub_topic[0] == 1:
-                        actions[i] = Categorical(pi[i]).sample().item()
+                    for t in range(env.num_topic):
+                        if client.pub_topic[t] == 1:
+                            actions[t][i] = Categorical(pi[t][i]).sample().item()
         else:
             clients = env.clients
-            actions = np.ones(self.num_agent)*-1
 
             for i in range(self.num_agent):
-                    client = clients[i]
-                    if client.pub_topic[0] == 1:
-                        actions[i] = torch.argmax(pi[i])
+                client = clients[i]
+                for t in range(env.num_topic):
+                    if client.pub_topic[t] == 1:
+                        actions[t][i] = torch.argmax(pi[t][i])
 
         return actions, pi
 

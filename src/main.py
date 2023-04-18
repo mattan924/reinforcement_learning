@@ -5,11 +5,11 @@ max_epi_itr = 1000
 learning_data_index_path = "../dataset/learning_data/index/index_test.csv"
 
 
-device = "cuda:1"
-result_dir = "../result/COMA_pretrain_test/pretrain_design/"
-output_base = result_dir + "pretrain"
+device = "cuda:0"
+result_dir = "../result/temporary/multi_topic/"
+output_base = result_dir + "test"
 
-for i in range(5, 10):
+for i in range(1):
     output = output_base + str(i)
     train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output)
 

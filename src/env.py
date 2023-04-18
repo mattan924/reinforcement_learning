@@ -31,7 +31,7 @@ class Edge:
         self.deploy_topic = np.zeros(num_topic)
         self.cpu_power = cpu_power
         self.power_allocation = np.zeros(num_topic)
-        self.used_publisers = np.zeros(num_topic)
+        self.used_publishers = np.zeros(num_topic)
 
     
     def cal_used_volume(self):
@@ -241,7 +241,7 @@ class Env:
                 obs[i][t][7] = cpu_used_client
 
         obs_topic_channel = 3
-        obs_topic = np.zeros(self.num_topic, obs_topic_channel)
+        obs_topic = np.zeros((self.num_topic, obs_topic_channel))
 
         for t in range(self.num_topic):
             topic = self.all_topic[t]
@@ -284,13 +284,13 @@ class Env:
             tmp = 0
 
             for t in range(self.num_topic):
-                if len(edge.used_publishers[t]) > 0:
+                if edge.used_publishers[t] > 0:
                     edge.used_volume[t] = self.all_topic[t].volume
                     tmp += 1
                 
                 if tmp != 0:
-                    if len(edge.used_publishers[t]) != 0:
-                        edge.power_allocation[t] = (edge.cpu_power / tmp) / len(edge.used_publishers[t])
+                    if edge.used_publishers[t] != 0:
+                        edge.power_allocation[t] = (edge.cpu_power / tmp) / edge.used_publishers[t]
                     else:
                         edge.power_allocation[t] = edge.cpu_power / tmp
                 else:
@@ -300,7 +300,7 @@ class Env:
 
             if edge.total_used_volume <= edge.max_volume:
                 for t in range(self.num_topic):
-                    if len(edge.used_publishers[t]) > 0:
+                    if edge.used_publishers[t] > 0:
                         edge.deploy_topic[t] = True
             else:
                 volume = edge.total_used_volume
@@ -320,7 +320,7 @@ class Env:
                         cloud_topic.append[max_id]
 
                 for t in range(self.num_topic):
-                    if len(edge.used_publishers[t]) > 0 and not(t in cloud_topic):
+                    if edge.used_publishers[t] > 0 and not(t in cloud_topic):
                         edge.deploy_topic[t] = True
             
         # 報酬の計算
