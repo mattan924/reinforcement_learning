@@ -112,8 +112,8 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
 
         if epi_iter % 1 == 0:
             #  ログの出力
-            #print(f"total_reward = {sum(reward_history)}")
-            #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
+            print(f"total_reward = {sum(reward_history)}")
+            print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
             with open(output + ".log", 'a') as f:
                 f.write(f"{(epi_iter/max_epi_itr)*100}%, {-sum(reward_history)}\n")
 
