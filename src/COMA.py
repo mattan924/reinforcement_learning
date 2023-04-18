@@ -105,7 +105,7 @@ class Critic(nn.Module):
         self.batch_norm2d_2 = nn.BatchNorm2d(self.N_topic*4 + 2)
         self.batch_norm2d_3 = nn.BatchNorm2d(4)
         self.batch_norm2d_4 = nn.BatchNorm2d(2)
-        self.batch_norm_topic = nn.BatchNorm1d(3)
+        self.batch_norm_topic = nn.BatchNorm1d(3*self.N_topic)
         self.batch_norm_action1 = nn.BatchNorm1d(512)
         self.batch_norm_action2 = nn.BatchNorm1d(256)
         self.batch_norm_action3 = nn.BatchNorm1d(64)
@@ -128,7 +128,7 @@ class Critic(nn.Module):
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 64)
 
-        self.fc4 = nn.Linear(2*9*9+3+64, 128)
+        self.fc4 = nn.Linear(2*9*9+3*self.N_topic+64, 128)
         self.fc5 = nn.Linear(128, 64)
         self.fc6 = nn.Linear(64, 1)
         
@@ -164,7 +164,7 @@ class V_Net(nn.Module):
         self.batch_norm2d_2 = nn.BatchNorm2d(self.N_topic*4 + 2)
         self.batch_norm2d_3 = nn.BatchNorm2d(4)
         self.batch_norm2d_4 = nn.BatchNorm2d(2)
-        self.batch_norm_topic = nn.BatchNorm1d(3)
+        self.batch_norm_topic = nn.BatchNorm1d(3*self.N_topic)
         self.batch_norm1d_1 = nn.BatchNorm1d(64)
         self.batch_norm1d_2 = nn.BatchNorm1d(16)
 
@@ -179,7 +179,7 @@ class V_Net(nn.Module):
         self.pool1 = nn.MaxPool2d(3)
         self.pool2 = nn.MaxPool2d(3)
 
-        self.fc1 = nn.Linear(2*9*9 + 3, 64)
+        self.fc1 = nn.Linear(2*9*9 + 3*self.N_topic, 64)
         self.fc2 = nn.Linear(64, 16)
         self.fc3 = nn.Linear(16, 1)
 
@@ -363,7 +363,6 @@ class COMA:
         self.replay_buffer.add(state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic)
 
         if len(self.replay_buffer) < self.buffer_size:
-            print("replay_buffer size < buffer size")
             return
 
         obs_exp, obs_topic_exp, actions_exp, actions_onehot_exp, reward_exp, next_obs_exp, next_obs_topic_exp = self.replay_buffer.get_batch()

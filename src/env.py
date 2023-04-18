@@ -320,7 +320,7 @@ class Env:
                     
                     if max_id != -1:
                         volume -= edge.used_volume[max_id]
-                        cloud_topic.append[max_id]
+                        cloud_topic.append(max_id)
 
                 for t in range(self.num_topic):
                     if edge.used_publishers[t] > 0 and not(t in cloud_topic):
