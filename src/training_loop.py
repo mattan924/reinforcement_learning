@@ -42,10 +42,10 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     #  pretrain_flag = True: 指定の行動, False: 確率分布からサンプリング
     pretrain_flag = False
 
-    #  pre_trainを行うエピソードの周期 (pre_train_iter = 10の時10回に一回 pre_train を実行)
+    #  pre_train を行うエピソードの周期 (pre_train_iter = 10の時10回に一回 pre_train を実行)
     pre_train_iter = 10
 
-    #  価値関数とActor ネットワークを交互に固定して学習するためのフラグ
+    #  価値関数と Actor ネットワークを交互に固定して学習するためのフラグ
     fix_net_flag = False
 
     #  何エピソードごとに固定する方を変えるか
