@@ -5,7 +5,7 @@ max_epi_itr = 10000
 learning_data_index_path = "../dataset/learning_data/index/index_multi.csv"
 
 
-device = "cuda:0"
+device = "cpu"
 result_dir = "../result/temporary/multi_topic/"
 output_base = result_dir + "multi"
 

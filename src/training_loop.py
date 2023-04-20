@@ -52,7 +52,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     fix_net_iter = 10
 
     #  標準エラー出力先の変更
-    sys.stderr = open(output + "_err.log", 'w')
+    #sys.stderr = open(output + "_err.log", 'w')
 
     if load_flag == False:
         with open(output + ".log", 'w') as f:
