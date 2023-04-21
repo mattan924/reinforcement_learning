@@ -248,7 +248,7 @@ class COMA:
             
             pi[t] = self.actor.get_action(obs_tensor[t], obs_topic_tensor_tmp)
 
-        actions = np.full((self.num_topic, self.num_agent), -1)
+        actions = torch.full((self.num_topic, self.num_agent), -1, device=self.device)
         
         clients = env.clients
 
@@ -274,10 +274,7 @@ class COMA:
             else:
                 pub_topic_tensor = torch.stack([torch.tensor(client.pub_topic) for client in clients]).T
                 mask = pub_topic_tensor.bool()  # マスクを作成
-                actions_opt = torch.full((self.num_topic, self.num_agent), -1)
                 actions[mask] = Categorical(pi[mask]).sample()  # マスクを使ってアクションをサンプリング
-
-                actions = actions_opt.numpy()
         else:
             for i in range(self.num_agent):
                 client = clients[i]
@@ -310,12 +307,15 @@ class COMA:
 
         # 行動のtensor化
         actions_onehot = torch.zeros(self.num_topic*self.num_agent*self.N_action, device=self.device)
-        
+
         for t in range(self.num_topic):
             for i in range(self.num_agent):
                 action = int(actions[t][i])
                 if action != -1:
                     actions_onehot[t*self.num_agent*self.N_action + i*self.N_action + action] = 1
+
+        start = time_modu.time()
+
         
         # 経験再生用バッファへの追加
         obs_tensor = torch.FloatTensor(obs[0]).to(self.device)
@@ -362,9 +362,14 @@ class COMA:
         next_state[-2] = next_obs_tensor[0][5]
         next_state[-1] = next_obs_tensor[0][6]
 
+        end = time_modu.time()
+
+        print(f"time = {end - start}")
+
         self.replay_buffer.add(state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic)
 
         if len(self.replay_buffer) < self.buffer_size:
+            #print(f"replay buffer < buffer size ({len(self.replay_buffer)})")
             return
 
         obs_exp, obs_topic_exp, actions_exp, actions_onehot_exp, reward_exp, next_obs_exp, next_obs_topic_exp = self.replay_buffer.get_batch()

@@ -36,7 +36,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     # 各種パラメーター
     N_action = 9
     buffer_size = 3000
-    batch_size = 300
+    batch_size = 500
     backup_iter = 1000
 
     #  pretrain_flag = True: 指定の行動, False: 確率分布からサンプリング
@@ -85,12 +85,13 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
 
         #  各エピソードにおける時間の推移
         for time in range(0, env.simulation_time, env.time_step):
-
+            """
             # 行動の選択方式の設定
             if epi_iter % pre_train_iter == 0:
                 pretrain_flag = True
             else:
                 pretrain_flag = False
+            """
 
             #  行動と確率分布の取得
             #  actions.shape = (num_topic, num_client) にする
@@ -112,8 +113,8 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
 
         if epi_iter % 1 == 0:
             #  ログの出力
-            print(f"total_reward = {sum(reward_history)}")
-            print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
+            #print(f"total_reward = {sum(reward_history)}")
+            #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
             with open(output + ".log", 'a') as f:
                 f.write(f"{(epi_iter/max_epi_itr)*100}%, {-sum(reward_history)}\n")
 

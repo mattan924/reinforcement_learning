@@ -1,13 +1,13 @@
 from training_loop import *
 
 
-max_epi_itr = 10000
-learning_data_index_path = "../dataset/learning_data/index/index_multi.csv"
+max_epi_itr = 1000
+learning_data_index_path = "../dataset/learning_data/index/index_test.csv"
 
 
-device = "cpu"
-result_dir = "../result/temporary/multi_topic/"
-output_base = result_dir + "multi"
+device = "cuda:0"
+result_dir = "../result/temporary/test/"
+output_base = result_dir + "test"
 
 for i in range(1):
     output = output_base + str(i)
