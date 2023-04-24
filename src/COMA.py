@@ -33,7 +33,7 @@ class ReplayBuffer:
 
         state = torch.cat([x[0].unsqueeze(0) for x in data], dim=0)
         state_topic = torch.cat([x[1].unsqueeze(0) for x in data], dim=0)
-        actions = np.stack([x[2] for x in data])
+        actions = torch.cat([x[2].unsqueeze(0) for x in data], dim=0)
         actions_onehot = torch.cat([x[3].unsqueeze(0) for x in data], dim=0)
         reward = np.stack([x[4] for x in data])
         next_state = torch.cat([x[5].unsqueeze(0) for x in data], dim=0)
@@ -313,9 +313,6 @@ class COMA:
                 action = int(actions[t][i])
                 if action != -1:
                     actions_onehot[t*self.num_agent*self.N_action + i*self.N_action + action] = 1
-
-        start = time_modu.time()
-
         
         # 経験再生用バッファへの追加
         obs_tensor = torch.FloatTensor(obs[0]).to(self.device)
@@ -323,53 +320,35 @@ class COMA:
         next_obs_tensor = torch.FloatTensor(next_obs[0]).to(self.device)
         next_state_topic = torch.FloatTensor(next_obs_topic).to(self.device).view(-1)
 
+        publisher_distribution = obs_tensor[:, 1]
+        subscriber_distribution = obs_tensor[:, 2]
+        topic_storage_info = obs_tensor[:, 4]
+        topic_cpu_info = obs_tensor[:, 7]
 
-        publisher_distribution = torch.zeros((self.num_topic, 81, 81))
-        subscriber_distribution = torch.zeros((self.num_topic, 81, 81))
-        topic_storage_info = torch.zeros((self.num_topic, 81, 81))
-        topic_cpu_info = torch.zeros((self.num_topic, 81, 81))
-
-        next_publisher_distribution = torch.zeros((self.num_topic, 81, 81))
-        next_subscriber_distribution = torch.zeros((self.num_topic, 81, 81))
-        next_topic_storage_info = torch.zeros((self.num_topic, 81, 81))
-        next_topic_cpu_info = torch.zeros((self.num_topic, 81, 81))
-
-        for t in range(self.num_topic):
-            publisher_distribution[t] = obs_tensor[t][1]
-            subscriber_distribution[t] = obs_tensor[t][2]
-            topic_storage_info[t] = obs_tensor[t][4]
-            topic_cpu_info[t] = obs_tensor[t][7]
-
-            next_publisher_distribution[t] = next_obs_tensor[t][1]
-            next_subscriber_distribution[t] = next_obs_tensor[t][2]
-            next_topic_storage_info[t] = next_obs_tensor[t][4]
-            next_topic_cpu_info[t] = next_obs_tensor[t][7]
+        next_publisher_distribution = next_obs_tensor[:, 1]
+        next_subscriber_distribution = next_obs_tensor[:, 2]
+        next_topic_storage_info = next_obs_tensor[:, 4]
+        next_topic_cpu_info = next_obs_tensor[:, 7]
 
         state = torch.zeros((self.num_topic*4 + 2, 81, 81), device=self.device)
         next_state = torch.zeros((self.num_topic*4 + 2, 81, 81), device=self.device)
 
-        state[0:self.num_topic] = publisher_distribution
+        state[:self.num_topic] = publisher_distribution
         state[self.num_topic:2*self.num_topic] = subscriber_distribution
         state[2*self.num_topic:3*self.num_topic] = topic_storage_info
         state[3*self.num_topic:4*self.num_topic] = topic_cpu_info
-        state[-2] = obs_tensor[0][5]
-        state[-1] = obs_tensor[0][6]
+        state[-2:] = obs_tensor[0][5:7]
 
-        next_state[0:self.num_topic] = next_publisher_distribution
+        next_state[:self.num_topic] = next_publisher_distribution
         next_state[self.num_topic:2*self.num_topic] = next_subscriber_distribution
         next_state[2*self.num_topic:3*self.num_topic] = next_topic_storage_info
         next_state[3*self.num_topic:4*self.num_topic] = next_topic_cpu_info
-        next_state[-2] = next_obs_tensor[0][5]
-        next_state[-1] = next_obs_tensor[0][6]
-
-        end = time_modu.time()
-
-        print(f"time = {end - start}")
+        next_state[-2:] = next_obs_tensor[0][5:7]
 
         self.replay_buffer.add(state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic)
 
         if len(self.replay_buffer) < self.buffer_size:
-            #print(f"replay buffer < buffer size ({len(self.replay_buffer)})")
+            print(f"replay buffer < buffer size ({len(self.replay_buffer)})")
             return
 
         obs_exp, obs_topic_exp, actions_exp, actions_onehot_exp, reward_exp, next_obs_exp, next_obs_topic_exp = self.replay_buffer.get_batch()
@@ -386,11 +365,10 @@ class COMA:
             V_net_loss.backward(retain_graph=True)
             self.V_net_optimizer.step()
 
-            # batch_size*1のQ値をtensorとして取得
-            Q = self.critic.get_value(obs_exp, obs_topic_exp, actions_onehot_exp)
+            Q1 = self.critic.get_value(obs_exp, obs_topic_exp, actions_onehot_exp)
 
             # critic ネットワークの更新
-            critic_loss = self.critic_loss_fn(V_target.detach(), Q)
+            critic_loss = self.critic_loss_fn(V_target.detach(), Q1)
 
             self.critic_optimizer.zero_grad()
             critic_loss.backward(retain_graph=True)
@@ -398,37 +376,29 @@ class COMA:
         else:
             actor_loss = torch.FloatTensor([0.0]).to(self.device)
 
-            critic_obs = state.unsqueeze(0)
-            critic_obs_topic = state_topic.unsqueeze(0)
-            critic_action = actions_onehot.unsqueeze(0)
-
-            for i in range(1, self.num_agent):
-                critic_obs = torch.cat([critic_obs, state.unsqueeze(0)], dim=0)
-                critic_obs_topic = torch.cat([critic_obs_topic, state_topic.unsqueeze(0)], dim=0)
-                critic_action = torch.cat([critic_action, actions_onehot.unsqueeze(0)], dim=0)
+            critic_obs = torch.stack([state] * self.num_agent, dim=0)
+            critic_obs_topic = torch.stack([state_topic] * self.num_agent, dim=0)
+            critic_action = torch.stack([actions_onehot] * self.num_agent, dim=0)
                     
             Q2 = self.critic.get_value(critic_obs, critic_obs_topic, critic_action)
 
-            Q_tmp = torch.zeros(self.num_topic, self.N_action, self.num_agent, device=self.device)
+            Q_tmp = torch.zeros(self.num_topic, self.num_agent, self.N_action, device=self.device)
 
-            for t in range(self.num_topic):           
-                for a in range(self.N_action):
-                    critic_action_copy = critic_action.clone()
-
-                    for i in range(self.num_agent):
-                        for j in range(self.N_action):
-                            critic_action_copy[i][t*self.num_agent*self.N_action + i*self.N_action+j] = 0
-                                    
-                        critic_action_copy[i][i*self.N_action + a] = 1
-                            
-                    Q_tmp[t][a] = self.critic.get_value(critic_obs, critic_obs_topic, critic_action_copy).squeeze(1)
-                    
-            Q_tmp = torch.permute(Q_tmp, (0, 2, 1))
-            
-            A = torch.zeros((self.num_topic, self.num_agent), device=self.device)
+            critic_obs_tmp = torch.stack([state] * self.num_topic*self.N_action*self.num_agent, dim=0)
+            critic_obs_topic_tmp = torch.stack([state_topic] * self.num_topic*self.N_action*self.num_agent, dim=0)
+            critic_action_tmp = torch.stack([actions_onehot] * self.num_topic*self.N_action*self.num_agent, dim=0)
 
             for t in range(self.num_topic):
-                A[t] = Q2.squeeze(1) - torch.sum(pi[t]*Q_tmp[t], 1)
+                for a in range(self.N_action):
+                    for i in range(self.num_agent):
+                        idx = t * self.num_agent * self.N_action + i * self.N_action
+                        critic_action_tmp[t*self.N_action*self.num_agent + i*self.N_action + a][idx:idx+self.N_action] = torch.FloatTensor([1 if k==a else 0 for k in range(self.N_action)]).to(self.device)
+                    
+            Q = self.critic.get_value(critic_obs_tmp, critic_obs_topic_tmp, critic_action_tmp).squeeze(1)
+
+            Q_tmp = Q.view(self.num_topic, self.num_agent, -1)
+            
+            A = Q2.squeeze(1).unsqueeze(0).repeat(3,1) - torch.sum(pi * Q_tmp, dim=2)
                 
             cnt = 0
             for t in range(self.num_topic):

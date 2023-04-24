@@ -1,8 +1,8 @@
 from training_loop import *
 
 
-max_epi_itr = 1000
-learning_data_index_path = "../dataset/learning_data/index/index_test.csv"
+max_epi_itr = 10000
+learning_data_index_path = "../dataset/learning_data/index/index_multi.csv"
 
 
 device = "cuda:0"
