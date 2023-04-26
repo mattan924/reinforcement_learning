@@ -348,7 +348,7 @@ class COMA:
         self.replay_buffer.add(state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic)
 
         if len(self.replay_buffer) < self.buffer_size:
-            print(f"replay buffer < buffer size ({len(self.replay_buffer)})")
+            #print(f"replay buffer < buffer size ({len(self.replay_buffer)})")
             return
 
         obs_exp, obs_topic_exp, actions_exp, actions_onehot_exp, reward_exp, next_obs_exp, next_obs_topic_exp = self.replay_buffer.get_batch()
