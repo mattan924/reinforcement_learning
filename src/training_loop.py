@@ -46,10 +46,10 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     pre_train_iter = 10
 
     #  価値関数と Actor ネットワークを交互に固定して学習するためのフラグ
-    fix_net_flag = False
+    target_net_flag = False
 
-    #  何エピソードごとに固定する方を変えるか
-    fix_net_iter = 10
+    #  何エピソードごとにターゲットネットワークを更新するか
+    target_net_iter = 10
 
     #  標準エラー出力先の変更
     sys.stderr = open(output + "_err.log", 'w')
@@ -70,8 +70,10 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
         if load_flag:
             agent.load_model(load_parameter_path, start_epi_itr)
 
-        if epi_iter % fix_net_iter == 0:
-            fix_net_flag = not fix_net_flag
+        if epi_iter % target_net_iter == 0:
+            target_net_flag = True
+        else:
+            target_net_flag = False
         
         #  環境のリセット
         env.reset()
@@ -106,7 +108,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
             next_obs, next_obs_topic = env.get_observation()
 
             # 学習
-            agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, fix_net_flag)
+            agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag)
 
             obs = next_obs
             obs_topic = next_obs_topic

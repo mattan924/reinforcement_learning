@@ -214,8 +214,14 @@ class COMA:
         self.batch_size = batch_size
         self.device = device
         self.actor = Actor(self.N_action)
+        self.old_actor = Actor(self.N_action)
+        self.old_actor.load_state_dict(self.actor.sate_dict())
         self.critic = Critic(self.N_action, num_agent, num_topic)
+        self.target_critic = Critic(self.N_action, num_agent, num_topic)
+        self.target_critic.load_state_dict(self.critic.sate_dict())
         self.V_net = V_Net(num_topic)
+        self.target_V_net = V_Net(num_topic)
+        self.target_V_net.load_state_dict(self.V_net.state_dict())
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action, device=self.device)
 
         # オプティマイザーの設定
@@ -297,7 +303,7 @@ class COMA:
         self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
 
 
-    def train(self, obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, fix_net_flag):
+    def train(self, obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag):
         #  obs.shape = (num_client, num_topic, channel=9, 81, 81)
         #  obs_topic.shape = (num_topic, channel=3)
         #  actions.shaoe = (num_topic, num_client)
@@ -313,6 +319,9 @@ class COMA:
                 action = int(actions[t][i])
                 if action != -1:
                     actions_onehot[t*self.num_agent*self.N_action + i*self.N_action + action] = 1
+                else:
+                    idx = t*self.num_agent*self.N_action + i*self.N_action
+                    actions_onehot[idx:idx+self.N_action].fill_(-1)
         
         # 経験再生用バッファへの追加
         obs_tensor = torch.FloatTensor(obs[0]).to(self.device)
@@ -355,61 +364,65 @@ class COMA:
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
 
-        if fix_net_flag:
-            V_target = reward_exp/100 + self.gamma*self.V_net.get_value(next_obs_exp, next_obs_topic_exp)
-            V = self.V_net.get_value(obs_exp, obs_topic_exp)
+        if target_net_flag:
+            self.target_V_net.load_state_dict(self.V_net.state_dict())
+            self.target_critic.load_state_dict(self.critic.state_dict())
 
-            V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
+        V_target = reward_exp/100 + self.gamma*self.target_V_net.get_value(next_obs_exp, next_obs_topic_exp)
+        V = self.V_net.get_value(obs_exp, obs_topic_exp)
 
-            self.V_net_optimizer.zero_grad()
-            V_net_loss.backward(retain_graph=True)
-            self.V_net_optimizer.step()
+        V_net_loss = self.V_net_loff_fn(V_target.detach(), V)
 
-            Q1 = self.critic.get_value(obs_exp, obs_topic_exp, actions_onehot_exp)
+        self.V_net_optimizer.zero_grad()
+        V_net_loss.backward(retain_graph=True)
+        self.V_net_optimizer.step()
 
-            # critic ネットワークの更新
-            critic_loss = self.critic_loss_fn(V_target.detach(), Q1)
+        Q1 = self.critic.get_value(obs_exp, obs_topic_exp, actions_onehot_exp)
 
-            self.critic_optimizer.zero_grad()
-            critic_loss.backward(retain_graph=True)
-            self.critic_optimizer.step()
-        else:
-            actor_loss = torch.FloatTensor([0.0]).to(self.device)
+        # critic ネットワークの更新
+        critic_loss = self.critic_loss_fn(V_target.detach(), Q1)
 
-            critic_obs = torch.stack([state] * self.num_agent, dim=0)
-            critic_obs_topic = torch.stack([state_topic] * self.num_agent, dim=0)
-            critic_action = torch.stack([actions_onehot] * self.num_agent, dim=0)
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward(retain_graph=True)
+        self.critic_optimizer.step()
+        
+        actor_loss = torch.FloatTensor([0.0]).to(self.device)
+
+        critic_obs = torch.stack([state] * self.num_agent, dim=0)
+        critic_obs_topic = torch.stack([state_topic] * self.num_agent, dim=0)
+        critic_action = torch.stack([actions_onehot] * self.num_agent, dim=0)
                     
-            Q2 = self.critic.get_value(critic_obs, critic_obs_topic, critic_action)
+        Q2 = self.critic.get_value(critic_obs, critic_obs_topic, critic_action)
 
-            Q_tmp = torch.zeros(self.num_topic, self.num_agent, self.N_action, device=self.device)
+        Q_tmp = torch.zeros(self.num_topic, self.num_agent, self.N_action, device=self.device)
 
-            critic_obs_tmp = torch.stack([state] * self.num_topic*self.N_action*self.num_agent, dim=0)
-            critic_obs_topic_tmp = torch.stack([state_topic] * self.num_topic*self.N_action*self.num_agent, dim=0)
-            critic_action_tmp = torch.stack([actions_onehot] * self.num_topic*self.N_action*self.num_agent, dim=0)
+        critic_obs_tmp = torch.stack([state] * self.num_topic*self.N_action*self.num_agent, dim=0)
+        critic_obs_topic_tmp = torch.stack([state_topic] * self.num_topic*self.N_action*self.num_agent, dim=0)
+        critic_action_tmp = torch.stack([actions_onehot] * self.num_topic*self.N_action*self.num_agent, dim=0)
 
-            for t in range(self.num_topic):
-                for a in range(self.N_action):
-                    for i in range(self.num_agent):
+        for t in range(self.num_topic):
+            for a in range(self.N_action):
+                for i in range(self.num_agent):
+                    if actions[t][i] != -1:
                         idx = t * self.num_agent * self.N_action + i * self.N_action
                         critic_action_tmp[t*self.N_action*self.num_agent + i*self.N_action + a][idx:idx+self.N_action] = torch.FloatTensor([1 if k==a else 0 for k in range(self.N_action)]).to(self.device)
                     
-            Q = self.critic.get_value(critic_obs_tmp, critic_obs_topic_tmp, critic_action_tmp).squeeze(1)
+        Q = self.target_critic.get_value(critic_obs_tmp, critic_obs_topic_tmp, critic_action_tmp).squeeze(1)
 
-            Q_tmp = Q.view(self.num_topic, self.num_agent, -1)
+        Q_tmp = Q.view(self.num_topic, self.num_agent, -1)
             
-            A = Q2.squeeze(1).unsqueeze(0).repeat(3,1) - torch.sum(pi * Q_tmp, dim=2)
+        A = Q2.squeeze(1).unsqueeze(0).repeat(3,1) - torch.sum(pi * Q_tmp, dim=2)
                 
-            cnt = 0
-            for t in range(self.num_topic):
-                for i in range(self.num_agent):
-                    if actions[t][i] != -1:
-                        actor_loss = actor_loss + A[t][i].item() * torch.log(pi[t][i][int(actions[t][i])] + 1e-16)
-                        cnt += 1
+        cnt = 0
+        for t in range(self.num_topic):
+            for i in range(self.num_agent):
+                if actions[t][i] != -1:
+                    actor_loss = actor_loss + A[t][i].item() * torch.log(pi[t][i][int(actions[t][i])] + 1e-16)
+                    cnt += 1
 
-            actor_loss = - actor_loss / cnt
+        actor_loss = - actor_loss / cnt
 
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            self.actor_optimizer.step()
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
         
