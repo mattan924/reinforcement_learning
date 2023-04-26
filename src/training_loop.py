@@ -42,10 +42,10 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     #  pretrain_flag = True: 指定の行動, False: 確率分布からサンプリング
     pretrain_flag = False
 
-    #  pre_trainを行うエピソードの周期 (pre_train_iter = 10の時10回に一回 pre_train を実行)
-    pre_train_iter = 2
+    #  pre_train を行うエピソードの周期 (pre_train_iter = 10の時10回に一回 pre_train を実行)
+    pre_train_iter = 10
 
-    #  価値関数とActor ネットワークを交互に固定して学習するためのフラグ
+    #  価値関数と Actor ネットワークを交互に固定して学習するためのフラグ
     fix_net_flag = False
 
     #  何エピソードごとに固定する方を変えるか
@@ -62,7 +62,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     env = Env(learning_data_index_path)
 
     #  学習モデルの指定
-    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
+    agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, device)
 
     # 学習ループ
     for epi_iter in range(start_epi_itr, max_epi_itr):
@@ -76,49 +76,26 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
         #  環境のリセット
         env.reset()
         #  状態の観測
-        obs = env.get_observation()
+        obs, obs_topic = env.get_observation()
         next_obs = None
+        next_obs_topic = None
 
         #  1エピソード中の reward の保持
-        reward_history = []
-
-        if epi_iter < 10:
-            pre_train_iter = 2
-        elif epi_iter < 50:
-            pre_train_iter = 3
-        elif epi_iter < 100:
-            pre_train_iter = 4
-        elif epi_iter < 200:
-            pre_train_iter = 5
-        elif epi_iter < 300:
-            pre_train_iter = 6
-        elif epi_iter < 400:
-            pre_train_iter = 7
-        elif epi_iter < 500:
-            pre_train_iter = 8
-        elif epi_iter < 600:
-            pre_train_iter = 10
-        elif epi_iter < 700:
-            pre_train_iter = 15
-        elif epi_iter < 800:
-            pre_train_iter = 20
-        elif epi_iter < 900:
-            pre_train_iter = 25
-        else:
-            pre_train_iter = 30
-        
+        reward_history = []        
 
         #  各エピソードにおける時間の推移
         for time in range(0, env.simulation_time, env.time_step):
-
+            
             # 行動の選択方式の設定
             if epi_iter % pre_train_iter == 0:
                 pretrain_flag = True
             else:
                 pretrain_flag = False
+            
 
             #  行動と確率分布の取得
-            actions, pi = agent.get_acction(obs, env, True, pretrain_flag)
+            #  actions.shape = (num_topic, num_client) にする
+            actions, pi = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
 
             # 報酬の受け取り
             reward = env.step(actions, time)
@@ -126,12 +103,13 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
             reward = -reward
 
             # 状態の観測
-            next_obs = env.get_observation()
+            next_obs, next_obs_topic = env.get_observation()
 
             # 学習
-            agent.train(obs, actions, pi, reward, next_obs, fix_net_flag)
+            agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, fix_net_flag)
 
             obs = next_obs
+            obs_topic = next_obs_topic
 
         if epi_iter % 1 == 0:
             #  ログの出力

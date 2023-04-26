@@ -15,7 +15,7 @@ class Client:
         self.y = y
         self.pub_topic = pub_topic
         self.sub_topic = sub_topic
-        self.pub_edge = np.ones(num_topic)*-1
+        self.pub_edge = np.full(num_topic, -1)
         self.sub_edge = -1
 
 
@@ -26,10 +26,16 @@ class Edge:
         self.x = x
         self.y = y
         self.max_volume = volume
-        self.used_volume = 0
+        self.used_volume = np.zeros(num_topic)
+        self.total_used_volume = 0
+        self.deploy_topic = np.zeros(num_topic)
         self.cpu_power = cpu_power
         self.power_allocation = np.zeros(num_topic)
-        self.used_publisers = [[] for _ in range(num_topic)]
+        self.used_publishers = np.zeros(num_topic)
+
+    
+    def cal_used_volume(self):
+        self.total_used_volume = sum(self.used_volume)
 
 
 class Topic:
@@ -89,25 +95,21 @@ class Env:
 
         #  edge情報の読み込み
         edges = util.read_edge(self.edge_file)
-        self.all_edge = []
-        for e in edges:
-            edge = Edge(e.id, e.x, e.y, e.volume, e.cpu_power, self.num_topic)
-            self.all_edge.append(edge)
+
+        self.all_edge = [Edge(e.id, e.x, e.y, e.volume, e.cpu_power, self.num_topic) for e in edges]
 
         #  topic 情報の読み込み
         topics = util.read_topic(self.topic_file)
-        self.all_topic = []
-        for t in topics:
-            topic = Topic(t.id, t.save_period, t.publish_rate, t.data_size, t.require_cycle)
-            self.all_topic.append(topic)
+
+        self.all_topic = [Topic(t.id, t.save_period, t.publish_rate, t.data_size, t.require_cycle) for t in topics]
 
         #  pub/sub関係を持ったトラッキングデータの読み込み
         self.learning_data = util.read_data_set_topic(self.data_file, self.num_topic)
 
-        self.clients = []
-        self.pre_time_clients = []
         self.publishers = [[] for _ in range(self.num_topic)]
         self.subscribers = [[] for _ in range(self.num_topic)]
+
+        self.clients = []
         for _ in range(self.num_client):
             data = self.learning_data.pop(0)
             client = Client(data.id, data.x, data.y, data.pub_topic, data.sub_topic, self.num_topic)
@@ -129,17 +131,15 @@ class Env:
 
     # 環境の初期化
     def reset(self):
+        #  edge情報の読み込み
         edges = util.read_edge(self.edge_file)
-        self.all_edge = []
-        for e in edges:
-            edge = Edge(e.id, e.x, e.y, e.volume, e.cpu_power, self.num_topic)
-            self.all_edge.append(edge)
 
+        self.all_edge_opt = [Edge(e.id, e.x, e.y, e.volume, e.cpu_power, self.num_topic) for e in edges]
+
+        #  topic 情報の読み込み
         topics = util.read_topic(self.topic_file)
-        self.all_topic = []
-        for t in topics:
-            topic = Topic(t.id, t.save_period, t.publish_rate, t.data_size, t.require_cycle)
-            self.all_topic.append(topic)
+
+        self.all_topic_opt = [Topic(t.id, t.save_period, t.publish_rate, t.data_size, t.require_cycle) for t in topics]
 
         self.learning_data = util.read_data_set_topic(self.data_file, self.num_topic)
 
@@ -165,16 +165,33 @@ class Env:
         
         
     #  状態の観測
-    #  マルチトピックへ改修が必要
     def get_observation(self):
-        obs_channel = 4
+        obs_channel = 9
         obs_size = 81
-        obs = np.zeros((self.num_client, obs_channel, obs_size, obs_size))
+
+        #  観測値
+        obs = np.zeros((self.num_client, self.num_topic, obs_channel, obs_size, obs_size))
 
         block_len_x = (self.max_x-self.min_x)/obs_size
         block_len_y = (self.max_y-self.min_y)/obs_size
 
-        distribution = np.zeros((obs_size, obs_size))
+        #  各クライアントの位置
+        position_info = np.zeros((self.num_client, obs_size, obs_size))
+        #  クライアント全体の分布
+        total_distribution = np.zeros((obs_size, obs_size))
+        #  ある topic の publisher/subscriber の分布
+        publisher_distribution = np.zeros((self.num_topic, obs_size, obs_size))
+        subscriber_distribution = np.zeros((self.num_topic, obs_size, obs_size))
+
+        #  ある topic が使用しているストレージ状況
+        topic_storage_info = np.zeros((self.num_topic, obs_size, obs_size))
+        #  ストレージの空き状況
+        storage_info = np.zeros((obs_size, obs_size))
+        #  cpu の最大クロック数
+        cpu_info = np.zeros((obs_size, obs_size))
+        #  使用中のクライアントの数
+        topic_cpu_used_client = np.zeros((self.num_topic, obs_size, obs_size))
+        cpu_used_client = np.zeros((obs_size, obs_size))
 
         for client in self.clients:
             block_index_x = int(client.x / block_len_x)
@@ -185,85 +202,124 @@ class Env:
             if block_index_y == obs_size:
                 block_index_y = obs_size-1
 
-            distribution[block_index_y][block_index_x] += 1
-        
-        storage_info = np.zeros((obs_size, obs_size))
-        cpu_info = np.zeros((obs_size, obs_size))
+            position_info[client.id][block_index_y][block_index_x] = 100
+
+            for t in range(self.num_topic):
+                if client.pub_topic[t] == 1:
+                    publisher_distribution[t][block_index_y][block_index_x] += 1
+
+                if client.sub_topic[t] == 1:
+                    subscriber_distribution[t][block_index_y][block_index_x] += 1
+
+            total_distribution[block_index_y][block_index_x] += 1
 
         for edge in self.all_edge:
             block_index_x = int(edge.x / block_len_x)
             block_index_y = int(edge.y / block_len_y)
-
-            storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.used_volume) / 1e5
-            cpu_info[block_index_y][block_index_x] = edge.power_allocation[0] / 1e8
-
-
-        for i in range(self.num_client):
-            position_info = np.zeros((obs_size, obs_size))
-            client = self.clients[i]
-
-            block_index_x = int(client.x / block_len_x)
-            block_index_y = int(client.y / block_len_y)
-
-            if block_index_x == obs_size:
-                block_index_x = obs_size-1
-            if block_index_y == obs_size:
-                block_index_y = obs_size-1
                 
-            position_info[block_index_y][block_index_x] = 100
-            obs[i][0] = position_info
-            obs[i][1] = distribution
-            obs[i][2] = storage_info
-            obs[i][3] = cpu_info
+            storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.total_used_volume) / 1e5
+            cpu_info[block_index_y][block_index_x] = edge.cpu_power
+            cpu_used_client[block_index_y][block_index_x] = sum(edge.used_publishers)
 
-        return obs
+            for t in range(self.num_topic):
+                topic_storage_info[t][block_index_y][block_index_x] = edge.used_volume[t]
+                topic_cpu_used_client[t][block_index_y][block_index_x] = edge.used_publishers[t]
+
+        obs_topic_channel = 3
+        obs_topic = np.zeros((self.num_topic, obs_topic_channel))
+
+        obs[:, :, 0] = position_info[:, np.newaxis]
+        obs[:, :, 1] = publisher_distribution[np.newaxis]
+        obs[:, :, 2] = subscriber_distribution[np.newaxis]
+        obs[:, :, 3] = total_distribution[np.newaxis, np.newaxis]
+        obs[:, :, 4] = topic_storage_info[np.newaxis]
+        obs[:, :, 5] = storage_info[np.newaxis, np.newaxis]
+        obs[:, :, 6] = cpu_info[np.newaxis, np.newaxis]
+        obs[:, :, 7] = topic_cpu_used_client[np.newaxis]
+        obs[:, :, 8] = cpu_used_client[np.newaxis, np.newaxis]
+
+        for t, topic in enumerate(self.all_topic):
+            obs_topic[t, 0] = topic.require_cycle
+            obs_topic[t, 1] = topic.data_size
+            obs_topic[t, 2] = topic.volume
+
+        return obs, obs_topic
         
  
     #  環境を進める
     def step(self, actions, time):
         for edge in self.all_edge:
-            edge.used_publishers = [[] for _ in range(self.num_topic)]
+            edge.used_publishers = np.zeros(self.num_topic)
 
         block_len_x = (self.max_x-self.min_x)/3
         block_len_y = (self.max_y-self.min_y)/3
 
-        for publisher in self.publishers[0]:
-            publisher.pub_edge[0] = actions[publisher.id]
+        for t in range(self.num_topic):
+            for publisher in self.publishers[t]:
+                publisher.pub_edge[t] = actions[t][publisher.id]
 
-            edge = self.all_edge[int(publisher.pub_edge[0])]
-            edge.used_publishers[0].append(publisher)
+                edge = self.all_edge[int(publisher.pub_edge[0])]
+                edge.used_publishers[t] += 1
 
-        for subscriber in self.subscribers[0]:
-            block_index_x = int(subscriber.x / block_len_x)
-            block_index_y = int(subscriber.y / block_len_y)
+            for subscriber in self.subscribers[t]:
+                block_index_x = int(subscriber.x / block_len_x)
+                block_index_y = int(subscriber.y / block_len_y)
 
-            if block_index_x == 3:
-                block_index_x = 2
-            if block_index_y == 3:
-                block_index_y = 2
+                if block_index_x == 3:
+                    block_index_x = 2
+                if block_index_y == 3:
+                    block_index_y = 2
 
-            subscriber.sub_edge = block_index_y*3+block_index_x
+                subscriber.sub_edge = block_index_y*3+block_index_x
+
+        old_time = 0
+        opt_time = 0
 
         for edge in self.all_edge:
-            edge.used_volume = 0
+            edge.used_volume = np.zeros(self.num_topic)
+            edge.deploy_topic = np.zeros(self.num_topic)
             tmp = 0
 
-            if len(edge.used_publishers[0]) > 0:
-                edge.used_volume += self.all_topic[0].volume
-                tmp += 1
+            for t in range(self.num_topic):
+                if edge.used_publishers[t] > 0:
+                    edge.used_volume[t] = self.all_topic[t].volume
+                    tmp += 1
                 
-            if tmp != 0:
-                if len(edge.used_publishers[0]) != 0:
-                    edge.power_allocation[0] = (edge.cpu_power / tmp) / len(edge.used_publishers[0])
+                if tmp != 0:
+                    if edge.used_publishers[t] != 0:
+                        edge.power_allocation[t] = (edge.cpu_power / tmp) / edge.used_publishers[t]
+                    else:
+                        edge.power_allocation[t] = edge.cpu_power / tmp
                 else:
-                    edge.power_allocation[0] = edge.cpu_power / tmp
+                    edge.power_allocation[t] = edge.cpu_power
+
+            edge.cal_used_volume()
+
+            if edge.total_used_volume <= edge.max_volume:
+                edge.deploy_topic = edge.used_publishers.astype(bool)
             else:
-                edge.power_allocation[0] = edge.cpu_power
+                volume = edge.total_used_volume
+                cloud_topic = []
+                while(volume > edge.max_volume):
+                    max_id = -1
+                    max_num = 0
+
+                    for t in range(self.num_topic):
+                        if not(t in cloud_topic):
+                            if max_num < edge.used_publishers[t]:
+                                max_id = t
+                                max_num = edge.used_publishers[t]
+                    
+                    if max_id != -1:
+                        volume -= edge.used_volume[max_id]
+                        cloud_topic.append(max_id)
+
+                for t in range(self.num_topic):
+                    if edge.used_publishers[t] > 0 and not(t in cloud_topic):
+                        edge.deploy_topic[t] = True
             
         # 報酬の計算
         reward = self.cal_reward()
-
-        self.pre_time_clients = self.clients
     
         if time != self.simulation_time-self.time_step:
             self.clients = []
@@ -292,11 +348,12 @@ class Env:
     # 報酬(総遅延)の計算
     def cal_reward(self):
         reward = 0
-        for publisher in self.publishers[0]:
-            for subscriber in self.subscribers[0]:
-                delay = self.cal_delay(publisher, subscriber, 0)
-                reward = reward + delay
-                
+        for t in range(self.num_topic):
+            for publisher in self.publishers[t]:
+                for subscriber in self.subscribers[t]:
+                    delay = self.cal_delay(publisher, subscriber, t)
+                    reward = reward + delay
+        
         return reward
 
 
@@ -310,7 +367,7 @@ class Env:
 
         delay += gamma*self.cal_distance(publisher.x, publisher.y, pub_edge.x, pub_edge.y)
         delay += self.cal_compute_time(pub_edge, n)
-        if pub_edge.used_volume <= pub_edge.max_volume:
+        if pub_edge.deploy_topic[n]:
             delay += gamma*self.cal_distance(pub_edge.x, pub_edge.y, sub_edge.x, sub_edge.y)
         else:
             delay += 2*self.cloud_time
@@ -323,7 +380,7 @@ class Env:
     def cal_compute_time(self, edge, n):
         topic = self.all_topic[n]
 
-        if edge.used_volume <= edge.max_volume:
+        if edge.deploy_topic[n]:
             delay = (topic.require_cycle*(topic.volume / topic.data_size)) / edge.power_allocation[n]
         else:
             delay = (topic.require_cycle*(topic.volume / topic.data_size)) / self.cloud_cycle
