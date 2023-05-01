@@ -19,8 +19,8 @@ class ReplayBuffer:
         self.device = device
 
     
-    def add(self, state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic):
-        data = (state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic)
+    def add(self, state, state_topic, actions_onehot, reward, next_state, next_state_topic):
+        data = (state, state_topic, actions_onehot, reward, next_state, next_state_topic)
         self.buffer.append(data)
 
     
@@ -33,13 +33,12 @@ class ReplayBuffer:
 
         state = torch.cat([x[0].unsqueeze(0) for x in data], dim=0)
         state_topic = torch.cat([x[1].unsqueeze(0) for x in data], dim=0)
-        actions = torch.cat([x[2].unsqueeze(0) for x in data], dim=0)
-        actions_onehot = torch.cat([x[3].unsqueeze(0) for x in data], dim=0)
-        reward = np.stack([x[4] for x in data])
-        next_state = torch.cat([x[5].unsqueeze(0) for x in data], dim=0)
-        next_state_topic = torch.cat([x[6].unsqueeze(0) for x in data], dim=0)
+        actions_onehot = torch.cat([x[2].unsqueeze(0) for x in data], dim=0)
+        reward = np.stack([x[3] for x in data])
+        next_state = torch.cat([x[4].unsqueeze(0) for x in data], dim=0)
+        next_state_topic = torch.cat([x[5].unsqueeze(0) for x in data], dim=0)
 
-        return state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic
+        return state, state_topic, actions_onehot, reward, next_state, next_state_topic
 
 
 class Actor(nn.Module):
@@ -215,10 +214,10 @@ class COMA:
         self.device = device
         self.actor = Actor(self.N_action)
         self.old_actor = Actor(self.N_action)
-        self.old_actor.load_state_dict(self.actor.sate_dict())
+        self.old_actor.load_state_dict(self.actor.state_dict())
         self.critic = Critic(self.N_action, num_agent, num_topic)
         self.target_critic = Critic(self.N_action, num_agent, num_topic)
-        self.target_critic.load_state_dict(self.critic.sate_dict())
+        self.target_critic.load_state_dict(self.critic.state_dict())
         self.V_net = V_Net(num_topic)
         self.target_V_net = V_Net(num_topic)
         self.target_V_net.load_state_dict(self.V_net.state_dict())
@@ -233,6 +232,9 @@ class COMA:
             self.actor.cuda(self.device)
             self.critic.cuda(self.device)
             self.V_net.cuda(self.device)
+            self.old_actor.cuda(self.device)
+            self.target_critic.cuda(self.device)
+            self.target_V_net.cuda(self.device)
 
         self.gamma = 0.95
         self.critic_loss_fn = torch.nn.MSELoss()
@@ -291,16 +293,16 @@ class COMA:
         return actions, pi
 
     
-    def save_model(self, dir_path, iter):
-        torch.save(self.actor.state_dict(), dir_path + 'actor_weight' + '_' + str(iter) + '.pth')
-        torch.save(self.critic.state_dict(), dir_path + 'critic_weight' + '_' + str(iter) + '.pth')
-        torch.save(self.V_net.state_dict(), dir_path + 'v_net_weight' + '_' + str(iter) + '.pth')
+    def save_model(self, dir_path, actor_weight, critic_weight, v_net_weight, iter):
+        torch.save(self.actor.state_dict(), dir_path + actor_weight + '_' + str(iter) + '.pth')
+        torch.save(self.critic.state_dict(), dir_path + critic_weight + '_' + str(iter) + '.pth')
+        torch.save(self.V_net.state_dict(), dir_path + v_net_weight + '_' + str(iter) + '.pth')
 
 
-    def load_model(self, dir_path, iter):
-        self.actor.load_state_dict(torch.load(dir_path + 'actor_weight' + '_' + str(iter) + '.pth'))
-        self.critic.load_state_dict(torch.load(dir_path + 'critic_weight' + '_' + str(iter) + '.pth'))
-        self.V_net.load_state_dict(torch.load(dir_path + 'v_net_weight' + '_' + str(iter) + '.pth'))
+    def load_model(self, dir_path, actor_weight, critic_weight, v_net_weight, iter):
+        self.actor.load_state_dict(torch.load(dir_path + actor_weight + '_' + str(iter) + '.pth'))
+        self.critic.load_state_dict(torch.load(dir_path + critic_weight + '_' + str(iter) + '.pth'))
+        self.V_net.load_state_dict(torch.load(dir_path + v_net_weight + '_' + str(iter) + '.pth'))
 
 
     def train(self, obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag):
@@ -354,13 +356,13 @@ class COMA:
         next_state[3*self.num_topic:4*self.num_topic] = next_topic_cpu_info
         next_state[-2:] = next_obs_tensor[0][5:7]
 
-        self.replay_buffer.add(state, state_topic, actions, actions_onehot, reward, next_state, next_state_topic)
+        self.replay_buffer.add(state, state_topic, actions_onehot, reward, next_state, next_state_topic)
 
         if len(self.replay_buffer) < self.buffer_size:
             #print(f"replay buffer < buffer size ({len(self.replay_buffer)})")
             return
-
-        obs_exp, obs_topic_exp, actions_exp, actions_onehot_exp, reward_exp, next_obs_exp, next_obs_topic_exp = self.replay_buffer.get_batch()
+        
+        obs_exp, obs_topic_exp, actions_onehot_exp, reward_exp, next_obs_exp, next_obs_topic_exp = self.replay_buffer.get_batch()
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
 
@@ -386,8 +388,6 @@ class COMA:
         critic_loss.backward(retain_graph=True)
         self.critic_optimizer.step()
         
-        actor_loss = torch.FloatTensor([0.0]).to(self.device)
-
         critic_obs = torch.stack([state] * self.num_agent, dim=0)
         critic_obs_topic = torch.stack([state_topic] * self.num_agent, dim=0)
         critic_action = torch.stack([actions_onehot] * self.num_agent, dim=0)
@@ -400,28 +400,26 @@ class COMA:
         critic_obs_topic_tmp = torch.stack([state_topic] * self.num_topic*self.N_action*self.num_agent, dim=0)
         critic_action_tmp = torch.stack([actions_onehot] * self.num_topic*self.N_action*self.num_agent, dim=0)
 
+        E = torch.eye(self.N_action).to(self.device)
         for t in range(self.num_topic):
-            for a in range(self.N_action):
-                for i in range(self.num_agent):
-                    if actions[t][i] != -1:
-                        idx = t * self.num_agent * self.N_action + i * self.N_action
-                        critic_action_tmp[t*self.N_action*self.num_agent + i*self.N_action + a][idx:idx+self.N_action] = torch.FloatTensor([1 if k==a else 0 for k in range(self.N_action)]).to(self.device)
-                    
+            actions_t = actions[t]
+            mask = (actions_t != -1)
+            idx_base = t * self.num_agent * self.N_action
+            for i in range(self.num_agent):
+                idx = idx_base + i * self.N_action
+                for a in range(self.N_action):
+                    if mask[i]:
+                        critic_action_tmp[t*self.N_action*self.num_agent + i*self.N_action + a][idx:idx+self.N_action] = E[a]
+      
         Q = self.target_critic.get_value(critic_obs_tmp, critic_obs_topic_tmp, critic_action_tmp).squeeze(1)
 
         Q_tmp = Q.view(self.num_topic, self.num_agent, -1)
             
-        A = Q2.squeeze(1).unsqueeze(0).repeat(3,1) - torch.sum(pi * Q_tmp, dim=2)
-                
-        cnt = 0
-        for t in range(self.num_topic):
-            for i in range(self.num_agent):
-                if actions[t][i] != -1:
-                    actor_loss = actor_loss + A[t][i].item() * torch.log(pi[t][i][int(actions[t][i])] + 1e-16)
-                    cnt += 1
+        A = Q2.squeeze(1).unsqueeze(0).repeat(3,1) - torch.sum(pi * Q_tmp, dim=2)        
 
-        actor_loss = - actor_loss / cnt
-
+        mask = actions != -1
+        actor_loss = -(A[mask] * torch.log(pi[mask, actions[mask]] + 1e-16)).sum() / mask.sum()
+        
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()

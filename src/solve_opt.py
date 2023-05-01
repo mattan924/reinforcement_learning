@@ -2,18 +2,13 @@ from solver import Solver
 import pandas as pd
 
 if __name__ == '__main__':
-    index_file = "../dataset/learning_data/index/index_single2.csv"
-    output_file = "../dataset/learning_data/solution/solution_single2.csv"
+    index_file = "../dataset/learning_data/index/index_multi.csv"
+    output_file = "../dataset/learning_data/solution/solution_multi.csv"
 
     solver = Solver(index_file)
 
     with open(output_file, "w") as f:
-        f.write(f"id, time")
-
-        for n in range(solver.num_topic):
-            f.write(f",pub{n}")
-        
-        f.write(f",sub\n")
+        pass
 
     total_delay = 0.0
 

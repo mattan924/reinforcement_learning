@@ -110,6 +110,7 @@ class Env:
         self.subscribers = [[] for _ in range(self.num_topic)]
 
         self.clients = []
+        self.pre_time_clients = []
         for _ in range(self.num_client):
             data = self.learning_data.pop(0)
             client = Client(data.id, data.x, data.y, data.pub_topic, data.sub_topic, self.num_topic)
@@ -320,6 +321,8 @@ class Env:
             
         # 報酬の計算
         reward = self.cal_reward()
+
+        self.pre_time_clients = self.clients.copy()
     
         if time != self.simulation_time-self.time_step:
             self.clients = []
