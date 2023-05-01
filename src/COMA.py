@@ -325,7 +325,7 @@ class COMA:
                     idx = t*self.num_agent*self.N_action + i*self.N_action
                     actions_onehot[idx:idx+self.N_action].fill_(-1)
         
-        # 経験再生用バッファへの追加
+        #  ==========経験再生用バッファへの追加==========
         obs_tensor = torch.FloatTensor(obs[0]).to(self.device)
         state_topic = torch.FloatTensor(obs_topic).to(self.device).view(-1)
         next_obs_tensor = torch.FloatTensor(next_obs[0]).to(self.device)
@@ -370,6 +370,8 @@ class COMA:
             self.target_V_net.load_state_dict(self.V_net.state_dict())
             self.target_critic.load_state_dict(self.critic.state_dict())
 
+        #  ========== V_net の更新 ==========
+
         V_target = reward_exp/100 + self.gamma*self.target_V_net.get_value(next_obs_exp, next_obs_topic_exp)
         V = self.V_net.get_value(obs_exp, obs_topic_exp)
 
@@ -381,7 +383,7 @@ class COMA:
 
         Q1 = self.critic.get_value(obs_exp, obs_topic_exp, actions_onehot_exp)
 
-        # critic ネットワークの更新
+        #  ========== critic ネットワークの更新 ==========
         critic_loss = self.critic_loss_fn(V_target.detach(), Q1)
 
         self.critic_optimizer.zero_grad()
@@ -400,6 +402,8 @@ class COMA:
         critic_obs_topic_tmp = torch.stack([state_topic] * self.num_topic*self.N_action*self.num_agent, dim=0)
         critic_action_tmp = torch.stack([actions_onehot] * self.num_topic*self.N_action*self.num_agent, dim=0)
 
+        #  ========== actor ネットワークの更新 ==========
+        #  ========== アドバンテージの計算 ==========
         E = torch.eye(self.N_action).to(self.device)
         for t in range(self.num_topic):
             actions_t = actions[t]
@@ -415,9 +419,15 @@ class COMA:
 
         Q_tmp = Q.view(self.num_topic, self.num_agent, -1)
             
-        A = Q2.squeeze(1).unsqueeze(0).repeat(3,1) - torch.sum(pi * Q_tmp, dim=2)        
+        A = Q2.squeeze(1).unsqueeze(0).repeat(3,1) - torch.sum(pi * Q_tmp, dim=2)
 
+        #  ========== ratio の計算 ==========
         mask = actions != -1
+        pi_old = self.old_actor.get_action(obs, obs_topic)
+        rations = pi[mask, actions[mask]] / (pi_old[mask, actions[mask]] + 1e-16)
+
+        #  ========== actor_loss の計算 ==========     
+
         actor_loss = -(A[mask] * torch.log(pi[mask, actions[mask]] + 1e-16)).sum() / mask.sum()
         
         self.actor_optimizer.zero_grad()
