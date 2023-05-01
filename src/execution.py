@@ -3,25 +3,25 @@ sys.path.append("../../dataset_visualization/src")
 import util
 import animation
 from env import Env
-from COMA import COMA, ActorCritic
+from COMA import COMA
 import matplotlib.pyplot as plt
 import pandas as pd
-import time as time_modu
-import datetime
-import os
 
 if __name__ == '__main__':
     #  学習に使用するデータの指定
-    data_index = "../dataset/learning_data/index/index_test.csv"
+    data_index = "../dataset/learning_data/index/index_multi.csv"
 
     #  読み込む重みパラメータ
-    load_parameter = "../result/COMA_test/model_parameter/"
+    load_parameter = "../result/temporary/multi_topic/target_net/model_parameter/"
+    critic_weight = "critic_weight_0"
+    actor_weight = "actor_weight_0"
+    v_net_weight = "V_net_weight_0"
 
     #  結果出力先ファイル
-    output_file = "../dataset/execution_data/solution/COMA_test1000.csv"
+    output_file = "../dataset/execution_data/solution/multi15000.csv"
 
     #  結果確認用アニメーション
-    output_animation = "../dataset/execution_data/animation/COMA_test1000.gif"
+    output_animation = "../dataset/execution_data/animation/multi15000.gif"
 
     df_index = pd.read_csv(data_index, index_col=0, dtype=str)
     df_index.at['data', 'solve_file'] = output_file
@@ -47,15 +47,15 @@ if __name__ == '__main__':
     pretrain_flag = False
 
     #  学習モデルの指定
-    agent = COMA(N_action, env.num_client, buffer_size, batch_size, device)
-    #agent = ActorCritic(N_action, env.num_client, buffer_size, batch_size, device)
+    agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, device)
 
     #  重みパラメータの読み込み
-    agent.load_model(load_parameter, 1000)
+    agent.load_model(load_parameter, actor_weight, critic_weight, v_net_weight, 15000)
         
     #  状態の観測
-    obs = env.get_observation()
+    obs,obs_topic = env.get_observation()
     next_obs = None
+    next_obs_topic = None
 
     #  1エピソード中の reward の保持
     reward_history = []
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     #  各エピソードにおける時間の推移
     for time in range(0, env.simulation_time, env.time_step):
         #  行動と確率分布の取得
-        actions, pi = agent.get_acction(obs, env, train_flag, pretrain_flag)
+        actions, pi = agent.get_acction(obs, obs_topic, env, train_flag, pretrain_flag)
 
         # 報酬の受け取り
         reward = env.step(actions, time)
@@ -71,12 +71,13 @@ if __name__ == '__main__':
         reward = -reward
 
         # 状態の観測
-        next_obs = env.get_observation()
+        next_obs, next_obs_topic = env.get_observation()
 
         obs = next_obs
+        obs_topic = next_obs_topic
 
         for i in range(env.num_client):
             client = env.pre_time_clients[i]
-            util.writeSolutionCSV(output_file, client.id, time, client.x, client.y, client.pub_edge, client.sub_edge, 1)
+            util.write_solution_csv(output_file, client.id, time, client.x, client.y, client.pub_edge, client.sub_edge, env.num_topic)
 
-    animation.create_single_assign_animation(data_index, output_animation, 20)
+    animation.create_assign_animation(data_index, output_animation, 20)

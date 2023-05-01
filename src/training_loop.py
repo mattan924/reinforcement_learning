@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 import os
-
+import time as time_modu
 
 def read_train_curve(log_path, pre_train_iter):
     reward_history = []
@@ -21,7 +21,7 @@ def read_train_curve(log_path, pre_train_iter):
             
     return reward_history
 
-def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
+def train_loop(max_epi_itr, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
@@ -45,11 +45,11 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     #  pre_train を行うエピソードの周期 (pre_train_iter = 10の時10回に一回 pre_train を実行)
     pre_train_iter = 10
 
-    #  価値関数と Actor ネットワークを交互に固定して学習するためのフラグ
-    fix_net_flag = False
+    #  ターゲットネットワークの同期
+    target_net_flag = False
 
-    #  何エピソードごとに固定する方を変えるか
-    fix_net_iter = 10
+    #  何エピソードごとにターゲットネットワークを更新するか
+    target_net_iter = 10
 
     #  標準エラー出力先の変更
     sys.stderr = open(output + "_err.log", 'w')
@@ -68,10 +68,12 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     for epi_iter in range(start_epi_itr, max_epi_itr):
         #  重みパラメータの読み込み
         if load_flag:
-            agent.load_model(load_parameter_path, start_epi_itr)
+            agent.load_model(load_parameter_path, actor_weight, critic_weight, V_net_weight, start_epi_itr)
 
-        if epi_iter % fix_net_iter == 0:
-            fix_net_flag = not fix_net_flag
+        if epi_iter % target_net_iter == 0:
+            target_net_flag = True
+        else:
+            target_net_flag = False
         
         #  環境のリセット
         env.reset()
@@ -85,16 +87,25 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
 
         #  各エピソードにおける時間の推移
         for time in range(0, env.simulation_time, env.time_step):
+
+            if epi_iter < 500:
+                pre_train_iter = 10
+            elif epi_iter < 1000:
+                pre_train_iter = 20
+            elif epi_iter < 1500:
+                pre_train_iter = 30
+            elif epi_iter < 2000:
+                pre_train_iter = 40
+            else:
+                pre_train_iter = 10000000
             
             # 行動の選択方式の設定
             if epi_iter % pre_train_iter == 0:
                 pretrain_flag = True
             else:
                 pretrain_flag = False
-            
 
             #  行動と確率分布の取得
-            #  actions.shape = (num_topic, num_client) にする
             actions, pi = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
 
             # 報酬の受け取り
@@ -106,7 +117,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
             next_obs, next_obs_topic = env.get_observation()
 
             # 学習
-            agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, fix_net_flag)
+            agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag)
 
             obs = next_obs
             obs_topic = next_obs_topic
@@ -120,7 +131,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
 
         #  重みパラメータのバックアップ
         if epi_iter % backup_iter == 0:
-            agent.save_model(result_dir + 'model_parameter/', epi_iter)
+            agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter)
 
     #  最適解の取り出し
     df_index = pd.read_csv(learning_data_index_path, index_col=0)
@@ -137,7 +148,7 @@ def train_loop(max_epi_itr, device, result_dir, learning_data_index_path, output
     fig.savefig(output + ".png")
 
     #  重みパラメータの保存
-    agent.save_model(result_dir + 'model_parameter/', epi_iter+1)
+    agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter+1)
 
     #  標準エラー出力先を戻す
     sys.stderr = sys.__stderr__
