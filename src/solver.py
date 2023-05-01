@@ -468,7 +468,7 @@ class Solver:
                 
                 for l in range(self.num_edge):
                         if y_opt[m][l] == 1:
-                            y_opt_output[m] = l
+                            y_opt_output[m] = self.all_edge[l].id
             
             with open(output_file, "a") as f:
                 for m in range(self.num_client):
@@ -478,7 +478,10 @@ class Solver:
                         f.write(f",{x_opt_output[m][n]}")
 
                     for n in range(self.num_topic):
-                        f.write(f",{y_opt_output[m]}\n")
+                        if self.all_client[m].sub_topic[n] == 1:
+                            f.write(f",{y_opt_output[m]}\n")
+                        else:
+                            f.write(",-1")
 
             # 総遅延の計算
             for m in range(self.num_client):
@@ -562,7 +565,7 @@ class Solver:
                 
                 for l in range(self.num_edge):
                         if y_opt[m][l] == 1:
-                            y_opt_output[m] = l
+                            y_opt_output[m] = self.all_edge[l].id
             
             with open(output_file, "a") as f:
                 for m in range(self.num_client):
@@ -571,7 +574,13 @@ class Solver:
                     for n in range(self.num_topic):
                         f.write(f",{x_opt_output[m][n]}")
 
-                    f.write(f",{y_opt_output[m]}\n")
+                    for n in range(self.num_topic):
+                        if self.all_client[m].sub_topic[n] == 1:
+                            f.write(f",{y_opt_output[m]}")
+                        else:
+                            f.write(",-1")
+
+                    f.write("\n")
 
             # 総遅延の計算
             for m in range(self.num_client):
