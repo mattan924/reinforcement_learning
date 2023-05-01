@@ -5,14 +5,20 @@ if __name__ == '__main__':
     index_file = "../dataset/learning_data/index/index_multi.csv"
     output_file = "../dataset/learning_data/solution/solution_multi.csv"
 
+    start_time = 0
+
     solver = Solver(index_file)
 
-    with open(output_file, "w") as f:
-        pass
+    if start_time == 0:
+        with open(output_file, "w") as f:
+            pass
 
     total_delay = 0.0
 
-    for time in range(0, solver.simulation_time, solver.time_step):
+    for time in range(0, start_time, solver.time_step):
+        solver.update_client()
+
+    for time in range(start_time, solver.simulation_time, solver.time_step):
         print(f"time = {time}")
         solver.update_client()
 
