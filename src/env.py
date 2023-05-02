@@ -16,7 +16,7 @@ class Client:
         self.pub_topic = pub_topic
         self.sub_topic = sub_topic
         self.pub_edge = np.full(num_topic, -1)
-        self.sub_edge = -1
+        self.sub_edge = np.full(num_topic, -1)
 
 
 class Edge:
@@ -259,7 +259,7 @@ class Env:
             for publisher in self.publishers[t]:
                 publisher.pub_edge[t] = actions[t][publisher.id]
 
-                edge = self.all_edge[int(publisher.pub_edge[0])]
+                edge = self.all_edge[int(publisher.pub_edge[t])]
                 edge.used_publishers[t] += 1
 
             for subscriber in self.subscribers[t]:
@@ -271,10 +271,7 @@ class Env:
                 if block_index_y == 3:
                     block_index_y = 2
 
-                subscriber.sub_edge = block_index_y*3+block_index_x
-
-        old_time = 0
-        opt_time = 0
+                subscriber.sub_edge[t] = block_index_y*3+block_index_x
 
         for edge in self.all_edge:
             edge.used_volume = np.zeros(self.num_topic)
@@ -363,7 +360,7 @@ class Env:
     # topic n に関してある publisher からある subscriber までの遅延
     def cal_delay(self, publisher, subscriber, n):
         pub_edge = self.all_edge[int(publisher.pub_edge[n])]
-        sub_edge = self.all_edge[int(subscriber.sub_edge)]
+        sub_edge = self.all_edge[int(subscriber.sub_edge[n])]
 
         delay = 0
         gamma = 0.1

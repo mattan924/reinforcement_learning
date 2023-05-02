@@ -33,7 +33,7 @@ def read_train_curve_design(log_path):
 
             reward = float(line[1])
 
-            if reward != -2939134.091680464:
+            if reward != -1358288.0227242818:
                 reward_history.append(reward)
 
         train_curve = np.zeros(len(reward_history))
@@ -47,7 +47,7 @@ def read_train_curve_design(log_path):
 
 learning_data_index_path = "../dataset/learning_data/index/index_multi.csv"
 
-output_fix_base = "../result/temporary/multi_topic/target_net/target_pretrain"
+output_fix_base = "../result/temporary/multi_topic/ppo_check/ppo"
 
 output_fix = output_fix_base + "0.log"
 
@@ -60,9 +60,9 @@ opt = df_index.at['data', 'opt']
 
 fig = plt.figure()
 wind = fig.add_subplot(1, 1, 1)
-#wind.set_ylim(ymin=-40000, ymax=-25000)
+wind.set_ylim(ymin=-100000, ymax=0)
 wind.grid()
-wind.plot(train_curve, linewidth=1, label='multi_topic')
+wind.plot(train_curve, linewidth=1, label='ppo')
 wind.axhline(y=-opt, c='r', label="optimal")
 wind.legend()
-fig.savefig("../result/temporary/multi_topic/target_net/target_pretrain_0.png")
+fig.savefig("../result/temporary/multi_topic/ppo_check/ppo_0.png")
