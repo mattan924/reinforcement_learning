@@ -205,12 +205,13 @@ class V_Net(nn.Module):
 
 class COMA:
     
-    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, device):
+    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, eps_clip, device):
         self.N_action = N_action
         self.num_agent = num_agent
         self.num_topic = num_topic
         self.buffer_size = buffer_size
         self.batch_size = batch_size
+        self.eps_clip = eps_clip
         self.device = device
         self.actor = Actor(self.N_action)
         self.old_actor = Actor(self.N_action)
@@ -248,6 +249,7 @@ class COMA:
         obs_tensor = obs_tensor.permute(1, 0, 2, 3, 4)
 
         pi = torch.zeros((self.num_topic, self.num_agent, self.N_action)).to(self.device)
+        pi_old = torch.zeros((self.num_topic, self.num_agent, self.N_action)).to(self.device)
 
         for t in range(self.num_topic):
             obs_topic_tensor_tmp = obs_topic_tensor[t].unsqueeze(0)
@@ -255,6 +257,7 @@ class COMA:
                 obs_topic_tensor_tmp = torch.cat([obs_topic_tensor_tmp, obs_topic_tensor[t].unsqueeze(0)], 0)
             
             pi[t] = self.actor.get_action(obs_tensor[t], obs_topic_tensor_tmp)
+            pi_old[t] = self.old_actor.get_action(obs_tensor[t], obs_topic_tensor_tmp)
 
         actions = torch.full((self.num_topic, self.num_agent), -1, device=self.device)
         
@@ -290,7 +293,11 @@ class COMA:
                     if client.pub_topic[t] == 1:
                         actions[t][i] = torch.argmax(pi[t][i])
 
-        return actions, pi
+        return actions, pi, pi_old
+    
+
+    def old_net_update(self):
+        self.old_actor.load_state_dict(self.actor.state_dict())
 
     
     def save_model(self, dir_path, actor_weight, critic_weight, v_net_weight, iter):
@@ -305,7 +312,7 @@ class COMA:
         self.V_net.load_state_dict(torch.load(dir_path + v_net_weight + '_' + str(iter) + '.pth'))
 
 
-    def train(self, obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag):
+    def train(self, obs, obs_topic, actions, pi, pi_old, reward, next_obs, next_obs_topic, target_net_flag):
         #  obs.shape = (num_client, num_topic, channel=9, 81, 81)
         #  obs_topic.shape = (num_topic, channel=3)
         #  actions.shaoe = (num_topic, num_client)
@@ -423,13 +430,19 @@ class COMA:
 
         #  ========== ratio の計算 ==========
         mask = actions != -1
-        pi_old = self.old_actor.get_action(obs, obs_topic)
-        rations = pi[mask, actions[mask]] / (pi_old[mask, actions[mask]] + 1e-16)
+        rations = pi[mask, actions[mask]].detach() / (pi_old[mask, actions[mask]].detach() + 1e-16)
+
+        surr1 = rations * A[mask]
+        surr2 = torch.clamp(rations, 1-self.eps_clip, 1+self.eps_clip) * A[mask]
+
+        clip = torch.min(surr1, surr2)
 
         #  ========== actor_loss の計算 ==========     
 
-        actor_loss = -(A[mask] * torch.log(pi[mask, actions[mask]] + 1e-16)).sum() / mask.sum()
-        
+        actor_loss = -(clip * torch.log(pi[mask, actions[mask]] + 1e-16)).sum() / mask.sum()
+        #actor_loss_old = -(A[mask] * torch.log(pi[mask, actions[mask]] + 1e-16)).sum() / mask.sum()
+        #test = - torch.log(pi[mask, actions[mask]] + 1e-16).sum() / mask.sum()
+
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()

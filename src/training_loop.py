@@ -21,7 +21,7 @@ def read_train_curve(log_path, pre_train_iter):
             
     return reward_history
 
-def train_loop(max_epi_itr, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
+def train_loop(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
@@ -35,9 +35,6 @@ def train_loop(max_epi_itr, device, result_dir, actor_weight, critic_weight, V_n
 
     # 各種パラメーター
     N_action = 9
-    buffer_size = 3000
-    batch_size = 500
-    backup_iter = 1000
 
     #  pretrain_flag = True: 指定の行動, False: 確率分布からサンプリング
     pretrain_flag = False
@@ -49,10 +46,10 @@ def train_loop(max_epi_itr, device, result_dir, actor_weight, critic_weight, V_n
     target_net_flag = False
 
     #  何エピソードごとにターゲットネットワークを更新するか
-    target_net_iter = 10
+    target_net_iter = 5
 
     #  標準エラー出力先の変更
-    sys.stderr = open(output + "_err.log", 'w')
+    #sys.stderr = open(output + "_err.log", 'w')
 
     if load_flag == False:
         with open(output + ".log", 'w') as f:
@@ -62,7 +59,7 @@ def train_loop(max_epi_itr, device, result_dir, actor_weight, critic_weight, V_n
     env = Env(learning_data_index_path)
 
     #  学習モデルの指定
-    agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, device)
+    agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, eps_clip, device)
 
     # 学習ループ
     for epi_iter in range(start_epi_itr, max_epi_itr):
@@ -82,6 +79,8 @@ def train_loop(max_epi_itr, device, result_dir, actor_weight, critic_weight, V_n
         next_obs = None
         next_obs_topic = None
 
+        agent.old_net_update
+
         #  1エピソード中の reward の保持
         reward_history = []        
 
@@ -89,13 +88,13 @@ def train_loop(max_epi_itr, device, result_dir, actor_weight, critic_weight, V_n
         for time in range(0, env.simulation_time, env.time_step):
 
             if epi_iter < 500:
-                pre_train_iter = 10
+                pre_train_iter = 5
             elif epi_iter < 1000:
-                pre_train_iter = 20
+                pre_train_iter = 10
             elif epi_iter < 1500:
-                pre_train_iter = 30
+                pre_train_iter = 15
             elif epi_iter < 2000:
-                pre_train_iter = 40
+                pre_train_iter = 20
             else:
                 pre_train_iter = 10000000
             
@@ -106,7 +105,7 @@ def train_loop(max_epi_itr, device, result_dir, actor_weight, critic_weight, V_n
                 pretrain_flag = False
 
             #  行動と確率分布の取得
-            actions, pi = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
+            actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
 
             # 報酬の受け取り
             reward = env.step(actions, time)
@@ -117,7 +116,7 @@ def train_loop(max_epi_itr, device, result_dir, actor_weight, critic_weight, V_n
             next_obs, next_obs_topic = env.get_observation()
 
             # 学習
-            agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag)
+            agent.train(obs, obs_topic, actions, pi, pi_old, reward, next_obs, next_obs_topic, target_net_flag)
 
             obs = next_obs
             obs_topic = next_obs_topic
