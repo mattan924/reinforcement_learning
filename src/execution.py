@@ -18,10 +18,10 @@ if __name__ == '__main__':
     v_net_weight = "V_net_weight_0"
 
     #  結果出力先ファイル
-    output_file = "../dataset/execution_data/solution/ppo500.csv"
+    output_file = "../dataset/execution_data/solution/ppo0.csv"
 
     #  結果確認用アニメーション
-    output_animation = "../dataset/execution_data/animation/ppo500.gif"
+    output_animation = "../dataset/execution_data/animation/ppo0.gif"
 
     df_index = pd.read_csv(data_index, index_col=0, dtype=str)
     df_index.at['data', 'solve_file'] = output_file
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, eps_clip, device)
 
     #  重みパラメータの読み込み
-    agent.load_model(load_parameter, actor_weight, critic_weight, v_net_weight, 500)
+    agent.load_model(load_parameter, actor_weight, critic_weight, v_net_weight, 0)
         
     #  状態の観測
     obs,obs_topic = env.get_observation()
