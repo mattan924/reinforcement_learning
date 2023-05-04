@@ -9,19 +9,19 @@ import pandas as pd
 
 if __name__ == '__main__':
     #  学習に使用するデータの指定
-    data_index = "../dataset/learning_data/index/index_multi.csv"
+    data_index = "../dataset/test_data_set/index/index_0.csv"
 
     #  読み込む重みパラメータ
-    load_parameter = "../result/temporary/multi_topic/compare_opt/model_parameter/"
+    load_parameter = "../result/temporary/pretrain/model_parameter/"
     critic_weight = "critic_weight_0"
     actor_weight = "actor_weight_0"
     v_net_weight = "V_net_weight_0"
 
     #  結果出力先ファイル
-    output_file = "../dataset/execution_data/solution/compare1000.csv"
+    output_file = "../dataset/execution_data/solution/pretrain0_10000.csv"
 
     #  結果確認用アニメーション
-    output_animation = "../dataset/execution_data/animation/compare1000.gif"
+    output_animation = "../dataset/execution_data/animation/pretrain0_10000.gif"
 
     df_index = pd.read_csv(data_index, index_col=0, dtype=str)
     df_index.at['data', 'solve_file'] = output_file
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, eps_clip, device)
 
     #  重みパラメータの読み込み
-    agent.load_model(load_parameter, actor_weight, critic_weight, v_net_weight, 1000)
+    agent.load_model(load_parameter, actor_weight, critic_weight, v_net_weight, 10000)
         
     #  状態の観測
     obs,obs_topic = env.get_observation()
