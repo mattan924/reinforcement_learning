@@ -564,8 +564,8 @@ class Solver:
                             x_opt_output[m][n] = l
                 
                 for l in range(self.num_edge):
-                        if y_opt[m][l] == 1:
-                            y_opt_output[m] = self.all_edge[l].id
+                    if y_opt[m][l] == 1:
+                        y_opt_output[m] = self.all_edge[l].id
             
             with open(output_file, "a") as f:
                 for m in range(self.num_client):
