@@ -439,7 +439,8 @@ class Solver:
             for l in range(self.num_edge):
                 for m in range(self.num_client):
                     for n in p[m]:
-                        num_user[l] += x_opt[m][n][l]
+                        if x_opt[m][n][l]:
+                            num_user[l] += 1
 
             x_opt_output = np.ones((self.num_client, self.num_topic))*-1
             y_opt_output = np.ones((self.num_client))*-1
@@ -536,7 +537,8 @@ class Solver:
             for l in range(self.num_edge):
                 for m in range(self.num_client):
                     for n in p[m]:
-                        num_user[l] += x_opt[m][n][l]
+                        if x_opt[m][n][l] > 0.5:
+                            num_user[l] += 1
 
             x_opt_output = np.ones((self.num_client, self.num_topic))*-1
             y_opt_output = np.ones((self.num_client, self.num_topic))*-1
