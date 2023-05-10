@@ -45,9 +45,9 @@ def read_train_curve_design(log_path):
 
 
 
-learning_data_index_path = "../dataset/learning_data/index/index_multi.csv"
+learning_data_index_path = "../dataset/learning_data/index/index_multi2.csv"
 
-output_fix_base = "../result/temporary/multi_topic/ppo_check/ppo"
+output_fix_base = "../result/temporary/multi_topic/compare_opt/compare"
 
 output_fix = output_fix_base + "0.log"
 
@@ -60,9 +60,9 @@ opt = df_index.at['data', 'opt']
 
 fig = plt.figure()
 wind = fig.add_subplot(1, 1, 1)
-wind.set_ylim(ymin=-100000, ymax=0)
+wind.set_ylim(ymin=-100000, ymax=-20000)
 wind.grid()
 wind.plot(train_curve, linewidth=1, label='ppo')
 wind.axhline(y=-opt, c='r', label="optimal")
 wind.legend()
-fig.savefig("../result/temporary/multi_topic/ppo_check/ppo_0.png")
+fig.savefig("../result/temporary/multi_topic/compare_opt/compare0.png")
