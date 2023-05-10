@@ -81,7 +81,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
         next_obs = None
         next_obs_topic = None
 
-        agent.old_net_update()
+        #agent.old_net_update()
 
         #  1エピソード中の reward の保持
         reward_history = []        
@@ -109,7 +109,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
                 pretrain_flag = False
 
             #  行動と確率分布の取得
-            actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
+            actions, pi = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
 
             # 報酬の受け取り
             reward = env.step(actions, time)
@@ -120,7 +120,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
             next_obs, next_obs_topic = env.get_observation()
 
             # 学習
-            agent.train(obs, obs_topic, actions, pi, pi_old, reward, next_obs, next_obs_topic, target_net_flag)
+            agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag)
 
             obs = next_obs
             obs_topic = next_obs_topic

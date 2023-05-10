@@ -9,19 +9,19 @@ import pandas as pd
 
 if __name__ == '__main__':
     #  学習に使用するデータの指定
-    data_index = "../dataset/test_data_set/index/index_0.csv"
+    data_index = "../dataset/learning_data/index/index_multi.csv"
 
     #  読み込む重みパラメータ
-    load_parameter = "../result/temporary/pretrain/model_parameter/"
-    critic_weight = "critic_weight_0"
-    actor_weight = "actor_weight_0"
-    v_net_weight = "V_net_weight_0"
+    load_parameter = "../result/temporary/multi_topic/ppo_check/model_parameter/"
+    critic_weight = "critic_weight_0_1_2_3"
+    actor_weight = "actor_weight_0_1_2_3"
+    v_net_weight = "V_net_weight_0_1_2_3"
 
     #  結果出力先ファイル
-    output_file = "../dataset/execution_data/solution/pretrain0_10000.csv"
+    output_file = "../dataset/execution_data/solution/no_ppo_3_3000.csv"
 
     #  結果確認用アニメーション
-    output_animation = "../dataset/execution_data/animation/pretrain0_10000.gif"
+    output_animation = "../dataset/execution_data/animation/no_ppo_3_3000.gif"
 
     df_index = pd.read_csv(data_index, index_col=0, dtype=str)
     df_index.at['data', 'solve_file'] = output_file
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, eps_clip, device)
 
     #  重みパラメータの読み込み
-    agent.load_model(load_parameter, actor_weight, critic_weight, v_net_weight, 10000)
+    agent.load_model(load_parameter, actor_weight, critic_weight, v_net_weight, 3000)
         
     #  状態の観測
     obs,obs_topic = env.get_observation()
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     #  各エピソードにおける時間の推移
     for time in range(0, env.simulation_time, env.time_step):
         #  行動と確率分布の取得
-        actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag, pretrain_flag)
+        actions, pi = agent.get_acction(obs, obs_topic, env, train_flag, pretrain_flag)
 
         # 報酬の受け取り
         reward = env.step(actions, time)
@@ -80,5 +80,9 @@ if __name__ == '__main__':
         for i in range(env.num_client):
             client = env.pre_time_clients[i]
             util.write_solution_csv(output_file, client.id, time, client.x, client.y, client.pub_edge, client.sub_edge, env.num_topic)
+    
+    print(f"create animation")
 
     animation.create_assign_animation(data_index, output_animation, 20)
+
+    print(f"total_reward = {sum(reward_history)}")
