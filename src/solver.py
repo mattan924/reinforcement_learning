@@ -375,10 +375,6 @@ class Solver:
         model.Params.NonConvex = 2
         model.optimize()
 
-        if time == 5:
-            for l in range(self.num_edge):
-                print(f"x[28, 0, {l}] = {x[28, 0, l]}")
-
         delay = self.output_solution_y_fix(time, model, d, d_s, p, s, y, output_file)
 
         return delay
@@ -594,7 +590,7 @@ def calmyModeltime(m, m2, n, x, y, z, d, d_s, num_user, all_topic, all_edge, clo
         if x[m][n][l] == 1:
             time_front = (x[m][n][l]*topic.require_cycle * num_data)
             time_back = (x[m][n][l]*z[l][n]*(num_user[l]/all_edge[l].cpu_power) + (1 - z[l][n])*x[m][n][l]/cloud_cycle)
-            time += time_front*time_back
+            #time += time_front*time_back
 
     for l in range(len(all_edge)):
         time += 2*cloud_time*(1-z[l][n])*x[m][n][l]
