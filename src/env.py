@@ -366,7 +366,7 @@ class Env:
         gamma = 0.1
 
         delay += gamma*self.cal_distance(publisher.x, publisher.y, pub_edge.x, pub_edge.y)
-        #delay += self.cal_compute_time(pub_edge, n)
+        delay += self.cal_compute_time(pub_edge, n)
         if pub_edge.deploy_topic[n]:
             delay += gamma*self.cal_distance(pub_edge.x, pub_edge.y, sub_edge.x, sub_edge.y)
         else:
