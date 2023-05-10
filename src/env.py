@@ -317,6 +317,7 @@ class Env:
                         edge.deploy_topic[t] = True
             
         # 報酬の計算
+        print(f"time = {time}")
         reward = self.cal_reward()
 
         self.pre_time_clients = self.clients.copy()
@@ -361,6 +362,12 @@ class Env:
     def cal_delay(self, publisher, subscriber, n):
         pub_edge = self.all_edge[int(publisher.pub_edge[n])]
         sub_edge = self.all_edge[int(subscriber.sub_edge[n])]
+
+        if int(publisher.pub_edge[n]) == pub_edge.id:
+            #print("OK pub")
+            pass
+        else:
+            print(f"Err pub (id, t, pub_edge) = ({publisher.id}, {n}, {publisher.pub_edge[n]})")
 
         delay = 0
         gamma = 0.1

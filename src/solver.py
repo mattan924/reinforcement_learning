@@ -299,7 +299,7 @@ class Solver:
                 for l in range(self.num_edge):
                     x[m, n, l] = model.addVar(vtype=grb.GRB.BINARY, name=f"x({m}, {n}, {l})")
 
-        y = np.zeros((self.num_client, self.num_edge))
+        y = np.zeros((self.num_client, self.num_topic, self.num_edge))
         for n in range(self.num_topic):
             for m in s[n]:
                 client = self.all_client[m]
@@ -312,7 +312,7 @@ class Solver:
                         min_idx = l
                         min_dis = distance
                 
-                y[m][min_idx] = 1
+                y[m][n][min_idx] = 1
 
         z = {}
         for l in range(self.num_edge):
@@ -358,7 +358,7 @@ class Solver:
                 for m2 in s[n]:
                     for l in range(self.num_edge):
                         for l2 in range(self.num_edge):
-                            model.addConstr(w[m, n, m2, l, l2] == x[m, n, l]*y[m2, l2], name=f"con_w({m}, {n}, {m2}, {l}, {l2})")
+                            model.addConstr(w[m, n, m2, l, l2] == x[m, n, l]*y[m2, n, l2], name=f"con_w({m}, {n}, {m2}, {l}, {l2})")
 
         for m in range(self.num_client):
             for n in p[m]:
@@ -382,7 +382,7 @@ class Solver:
         obj += grb.quicksum(grb.quicksum(compute_time[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
         obj += grb.quicksum(grb.quicksum(2*self.cloud_time*(1-z[l, n])*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
         obj += grb.quicksum(grb.quicksum(z[l, n]*d_s[l][l2]*w[m, n, m2, l ,l2] for l in range(self.num_edge) for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(d[m2][l2]*y[m2, l2] for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum(d[m2][l2]*y[m2, n, l2] for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
 
         model.setObjective(obj, sense=grb.GRB.MINIMIZE)
 
@@ -556,16 +556,16 @@ class Solver:
                         num_user[l] += x_opt[m][n][l]
 
             x_opt_output = np.ones((self.num_client, self.num_topic))*-1
-            y_opt_output = np.ones((self.num_client))*-1
+            y_opt_output = np.ones((self.num_client, self.num_topic))*-1
             for m in range(self.num_client):
                 for n in range(self.num_topic):
                     for l in range(self.num_edge):
                         if x_opt[m][n][l] == 1:
                             x_opt_output[m][n] = l
                 
-                for l in range(self.num_edge):
-                    if y_opt[m][l] == 1:
-                        y_opt_output[m] = self.all_edge[l].id
+                    for l in range(self.num_edge):
+                        if y_opt[m][n][l] == 1:
+                            y_opt_output[m][n] = self.all_edge[l].id
             
             with open(output_file, "a") as f:
                 for m in range(self.num_client):
@@ -575,10 +575,7 @@ class Solver:
                         f.write(f",{x_opt_output[m][n]}")
 
                     for n in range(self.num_topic):
-                        if self.all_client[m].sub_topic[n] == 1:
-                            f.write(f",{y_opt_output[m]}")
-                        else:
-                            f.write(",-1")
+                        f.write(f",{y_opt_output[m][n]}")
 
                     f.write("\n")
 
