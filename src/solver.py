@@ -102,23 +102,6 @@ class Solver:
             self.all_topic.append(topic)
 
         self.data_set = util.read_data_set_topic(self.data_file, self.num_topic)
-
-        """
-        self.all_client = []
-        num_publisher = np.zeros(self.num_topic)
-        for _ in range(self.num_client):
-            c = self.data_set.pop(0)
-            client = Client(c.id, c.x, c.y, c.pub_topic, c.sub_topic, self.num_topic)
-            self.all_client.append(client)
-
-            for n in range(self.num_topic):
-                if client.pub_topic[n] == 1:
-                    num_publisher[n] += 1
-
-        for topic in self.all_topic:
-            topic.update_client(num_publisher[n], self.time_step)
-            topic.cal_volume(self.time_step)
-        """
     
 
     def update_client(self):
@@ -392,6 +375,10 @@ class Solver:
         model.Params.NonConvex = 2
         model.optimize()
 
+        if time == 5:
+            for l in range(self.num_edge):
+                print(f"x[28, 0, {l}] = {x[28, 0, l]}")
+
         delay = self.output_solution_y_fix(time, model, d, d_s, p, s, y, output_file)
 
         return delay
@@ -463,11 +450,11 @@ class Solver:
             for m in range(self.num_client):
                 for n in range(self.num_topic):
                     for l in range(self.num_edge):
-                        if x_opt[m][n][l] == 1:
+                        if x_opt[m][n][l] > 0.5:
                             x_opt_output[m][n] = l
                 
                 for l in range(self.num_edge):
-                        if y_opt[m][l] == 1:
+                        if y_opt[m][l] > 0.5:
                             y_opt_output[m] = self.all_edge[l].id
             
             with open(output_file, "a") as f:
@@ -560,7 +547,7 @@ class Solver:
             for m in range(self.num_client):
                 for n in range(self.num_topic):
                     for l in range(self.num_edge):
-                        if x_opt[m][n][l] == 1:
+                        if x_opt[m][n][l] > 0.5:
                             x_opt_output[m][n] = l
                 
                     for l in range(self.num_edge):
@@ -614,9 +601,9 @@ def calmyModeltime(m, m2, n, x, y, z, d, d_s, num_user, all_topic, all_edge, clo
 
     for l in range(len(all_edge)):
         for l2 in range(len(all_edge)):
-            time += z[l][n]*d_s[l][l2]*x[m][n][l]*y[m2][l2]
+            time += z[l][n]*d_s[l][l2]*x[m][n][l]*y[m2][n][l2]
 
     for l2 in range(len(all_edge)):
-        time += d[m2][l2]*y[m2][l2]
+        time += d[m2][l2]*y[m2][n][l2]
 
     return time
