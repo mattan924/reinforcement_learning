@@ -30,7 +30,7 @@ class Edge:
         self.total_used_volume = 0
         self.deploy_topic = np.zeros(num_topic)
         self.cpu_power = cpu_power
-        self.power_allocation = np.zeros(num_topic)
+        self.power_allocation = cpu_power
         self.used_publishers = np.zeros(num_topic)
 
     
@@ -276,20 +276,16 @@ class Env:
         for edge in self.all_edge:
             edge.used_volume = np.zeros(self.num_topic)
             edge.deploy_topic = np.zeros(self.num_topic)
-            tmp = 0
+            num_user = edge.used_publishers.sum()
 
             for t in range(self.num_topic):
                 if edge.used_publishers[t] > 0:
                     edge.used_volume[t] = self.all_topic[t].volume
-                    tmp += 1
                 
-                if tmp != 0:
-                    if edge.used_publishers[t] != 0:
-                        edge.power_allocation[t] = (edge.cpu_power / tmp) / edge.used_publishers[t]
-                    else:
-                        edge.power_allocation[t] = edge.cpu_power / tmp
+                if num_user != 0:
+                    edge.power_allocation = edge.cpu_power / num_user
                 else:
-                    edge.power_allocation[t] = edge.cpu_power
+                    edge.power_allocation = edge.cpu_power
 
             edge.cal_used_volume()
 
@@ -381,7 +377,7 @@ class Env:
         topic = self.all_topic[n]
 
         if edge.deploy_topic[n]:
-            delay = (topic.require_cycle*(topic.volume / topic.data_size)) / edge.power_allocation[n]
+            delay = (topic.require_cycle*(topic.volume / topic.data_size)) / edge.power_allocation
         else:
             delay = (topic.require_cycle*(topic.volume / topic.data_size)) / self.cloud_cycle
 
