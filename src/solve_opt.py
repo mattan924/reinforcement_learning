@@ -2,8 +2,8 @@ from solver import Solver
 import pandas as pd
 
 if __name__ == '__main__':
-    index_file = "../dataset/learning_data/index/index_multi.csv"
-    output_file = "../dataset/learning_data/solution/solution_multi.csv"
+    index_file = "../dataset/test_data_set_hard/index/index_0.csv"
+    output_file = "../dataset/test_data_set_hard/solution/solution_0.csv"
 
     start_time = 0
 
@@ -19,6 +19,7 @@ if __name__ == '__main__':
         solver.update_client()
 
     for time in range(start_time, solver.simulation_time, solver.time_step):
+        print(f"time = {time}")
         solver.update_client()
 
         d, d_s = solver.set_delay()
