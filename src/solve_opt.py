@@ -19,7 +19,6 @@ if __name__ == '__main__':
         solver.update_client()
 
     for time in range(start_time, solver.simulation_time, solver.time_step):
-        print(f"time = {time}")
         solver.update_client()
 
         d, d_s = solver.set_delay()

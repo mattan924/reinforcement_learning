@@ -117,7 +117,7 @@ class Solver:
                     num_publisher[n] += 1
 
         for topic in self.all_topic:
-            topic.update_client(num_publisher[n], self.time_step)
+            topic.update_client(num_publisher[topic.id], self.time_step)
             topic.cal_volume(self.time_step)
 
 
@@ -399,15 +399,21 @@ class Solver:
             for m in range(self.num_client):
                 for n in p[m]:
                     for l in range(self.num_edge):
-                        x_opt[m][n][l] = opt.pop(0)
+                        tmp = opt.pop(0)
+                        if tmp > 0.5:
+                            x_opt[m][n][l] = 1
             
             for m in range(self.num_client):
                 for l in range(self.num_edge):
-                    y_opt[m][l] = opt.pop(0)
+                    tmp = opt.pop(0)
+                    if tmp > 0.5:
+                        y_opt[m][l] = 1
 
             for l in range(self.num_edge):
                 for n in range(self.num_topic):
-                    z_opt[l][n] = opt.pop(0)
+                    tmp = opt.pop(0)
+                    if tmp > 0.5:
+                        z_opt[l][n] = 1
             
             for m in range(self.num_client):
                 for n in p[m]:
@@ -439,7 +445,7 @@ class Solver:
             for l in range(self.num_edge):
                 for m in range(self.num_client):
                     for n in p[m]:
-                        if x_opt[m][n][l]:
+                        if x_opt[m][n][l] == 1:
                             num_user[l] += 1
 
             x_opt_output = np.ones((self.num_client, self.num_topic))*-1
@@ -447,11 +453,11 @@ class Solver:
             for m in range(self.num_client):
                 for n in range(self.num_topic):
                     for l in range(self.num_edge):
-                        if x_opt[m][n][l] > 0.5:
+                        if x_opt[m][n][l] == 1:
                             x_opt_output[m][n] = l
                 
                 for l in range(self.num_edge):
-                        if y_opt[m][l] > 0.5:
+                        if y_opt[m][l] == 1:
                             y_opt_output[m] = self.all_edge[l].id
             
             with open(output_file, "a") as f:
@@ -501,11 +507,15 @@ class Solver:
             for m in range(self.num_client):
                 for n in p[m]:
                     for l in range(self.num_edge):
-                        x_opt[m][n][l] = opt.pop(0)
+                        tmp = opt.pop(0)
+                        if tmp > 0.5:
+                            x_opt[m][n][l] = 1
 
             for l in range(self.num_edge):
                 for n in range(self.num_topic):
-                    z_opt[l][n] = opt.pop(0)
+                    tmp = opt.pop(0)
+                    if tmp > 0.5:
+                        z_opt[l][n] = 1
             
             for m in range(self.num_client):
                 for n in p[m]:
@@ -537,7 +547,7 @@ class Solver:
             for l in range(self.num_edge):
                 for m in range(self.num_client):
                     for n in p[m]:
-                        if x_opt[m][n][l] > 0.5:
+                        if x_opt[m][n][l] == 1:
                             num_user[l] += 1
 
             x_opt_output = np.ones((self.num_client, self.num_topic))*-1
@@ -545,8 +555,8 @@ class Solver:
             for m in range(self.num_client):
                 for n in range(self.num_topic):
                     for l in range(self.num_edge):
-                        if x_opt[m][n][l] > 0.5:
-                            x_opt_output[m][n] = l
+                        if x_opt[m][n][l] == 1:
+                            x_opt_output[m][n] = x_opt[m][n][l]
                 
                     for l in range(self.num_edge):
                         if y_opt[m][n][l] == 1:
