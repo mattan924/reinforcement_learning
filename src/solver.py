@@ -556,7 +556,7 @@ class Solver:
                 for n in range(self.num_topic):
                     for l in range(self.num_edge):
                         if x_opt[m][n][l] == 1:
-                            x_opt_output[m][n] = x_opt[m][n][l]
+                            x_opt_output[m][n] = l
                 
                     for l in range(self.num_edge):
                         if y_opt[m][n][l] == 1:
