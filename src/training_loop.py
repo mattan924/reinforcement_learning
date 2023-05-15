@@ -157,7 +157,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
     sys.stderr = sys.__stderr__
 
 
-def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_dir, output, start_epi_itr=0, load_parameter_path=None):
+def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_dir, test_data_index_dir, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
@@ -182,23 +182,38 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
     target_net_flag = False
 
     #  何エピソードごとにターゲットネットワークを更新するか
-    target_net_iter = 5
+    target_net_iter = 3
+
+    #  何エピソードごとにテストを実行するか
+    test_iter = 10
 
     #  標準エラー出力先の変更
-    sys.stderr = open(output + "_err.log", 'w')
+    #sys.stderr = open(output + "_err.log", 'w')
 
     if load_flag == False:
         with open(output + ".log", 'w') as f:
             pass
 
     #  環境のインスタンスの生成
-    path = os.path.join(learning_data_index_dir, '*')
-    index_path = glob.glob(path)
+    learning_path = os.path.join(learning_data_index_dir, '*')
+    index_path = glob.glob(learning_path)
     env_list = []
     for path in index_path:
         env_list.append(Env(path))
 
     env_list_shuffle = random.sample(env_list, len(env_list))
+
+    #  test 用　環境インスタンスの生成
+    test_path = os.path.join(test_data_index_dir, "*")
+    test_index_path = glob.glob(test_path)
+    test_env_list = []
+    for  path in test_index_path:
+        test_env_list.append(Env(path))
+
+    for idx in range(10):
+        if load_flag == False:
+            with open(output + "_test" + str(idx) + ".csv", 'w') as f:
+                pass
 
     #  学習モデルの指定
     agent = COMA(N_action, env_list[0].num_client, env_list[0].num_topic, buffer_size, batch_size, eps_clip, device)
@@ -233,19 +248,6 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
 
         #  各エピソードにおける時間の推移
         for time in range(0, env.simulation_time, env.time_step):
-
-            """
-            if epi_iter < 500:
-                pre_train_iter = 5
-            elif epi_iter < 1000:
-                pre_train_iter = 10
-            elif epi_iter < 1500:
-                pre_train_iter = 15
-            elif epi_iter < 2000:
-                pre_train_iter = 20
-            else:
-                pre_train_iter = 10000000
-            """
             
             # 行動の選択方式の設定
             if epi_iter % pre_train_iter == 0:
@@ -255,6 +257,7 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
 
             #  行動と確率分布の取得
             actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
+            #actions, pi = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
 
             # 報酬の受け取り
             reward = env.step(actions, time)
@@ -266,6 +269,7 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
 
             # 学習
             agent.train(obs, obs_topic, actions, pi, pi_old, reward, next_obs, next_obs_topic, target_net_flag)
+            #agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag)
 
             obs = next_obs
             obs_topic = next_obs_topic
@@ -276,6 +280,30 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
             #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
             with open(output + ".log", 'a') as f:
                 f.write(f"{(epi_iter/max_epi_itr)*100}%, {-sum(reward_history)}\n")
+
+        if epi_iter % test_iter == 0:
+            for idx in range(10):
+                test_env = test_env_list[idx]
+                test_env.reset()
+
+                test_reward_history = []
+
+                for time in range(0, test_env.simulation_time, test_env.time_step):
+                    #  行動と確率分布の取得
+                    actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag=False, pretrain_flag=pretrain_flag)
+
+                    # 報酬の受け取り
+                    reward = test_env.step(actions, time)
+                    test_reward_history.append(reward)
+
+                    # 状態の観測
+                    next_obs, next_obs_topic = test_env.get_observation()
+
+                    obs = next_obs
+                    obs_topic = next_obs_topic
+
+                with open(output + "_test" + str(idx) + ".csv", "a") as f:
+                    f.write(f"{epi_iter}, {sum(test_reward_history)}\n")
 
         #  重みパラメータのバックアップ
         if epi_iter % backup_iter == 0:
