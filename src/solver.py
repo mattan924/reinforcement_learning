@@ -280,7 +280,7 @@ class Solver:
         for m in range(self.num_client):
             for n in p[m]:
                 for l in range(self.num_edge):
-                    x[m, n, l] = model.addVar(vtype=grb.GRB.BINARY, name=f"x({m}, {n}, {l})")
+                    x[m, n, l] = model.addVar(vtype=grb.GRB.BINARY, name=f"x({m},{n},{l})")
 
         y = np.zeros((self.num_client, self.num_topic, self.num_edge))
         for n in range(self.num_topic):
@@ -300,7 +300,7 @@ class Solver:
         z = {}
         for l in range(self.num_edge):
             for n in range(self.num_topic):
-                z[l, n] = model.addVar(vtype=grb.GRB.BINARY, name=f"z({l}, {n})")
+                z[l, n] = model.addVar(vtype=grb.GRB.BINARY, name=f"z({l},{n})")
 
         w = {}
         for m in range(self.num_client):
@@ -308,13 +308,13 @@ class Solver:
                 for m2 in s[n]:
                     for l in range(self.num_edge):
                         for l2 in range(self.num_edge):
-                            w[m, n, m2, l, l2] = model.addVar(vtype=grb.GRB.BINARY, name=f"w({m}, {n}, {m2}, {l}, {l2})")
+                            w[m, n, m2, l, l2] = model.addVar(vtype=grb.GRB.BINARY, name=f"w({m},{n},{m2},{l},{l2})")
         
         v = {}
         for m in range(self.num_client):
             for n in p[m]:
                 for l in range(self.num_edge):
-                    v[m, n, l] = model.addVar(vtype=grb.GRB.BINARY, name=f"v({m}, {n}, {l})")
+                    v[m, n, l] = model.addVar(vtype=grb.GRB.BINARY, name=f"v({m},{n},{l})")
         
         num_user = {}
         for l in range(self.num_edge):
@@ -324,14 +324,14 @@ class Solver:
         for m in range(self.num_client):
             for n in p[m]:
                 for l in range(self.num_edge):
-                    compute_time[m, n, l] = model.addVar(vtype=grb.GRB.CONTINUOUS, name=f"compute_fime({m}, {n}, {l})")
+                    compute_time[m, n, l] = model.addVar(vtype=grb.GRB.CONTINUOUS, name=f"compute_fime({m},{n},{l})")
         
         model.update()
 
         #  制約式の定義
         for m in range(self.num_client):
             for n in p[m]:
-                model.addConstr(grb.quicksum(x[m, n, l] for l in range(self.num_edge)) == 1, name=f"con_x({m}, {n})")
+                model.addConstr(grb.quicksum(x[m, n, l] for l in range(self.num_edge)) == 1, name=f"con_x({m},{n})")
 
         for l in range(self.num_edge):
             model.addConstr(grb.quicksum(z[l, n]*self.all_topic[n].volume for n in range(self.num_topic)) <= self.all_edge[l].max_volume, name=f"con_z({l})")
@@ -341,20 +341,20 @@ class Solver:
                 for m2 in s[n]:
                     for l in range(self.num_edge):
                         for l2 in range(self.num_edge):
-                            model.addConstr(w[m, n, m2, l, l2] == x[m, n, l]*y[m2, n, l2], name=f"con_w({m}, {n}, {m2}, {l}, {l2})")
+                            model.addConstr(w[m, n, m2, l, l2] == x[m, n, l]*y[m2, n, l2], name=f"con_w({m},{n},{m2},{l},{l2})")
 
         for m in range(self.num_client):
             for n in p[m]:
                 for l in range(self.num_edge):
-                    model.addConstr(v[m, n, l] == x[m, n, l]*z[l, n], name=f"con_v({m, n, l})")
+                    model.addConstr(v[m, n, l] == x[m, n, l]*z[l, n], name=f"con_v({m},{n},{l})")
 
         for l in range(self.num_edge):
-            model.addConstr(num_user[l] == grb.quicksum(x[m ,n, l] for m in range(self.num_client) for n in p[m]), name=f"con_num_user({n}, {l})")
+            model.addConstr(num_user[l] == grb.quicksum(x[m ,n, l] for m in range(self.num_client) for n in p[m]), name=f"con_num_user({n},{l})")
 
         for m in range(self.num_client):
             for n in p[m]:
                 for l in range(self.num_edge):
-                    model.addConstr(compute_time[m, n, l] == self.all_topic[n].require_cycle*num_data[n]*v[m, n, l]*num_user[l]*self.all_edge[l].cpu_power_gain + self.all_topic[n].require_cycle*num_data[n]*(1 - z[l, n])*x[m, n, l]*self.cloud_cycle_gain, name=f"compute_time({m}, {n}, {l})")
+                    model.addConstr(compute_time[m, n, l] == self.all_topic[n].require_cycle*num_data[n]*v[m, n, l]*num_user[l]*self.all_edge[l].cpu_power_gain + self.all_topic[n].require_cycle*num_data[n]*(1 - z[l, n])*x[m, n, l]*self.cloud_cycle_gain, name=f"compute_time({m},{n},{l})")
 
         model.update()
 
@@ -368,6 +368,9 @@ class Solver:
         obj += grb.quicksum(grb.quicksum(d[m2][l2]*y[m2, n, l2] for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
 
         model.setObjective(obj, sense=grb.GRB.MINIMIZE)
+
+        if time != 0:
+            model.read("./gurobi_solution/solution.mst")
 
         model.update()
 
@@ -391,6 +394,7 @@ class Solver:
         if model.Status == grb.GRB.OPTIMAL:
             print(" 最適解 ")
             print(model.ObjVal)
+
             for v in model.getVars():
                 #print(v.VarName, v.X)
                 opt.append(v.X)
@@ -499,6 +503,12 @@ class Solver:
         if model.Status == grb.GRB.OPTIMAL:
             print(" 最適解 ")
             print(model.ObjVal)
+
+            with open("./gurobi_solution/solution.mst", "w") as f:
+                for v in model.getVars():
+                    f.write(f"{v.VarName} {v.X}")
+                    f.write("\n")
+
             for v in model.getVars():
                 #print(v.VarName, v.X)
                 opt.append(v.X)

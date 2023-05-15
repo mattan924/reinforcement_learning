@@ -25,7 +25,7 @@ if __name__ == '__main__':
         d, d_s = solver.set_delay()
 
         p, s = solver.set_pub_sub()
-            
+        
         print("\n----------start solve----------\n")
         delay = solver.solve_y_fix(time, d, d_s, p, s, output_file)
         total_delay += delay
