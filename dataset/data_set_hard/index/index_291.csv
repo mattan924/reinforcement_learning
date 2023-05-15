@@ -1,0 +1,2 @@
+,config_file,edge_file,topic_file,traking_file,traking_seed,assign_file,assign_seed,solve_file,opt
+data,../../reinforcement_learning/dataset/data_set_hard/config/config.csv,../../reinforcement_learning/dataset/data_set_hard/edge/edge_291.csv,../../reinforcement_learning/dataset/test_data_set_hard/topic/topic_291.csv,../../reinforcement_learning/dataset/data_set_hard/traking/traking_291.csv,12402975,../../reinforcement_learning/dataset/data_set_hard/assign/assign_291.csv,15029101,,
