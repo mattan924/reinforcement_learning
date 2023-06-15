@@ -1,9 +1,10 @@
 from solver import Solver
 import pandas as pd
+import time as time_modu
 
 if __name__ == '__main__':
-    index_file = "../dataset/test_data_set_hard/index/index_9.csv"
-    output_file = "../dataset/test_data_set_hard/solution/solution_9.csv"
+    index_file = "../dataset/data_set_hard/index/index_0.csv"
+    output_file = "../dataset/data_set_hard/solution/solution_0_opt.csv"
 
     start_time = 0
 
@@ -18,6 +19,8 @@ if __name__ == '__main__':
     for time in range(0, start_time, solver.time_step):
         solver.update_client()
 
+    start = time_modu.perf_counter()
+
     for time in range(start_time, solver.simulation_time, solver.time_step):
         print(f"time = {time}")
         solver.update_client()
@@ -31,7 +34,11 @@ if __name__ == '__main__':
         total_delay += delay
         print("\n----------end solve----------\n")
 
+    end = time_modu.perf_counter()
+
     print(f"total_delay = {total_delay}")
+
+    print(f"compute time = {end - start}")
 
     df_index = pd.read_csv(index_file, index_col=0)
     df_index.at['data', 'opt'] = total_delay

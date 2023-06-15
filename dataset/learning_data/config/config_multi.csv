@@ -8,7 +8,7 @@ num_client,30
 num_topic,3
 num_edge,9
 volume, 1000000
-cpu_power,3000000000
+cpu_cycle,3000000000
 cloud_time, 200
 cloud_cycle, 30000000000
 save_period,60
