@@ -14,19 +14,19 @@ if __name__ == '__main__':
         data_index = "../dataset/data_set_hard/index/index_" + str(idx) + ".csv"
 
         #  読み込む重みパラメータ
-        load_parameter = "../result/temporary/pretrain_hard/model_parameter/"
-        critic_weight = "critic_weight_ppo_ppo0"
-        actor_weight = "actor_weight_ppo_ppo0"
-        v_net_weight = "V_net_weight_ppo_ppo0"
+        load_parameter = "../result/temporary/pretrain_hard_long/model_parameter/"
+        critic_weight = "critic_weight_coma0"
+        actor_weight = "actor_weight_coma0"
+        v_net_weight = "V_net_weight_coma0"
 
         #  結果出力先ファイル
-        output_file_base = "../dataset/execution_data/pretrain_hard/solution/ppo"
+        output_file_base = "../dataset/execution_data/pretrain_hard_long/solution/coma"
 
         #  結果確認用アニメーション
-        output_animation_base = "../dataset/execution_data/pretrain_hard/animation/ppo"
+        output_animation_base = "../dataset/execution_data/pretrain_hard_long/animation/coma"
 
         #  学習曲線の描画先ファイル
-        output_train_curve = "../result/temporary/pretrain_hard/ppo" + str(idx) + ".png"
+        output_train_curve = "../result/temporary/pretrain_hard_long/coma_learning" + str(idx) + ".png"
 
         train_curve = []
         iter_list = []
@@ -50,7 +50,7 @@ if __name__ == '__main__':
             buffer_size = 3000
             batch_size = 500
             eps_clip = 0.2
-            device = 'cuda:0'
+            device = 'cuda:1'
 
             #  train_flag = True: 学習モード, False: 実行モード
             train_flag = False
@@ -76,7 +76,8 @@ if __name__ == '__main__':
             #  各エピソードにおける時間の推移
             for time in range(0, env.simulation_time, env.time_step):
                 #  行動と確率分布の取得
-                actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag, pretrain_flag)
+                #actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag, pretrain_flag)
+                actions, pi = agent.get_acction(obs, obs_topic, env, train_flag, pretrain_flag)
 
                 # 報酬の受け取り
                 reward = env.step(actions, time)
@@ -91,7 +92,6 @@ if __name__ == '__main__':
 
                 for i in range(env.num_client):
                     client = env.pre_time_clients[i]
-                    #util.write_solution_csv(output_file, client.id, time, client.x, client.y, client.pub_edge, client.sub_edge, env.num_topic)
                     util.write_solution_csv(output_file, DataSolution(id, time, client.x, client.y, client.pub_edge, client.sub_edge), env.num_topic)
             
             #print(f"create animation")

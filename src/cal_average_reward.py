@@ -18,7 +18,7 @@ def read_train_curve(log_path, pre_train_iter):
         train_curve = np.zeros(len(reward_history))
         
         for i in range(len(reward_history)):
-            train_curve[i] = reward_history[i]
+            train_curve[i] = - reward_history[i]
             
     return train_curve
 
@@ -45,13 +45,13 @@ def read_train_curve_design(log_path):
 
 
 
-learning_data_index_path = "../dataset/learning_data/index/index_multi2.csv"
+learning_data_index_path = "../dataset/learning_data/index/index_multi.csv"
 
-output_fix_base = "../result/temporary/multi_topic/compare_opt/compare"
+output_fix_base = "../result/temporary/multi_topic/ppo_check/ppo"
 
-output_fix = output_fix_base + "0.log"
+output_fix = output_fix_base + "4.log"
 
-train_curve = read_train_curve_design(output_fix)
+train_curve = read_train_curve(output_fix, 10)
 
 #average_train_curve_fix = average_train_curve_fix / 10
 
@@ -60,9 +60,9 @@ opt = df_index.at['data', 'opt']
 
 fig = plt.figure()
 wind = fig.add_subplot(1, 1, 1)
-wind.set_ylim(ymin=-100000, ymax=-20000)
+wind.set_ylim(ymin=21000, ymax=34000)
 wind.grid()
-wind.plot(train_curve, linewidth=1, label='ppo')
-wind.axhline(y=-opt, c='r', label="optimal")
+wind.plot(train_curve, linewidth=1, label='coma')
+wind.axhline(y=opt, c='r', label="optimal")
 wind.legend()
-fig.savefig("../result/temporary/multi_topic/compare_opt/compare0.png")
+fig.savefig("../result/temporary/multi_topic/ppo_check/ppo4.png")
