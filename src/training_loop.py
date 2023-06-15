@@ -48,7 +48,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
     target_net_flag = False
 
     #  何エピソードごとにターゲットネットワークを更新するか
-    target_net_iter = 5
+    target_net_iter = 3
 
     #  標準エラー出力先の変更
     sys.stderr = open(output + "_err.log", 'w')
@@ -88,19 +88,6 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
         #  各エピソードにおける時間の推移
         for time in range(0, env.simulation_time, env.time_step):
-
-            """
-            if epi_iter < 500:
-                pre_train_iter = 5
-            elif epi_iter < 1000:
-                pre_train_iter = 10
-            elif epi_iter < 1500:
-                pre_train_iter = 15
-            elif epi_iter < 2000:
-                pre_train_iter = 20
-            else:
-                pre_train_iter = 10000000
-            """
             
             # 行動の選択方式の設定
             if epi_iter % pre_train_iter == 0:
@@ -182,13 +169,13 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
     target_net_flag = False
 
     #  何エピソードごとにターゲットネットワークを更新するか
-    target_net_iter = 3
+    target_net_iter = 1
 
     #  何エピソードごとにテストを実行するか
-    test_iter = 10
+    test_iter = 100
 
     #  標準エラー出力先の変更
-    #sys.stderr = open(output + "_err.log", 'w')
+    sys.stderr = open(output + "_err.log", 'w')
 
     if load_flag == False:
         with open(output + ".log", 'w') as f:
@@ -198,8 +185,8 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
     learning_path = os.path.join(learning_data_index_dir, '*')
     index_path = glob.glob(learning_path)
     env_list = []
-    for path in index_path:
-        env_list.append(Env(path))
+    for idx in range(10):
+        env_list.append(Env(index_path[idx]))
 
     env_list_shuffle = random.sample(env_list, len(env_list))
 
@@ -241,7 +228,7 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
         next_obs = None
         next_obs_topic = None
 
-        agent.old_net_update()
+        #agent.old_net_update()
 
         #  1エピソード中の reward の保持
         reward_history = []        
@@ -256,8 +243,8 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
                 pretrain_flag = False
 
             #  行動と確率分布の取得
-            actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
-            #actions, pi = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
+            #actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
+            actions, pi = agent.get_acction(obs, obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
 
             # 報酬の受け取り
             reward = env.step(actions, time)
@@ -268,8 +255,8 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
             next_obs, next_obs_topic = env.get_observation()
 
             # 学習
-            agent.train(obs, obs_topic, actions, pi, pi_old, reward, next_obs, next_obs_topic, target_net_flag)
-            #agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag)
+            #agent.train(obs, obs_topic, actions, pi, pi_old, reward, next_obs, next_obs_topic, target_net_flag)
+            agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag)
 
             obs = next_obs
             obs_topic = next_obs_topic
@@ -290,7 +277,8 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_it
 
                 for time in range(0, test_env.simulation_time, test_env.time_step):
                     #  行動と確率分布の取得
-                    actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag=False, pretrain_flag=pretrain_flag)
+                    #actions, pi, pi_old = agent.get_acction(obs, obs_topic, env, train_flag=False, pretrain_flag=pretrain_flag)
+                    actions, pi = agent.get_acction(obs, obs_topic, env, train_flag=False, pretrain_flag=pretrain_flag)
 
                     # 報酬の受け取り
                     reward = test_env.step(actions, time)

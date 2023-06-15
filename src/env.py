@@ -168,10 +168,25 @@ class Env:
     #  状態の観測
     def get_observation(self):
         obs_channel = 9
+        obs_topic_channel = 3
         obs_size = 81
 
         #  観測値
         obs = np.zeros((self.num_client, self.num_topic, obs_channel, obs_size, obs_size))
+        #  channel=0 : 各クライアントの位置
+        #  channel=1 : あるトピックの publisher の分布
+        #  channel=2 : あるトピックの subscriber の分布
+        #  channel=3 : クライアント全体の分布
+        #  channel=4 : あるトピックのストレージ使用状況
+        #  channel=5 : ストレージ状況
+        #  channel=6 : cpu の最大クロック数
+        #  channel=7 : あるトピックの publisher がどのエッジを何人使用しているか
+        #  channel=8 : どのエッジを何人使用しているか
+
+        obs_topic = np.zeros((self.num_topic, obs_topic_channel))
+        #  channel=0 : あるトピックの処理に必要なサイクル
+        #  channel=1 : あるトピックのデータサイズ
+        #  channel=2 : あるトピックの使用ストレージサイズ
 
         block_len_x = (self.max_x-self.min_x)/obs_size
         block_len_y = (self.max_y-self.min_y)/obs_size
@@ -225,9 +240,6 @@ class Env:
             for t in range(self.num_topic):
                 topic_storage_info[t][block_index_y][block_index_x] = edge.used_volume[t]
                 topic_cpu_used_client[t][block_index_y][block_index_x] = edge.used_publishers[t]
-
-        obs_topic_channel = 3
-        obs_topic = np.zeros((self.num_topic, obs_topic_channel))
 
         obs[:, :, 0] = position_info[:, np.newaxis]
         obs[:, :, 1] = publisher_distribution[np.newaxis]
