@@ -21,16 +21,16 @@ class Client:
 
 class Edge:
 
-    def __init__(self, id, x, y, volume, cpu_power, num_topic):
+    def __init__(self, id, x, y, volume, cpu_cycle, num_topic):
         self.id = id
         self.x = x
         self.y = y
         self.max_volume = volume
         self.used_volume = 0
-        self.cpu_power = cpu_power
-        self.cpu_power_gain = 1/self.cpu_power
-        self.power_allocation = np.zeros(num_topic)
-        self.power_gain = np.zeros(num_topic)
+        self.cpu_cycle = cpu_cycle
+        self.cpu_cycle_gain = 1/self.cpu_cycle
+        self.cycle_allocation = np.zeros(num_topic)
+        self.cycle_gain = np.zeros(num_topic)
         self.used_publisers = [[] for _ in range(num_topic)]
 
 
@@ -92,7 +92,7 @@ class Solver:
         edges = util.read_edge(self.edge_file)
         self.all_edge = []
         for e in edges:
-            edge = Edge(e.id, e.x, e.y, e.volume, e.cpu_power, self.num_topic)
+            edge = Edge(e.id, e.x, e.y, e.volume, e.cpu_cycle, self.num_topic)
             self.all_edge.append(edge)
 
         topics = util.read_topic(self.topic_file)
@@ -240,7 +240,7 @@ class Solver:
         for m in range(self.num_client):
             for n in p[m]:
                 for l in range(self.num_edge):
-                    model.addConstr(compute_time[m, n, l] == self.all_topic[n].require_cycle*num_data[n]*v[m, n, l]*num_user[l]*self.all_edge[l].cpu_power_gain + self.all_topic[n].require_cycle*num_data[n]*(1 - z[l, n])*x[m, n, l]*self.cloud_cycle_gain, name=f"compute_time({m},{n},{l})")
+                    model.addConstr(compute_time[m, n, l] == self.all_topic[n].require_cycle*num_data[n]*v[m, n, l]*num_user[l]*self.all_edge[l].cpu_cycle_gain + self.all_topic[n].require_cycle*num_data[n]*(1 - z[l, n])*x[m, n, l]*self.cloud_cycle_gain, name=f"compute_time({m},{n},{l})")
 
         model.update()
 
@@ -357,7 +357,7 @@ class Solver:
         for m in range(self.num_client):
             for n in p[m]:
                 for l in range(self.num_edge):
-                    model.addConstr(compute_time[m, n, l] == self.all_topic[n].require_cycle*num_data[n]*v[m, n, l]*num_user[l]*self.all_edge[l].cpu_power_gain + self.all_topic[n].require_cycle*num_data[n]*(1 - z[l, n])*x[m, n, l]*self.cloud_cycle_gain, name=f"compute_time({m},{n},{l})")
+                    model.addConstr(compute_time[m, n, l] == self.all_topic[n].require_cycle*num_data[n]*v[m, n, l]*num_user[l]*self.all_edge[l].cpu_cycle_gain + self.all_topic[n].require_cycle*num_data[n]*(1 - z[l, n])*x[m, n, l]*self.cloud_cycle_gain, name=f"compute_time({m},{n},{l})")
 
         model.update()
 
@@ -617,7 +617,7 @@ def calmyModeltime(m, m2, n, x, y, z, d, d_s, num_user, all_topic, all_edge, clo
     for l in range(len(all_edge)):
         if x[m][n][l] == 1:
             time_front = (x[m][n][l]*topic.require_cycle * num_data)
-            time_back = (x[m][n][l]*z[l][n]*(num_user[l]/all_edge[l].cpu_power) + (1 - z[l][n])*x[m][n][l]/cloud_cycle)
+            time_back = (x[m][n][l]*z[l][n]*(num_user[l]/all_edge[l].cpu_cycle) + (1 - z[l][n])*x[m][n][l]/cloud_cycle)
             time += time_front*time_back
 
     for l in range(len(all_edge)):
@@ -644,7 +644,7 @@ def calmyModeltime_y_fix(m, m2, n, x, y, z, d, d_s, num_user, all_topic, all_edg
     for l in range(len(all_edge)):
         if x[m][n][l] == 1:
             time_front = (x[m][n][l]*topic.require_cycle * num_data)
-            time_back = (x[m][n][l]*z[l][n]*(num_user[l]/all_edge[l].cpu_power) + (1 - z[l][n])*x[m][n][l]/cloud_cycle)
+            time_back = (x[m][n][l]*z[l][n]*(num_user[l]/all_edge[l].cpu_cycle) + (1 - z[l][n])*x[m][n][l]/cloud_cycle)
             time += time_front*time_back
 
     for l in range(len(all_edge)):
