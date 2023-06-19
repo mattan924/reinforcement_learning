@@ -89,7 +89,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
     pretrain_iter = 10
 
-    thread_num = 16
+    thread_num = 20
 
     #  標準エラー出力先の変更
     #sys.stderr = open(output + "_err.log", 'w')
@@ -125,15 +125,19 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
             pretrain_flag = False
 
         print(f"simulate start")
-        
+        start = time_modu.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(max_workers=thread_num, thread_name_prefix="thread") as executor:
             result = []
-            for thread_id in range(16):
+            for thread_id in range(thread_num):
                 result.append(executor.submit(simulate, learning_data_index_path, agent, thread_id))
   
         #  アドバンテージの計算
         print(f"compute advantage start")
         agent.compute_advantage()
+
+        end = time_modu.perf_counter()
+
+        print(f"thread time = {end - start}")
 
         # 学習
         print(f"train start")
