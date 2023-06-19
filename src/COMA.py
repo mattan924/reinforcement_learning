@@ -205,17 +205,14 @@ class V_Net(nn.Module):
 
 class COMA:
     
-    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, eps_clip, device):
+    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, device):
         self.N_action = N_action
         self.num_agent = num_agent
         self.num_topic = num_topic
         self.buffer_size = buffer_size
         self.batch_size = batch_size
-        self.eps_clip = eps_clip
         self.device = device
         self.actor = Actor(self.N_action)
-        #self.old_actor = Actor(self.N_action)
-        #self.old_actor.load_state_dict(self.actor.state_dict())
         self.critic = Critic(self.N_action, num_agent, num_topic)
         self.target_critic = Critic(self.N_action, num_agent, num_topic)
         self.target_critic.load_state_dict(self.critic.state_dict())
@@ -233,7 +230,6 @@ class COMA:
             self.actor.cuda(self.device)
             self.critic.cuda(self.device)
             self.V_net.cuda(self.device)
-            #self.old_actor.cuda(self.device)
             self.target_critic.cuda(self.device)
             self.target_V_net.cuda(self.device)
 
@@ -291,7 +287,6 @@ class COMA:
                     if client.pub_topic[t] == 1:
                         actions[t][i] = torch.argmax(pi[t][i])
 
-        #return actions, pi, pi_old
         return actions, pi
     
 
@@ -320,7 +315,7 @@ class COMA:
         #  next_obs_topic = (num_topic, channel=3)
 
         # 行動のtensor化
-        actions_onehot = torch.zeros(self.num_topic*self.num_agent*self.N_action, device=self.device)
+        actions_onehot = torch.zeros(self.num_topic*self.num_agent*self.N_action)
 
         for t in range(self.num_topic):
             for i in range(self.num_agent):
@@ -332,10 +327,10 @@ class COMA:
                     actions_onehot[idx:idx+self.N_action].fill_(-1)
         
         #  ==========経験再生用バッファへの追加==========
-        obs_tensor = torch.FloatTensor(obs[0]).to(self.device)
-        state_topic = torch.FloatTensor(obs_topic).to(self.device).view(-1)
-        next_obs_tensor = torch.FloatTensor(next_obs[0]).to(self.device)
-        next_state_topic = torch.FloatTensor(next_obs_topic).to(self.device).view(-1)
+        obs_tensor = torch.FloatTensor(obs[0])
+        state_topic = torch.FloatTensor(obs_topic).view(-1)
+        next_obs_tensor = torch.FloatTensor(next_obs[0])
+        next_state_topic = torch.FloatTensor(next_obs_topic).view(-1)
 
         publisher_distribution = obs_tensor[:, 1]
         subscriber_distribution = obs_tensor[:, 2]
@@ -347,8 +342,8 @@ class COMA:
         next_topic_storage_info = next_obs_tensor[:, 4]
         next_topic_cpu_info = next_obs_tensor[:, 7]
 
-        state = torch.zeros((self.num_topic*4 + 2, 81, 81), device=self.device)
-        next_state = torch.zeros((self.num_topic*4 + 2, 81, 81), device=self.device)
+        state = torch.zeros((self.num_topic*4 + 2, 81, 81))
+        next_state = torch.zeros((self.num_topic*4 + 2, 81, 81))
 
         state[:self.num_topic] = publisher_distribution
         state[self.num_topic:2*self.num_topic] = subscriber_distribution
@@ -371,6 +366,11 @@ class COMA:
         obs_exp, obs_topic_exp, actions_onehot_exp, reward_exp, next_obs_exp, next_obs_topic_exp = self.replay_buffer.get_batch()
 
         reward_exp = torch.FloatTensor(reward_exp).unsqueeze(1).to(self.device)
+        obs_exp = obs_exp.to(self.device)
+        obs_topic_exp = obs_topic_exp.to(self.device)
+        actions_onehot_exp = actions_onehot_exp.to(self.device)
+        next_obs_exp = next_obs_exp.to(self.device)
+        next_obs_topic_exp = next_obs_topic_exp.to(self.device)
 
         if target_net_flag:
             self.target_V_net.load_state_dict(self.V_net.state_dict())
@@ -395,6 +395,10 @@ class COMA:
         self.critic_optimizer.zero_grad()
         critic_loss.backward(retain_graph=True)
         self.critic_optimizer.step()
+
+        state = state.clone().detach().to(self.device)
+        state_topic = state_topic.clone().detach().to(self.device)
+        actions_onehot = actions_onehot.clone().detach().to(self.device)
         
         critic_obs = torch.stack([state] * self.num_agent, dim=0)
         critic_obs_topic = torch.stack([state_topic] * self.num_agent, dim=0)
@@ -427,20 +431,8 @@ class COMA:
             
         A = Q2.squeeze(1).unsqueeze(0).repeat(3,1) - torch.sum(pi * Q_tmp, dim=2)
 
-        #  ========== ratio の計算 ==========
         mask = actions != -1
-        #rations = pi[mask, actions[mask]].detach() / (pi_old[mask, actions[mask]].detach() + 1e-16)
 
-        #surr1 = rations * A[mask]
-        #surr2 = torch.clamp(rations, 1-self.eps_clip, 1+self.eps_clip) * A[mask]
-
-        #clip = torch.min(surr1, surr2)
-
-        #  ========== actor_loss の計算 ==========     
-        #  ppo
-        #actor_loss = -(clip * torch.log(pi[mask, actions[mask]] + 1e-16)).sum() / mask.sum()
-
-        #  no_ppo
         actor_loss = -(A[mask] * torch.log(pi[mask, actions[mask]] + 1e-16)).sum() / mask.sum()
 
         self.actor_optimizer.zero_grad()

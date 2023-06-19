@@ -23,7 +23,7 @@ def read_train_curve(log_path, pre_train_iter):
             
     return reward_history
 
-def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
+def train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
@@ -61,7 +61,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
     env = Env(learning_data_index_path)
 
     #  学習モデルの指定
-    agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, eps_clip, device)
+    agent = COMA(N_action, env.num_client, env.num_topic, buffer_size, batch_size, device)
 
     # 学習ループ
     for epi_iter in range(start_epi_itr, max_epi_itr):
@@ -80,8 +80,6 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
         obs, obs_topic = env.get_observation()
         next_obs = None
         next_obs_topic = None
-
-        #agent.old_net_update()
 
         #  1エピソード中の reward の保持
         reward_history = []        
@@ -144,7 +142,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
     sys.stderr = sys.__stderr__
 
 
-def train_loop_dataset(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_dir, test_data_index_dir, output, start_epi_itr=0, load_parameter_path=None):
+def train_loop_dataset(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_dir, test_data_index_dir, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 

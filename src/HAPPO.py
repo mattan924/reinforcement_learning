@@ -18,7 +18,6 @@ class ReplayBuffer:
 
     
     def add(self, data):
-        data = tuple(data)
         self.buffer.append(data)
 
     
@@ -28,17 +27,25 @@ class ReplayBuffer:
 
     def get_batch(self):
         data = random.sample(self.buffer, self.batch_size)
+        
+        actor_obs = torch.cat([x[0].unsqueeze(0) for x in data], dim=0)
+        actor_obs_topic = torch.cat([x[1].unsqueeze(0) for x in data], dim=0)
+        critic_obs = torch.cat([x[2].unsqueeze(0) for x in data], dim=0)
+        critic_obs_topic = torch.cat([x[3].unsqueeze(0) for x in data], dim=0)
+        next_actor_obs = torch.cat([x[4].unsqueeze(0) for x in data], dim=0)
+        next_actor_obs_topic = torch.cat([x[5].unsqueeze(0) for x in data], dim=0)
+        next_critic_obs = torch.cat([x[6].unsqueeze(0) for x in data], dim=0)
+        next_critic_obs_topic = torch.cat([x[7].unsqueeze(0) for x in data], dim=0)
+        actions = torch.cat([x[8].unsqueeze(0) for x in data], dim=0)
+        pi = torch.cat([x[9].unsqueeze(0) for x in data], dim=0)
+        reward = torch.cat([x[10] for x in data])
+        advantage = torch.cat([x[11] for x in data], dim=0)
 
-        actor_obs = torch.cat([x[0].unsqueeze(0) for history in data for x in history], dim=0)
-        actor_obs_topic = torch.cat([x[1].unsqueeze(0) for history in data for x in history], dim=0)
-        critic_obs = torch.cat([x[2].unsqueeze(0) for history in data for x in history], dim=0)
-        critic_obs_topic = torch.cat([x[3].unsqueeze(0) for history in data for x in history], dim=0)
-        actions = torch.cat([x[4].unsqueeze(0) for history in data for x in history], dim=0)
-        pi = torch.cat([x[5].unsqueeze(0) for history in data for x in history], dim=0)
-        reward = torch.cat([x[6] for history in data for x in history])
-        advantage = torch.cat([x[7] for history in data for x in history], dim=0)
+        return actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward, advantage
+    
 
-        return actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, actions, pi, reward, advantage
+    def reset(self):
+        self.buffer.clear()
 
 
 class Actor(nn.Module):
@@ -58,20 +65,12 @@ class Actor(nn.Module):
         self.conv2 = nn.Conv2d(in_channels=9, out_channels=4, kernel_size=3, padding=1)
         self.conv3 = nn.Conv2d(in_channels=4, out_channels=4, kernel_size=3, padding=1)
 
-        nn.init.zeros_(self.conv1.bias)
-        nn.init.zeros_(self.conv2.bias)
-        nn.init.zeros_(self.conv3.bias)
-
         self.pool1 = nn.MaxPool2d(3)
         self.pool2 = nn.MaxPool2d(3)
 
         self.fc1 = nn.Linear(4*9*9 + 3, 126)
         self.fc2 = nn.Linear(126, 64)
         self.fc3 = nn.Linear(64, self.N_action)
-
-        nn.init.zeros_(self.fc1.bias)
-        nn.init.zeros_(self.fc2.bias)
-        nn.init.zeros_(self.fc3.bias)
     
 
     def get_action(self, obs, obs_topic):
@@ -112,10 +111,6 @@ class Critic(nn.Module):
         self.conv2 = nn.Conv2d(in_channels=self.N_topic*4+2, out_channels=4, kernel_size=3, padding=1)
         self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
 
-        nn.init.zeros_(self.conv1.bias)
-        nn.init.zeros_(self.conv2.bias)
-        nn.init.zeros_(self.conv3.bias)
-
         self.pool1 = nn.MaxPool2d(3)
         self.pool2 = nn.MaxPool2d(3)
 
@@ -153,13 +148,12 @@ class HAPPO:
         self.eps_clip = eps_clip
         self.device = device
         self.actor = Actor(self.N_action)
-        self.old_actor = Actor(self.N_action)
-        self.old_actor.load_state_dict(self.actor.state_dict())
         self.critic = Critic(self.N_action, num_topic)
         self.target_critic = Critic(self.N_action, num_topic)
         self.target_critic.load_state_dict(self.critic.state_dict())
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action)
         self.tmp_buffer = []
+        self.train_iter = 0
 
         # オプティマイザーの設定
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-3)
@@ -168,7 +162,6 @@ class HAPPO:
         if self.device != 'cpu':
             self.actor.cuda(self.device)
             self.critic.cuda(self.device)
-            self.old_actor.cuda(self.device)
             self.target_critic.cuda(self.device)
 
         self.gamma = 0.95
@@ -176,7 +169,7 @@ class HAPPO:
         self.critic_loss_fn = torch.nn.MSELoss()
 
 
-    def get_acction(self, obs, obs_topic, env, train_flag):        
+    def get_acction(self, obs, obs_topic, env, train_flag, pretrain_flag):        
         obs = obs.reshape(-1, 9, 81, 81).to(self.device)
         obs_topic = obs_topic.reshape(-1, 3).to(self.device)
 
@@ -187,9 +180,28 @@ class HAPPO:
         clients = env.clients
 
         if train_flag:
-            pub_topic_tensor = torch.stack([torch.tensor(client.pub_topic) for client in clients]).T
-            mask = pub_topic_tensor.bool()  # マスクを作成
-            actions[mask] = Categorical(pi[mask]).sample()  # マスクを使ってアクションをサンプリング
+            if pretrain_flag:
+                edges = env.all_edge
+
+                for i in range(self.num_agent):
+                    client = clients[i]
+                    min_idx = 0
+                    min_distance = 100000000
+                
+                    for j in range(len(edges)):
+                        edge = edges[j]
+                        distance = math.sqrt(pow(client.x - edge.x, 2) + pow(client.y - edge.y, 2))
+                        if distance < min_distance:
+                            min_distance = distance
+                            min_idx = j
+                    
+                    for t in range(self.num_topic):
+                        if client.pub_topic[t] == 1:
+                            actions[t][i] = min_idx
+            else:
+                pub_topic_tensor = torch.stack([torch.tensor(client.pub_topic) for client in clients]).T
+                mask = pub_topic_tensor.bool()  # マスクを作成
+                actions[mask] = Categorical(pi[mask]).sample()  # マスクを使ってアクションをサンプリング
         else:
             for i in range(self.num_agent):
                 client = clients[i]
@@ -199,10 +211,6 @@ class HAPPO:
 
         return actions, pi
     
-
-    def old_net_update(self):
-        self.old_actor.load_state_dict(self.actor.state_dict())
-
     
     def save_model(self, dir_path, actor_weight, critic_weight, iter):
         torch.save(self.actor.state_dict(), dir_path + actor_weight + '_' + str(iter) + '.pth')
@@ -250,13 +258,17 @@ class HAPPO:
         return actor_obs, actor_obs_topic, critic_obs, critic_obs_topic
 
     
-    def collect(self, actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, actions, pi, reward):
+    def collect(self, actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward):
         #  ==========経験再生用バッファへの追加==========
         advantage = 0
 
+        reward = reward / 100 + 5
+
+        print(f"reward = {reward}")
+
         reward = torch.FloatTensor([reward])
 
-        self.tmp_buffer.append([actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, actions, pi.detach(), reward, advantage])
+        self.tmp_buffer.append([actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi.detach(), reward, advantage])
 
     
     def compute_advantage(self):
@@ -280,39 +292,37 @@ class HAPPO:
         value_target = value_target.detach()
 
         data = self.tmp_buffer[-1]
-        reward = data[6]
+        reward = data[-2]
         gae = reward - value[-1]
         data[-1] = gae
         
         for time in reversed(range(self.episord_len-1)):
             data = self.tmp_buffer[time]
-            reward = data[6]
+            reward = data[-2]
 
             delta = reward + self.gamma*value_target[time+1] - value[time]
             gae = delta + self.lamda*self.gamma*gae
 
             data[-1] = gae
-        
-        history = []
 
         for data in self.tmp_buffer:
-            history.append(tuple(data))
-        
-        self.replay_buffer.add(history)
+            self.replay_buffer.add(tuple(data))
 
         self.tmp_buffer = []
     
 
-    def train(self, target_net_flag):
+    def train(self, target_net_iter):
 
-        if len(self.replay_buffer) < self.batch_size:
+        if len(self.replay_buffer) < self.buffer_size:
             print(f"replay buffer < buffer size ({len(self.replay_buffer)})")
             return
         
-        if target_net_flag:
+        if self.train_iter == target_net_iter:
+            print(f"critic_target update")
+            self.train_iter = 0
             self.target_critic.load_state_dict(self.critic.state_dict())
         
-        actor_obs_exp, actor_obs_topic_exp, critic_obs_exp, critic_obs_topic_exp, actions_exp, pi_exp, reward_exp, advantage_exp = self.replay_buffer.get_batch()
+        actor_obs_exp, actor_obs_topic_exp, critic_obs_exp, critic_obs_topic_exp, next_actor_obs_exp, next_actor_obs_topic_exp, next_critic_obs_exp, next_critic_obs_topic_exp, actions_exp, pi_exp, reward_exp, advantage_exp = self.replay_buffer.get_batch()
         #  actor_obs_exp = torch.Size([batch_size * episode_len, num_topic, num_agent, channel=9, obs_size=81, obs_size=81]), cpu
         #  actor_obs_topic_exp = torch.Size([batch_size * episode_len, num_topic, num_agent, channel=3]), cpu
         #  critic_obs_exp = torch.Size([batch_size * episode_len, channel=14, 81, 81]), cpu
@@ -326,61 +336,78 @@ class HAPPO:
         actor_obs_topic_exp = actor_obs_topic_exp.to(self.device)
         critic_obs_exp = critic_obs_exp.to(self.device)
         critic_obs_topic_exp = critic_obs_topic_exp.to(self.device)
+        next_actor_obs_exp = next_actor_obs_exp.to(self.device)
+        next_actor_obs_topic_exp = next_actor_obs_topic_exp.to(self.device)
+        next_critic_obs_exp = next_critic_obs_exp.to(self.device)
+        next_critic_obs_topic_exp = next_critic_obs_topic_exp.to(self.device)
         pi_exp = pi_exp.to(self.device)
         reward_exp = reward_exp.to(self.device).unsqueeze(1)
         advantage_exp = advantage_exp.to(self.device)
 
-        actions_exp = actions_exp.reshape(self.batch_size, self.episord_len, self.num_topic, self.num_agent)
-        pi_exp = pi_exp.reshape(self.batch_size, self.episord_len, self.num_topic, self.num_agent, self.N_action)
+        actions_exp = actions_exp.reshape(self.batch_size, self.num_topic, self.num_agent)
+        pi_exp = pi_exp.reshape(self.batch_size, self.num_topic, self.num_agent, self.N_action)
 
-        actions_exp_onehot = torch.zeros((self.batch_size, self.episord_len, self.num_topic, self.num_agent, self.N_action))
+        actions_exp_onehot = torch.zeros((self.batch_size, self.num_topic, self.num_agent, self.N_action))
 
         for batch in range(self.batch_size):
-            for time in range(self.episord_len):
-                for topic in range(self.num_topic):
-                    for agent_id in range(self.num_agent):
-                        action = actions_exp[batch][time][topic][agent_id]
+            for topic in range(self.num_topic):
+                for agent_id in range(self.num_agent):
+                    action = actions_exp[batch][topic][agent_id]
 
-                        if action != -1:
-                            actions_exp_onehot[batch][time][topic][agent_id][action] = 1                                
+                    if action != -1:
+                        actions_exp_onehot[batch][topic][agent_id][action] = 1                                
 
         #  ========== critic ネットワークの更新 ==========
         Q1 = self.critic.get_value(critic_obs_exp, critic_obs_topic_exp)
-        critic_loss = self.critic_loss_fn(reward_exp, Q1)
+        Q_target = reward_exp + self.gamma*self.target_critic.get_value(next_critic_obs_exp, next_critic_obs_topic_exp)
+        critic_loss = self.critic_loss_fn(Q_target, Q1)
+
+        print(f"critic_loss = {critic_loss}")
 
         self.critic_optimizer.zero_grad()
-        critic_loss.backward(retain_graph=True)
+        critic_loss.backward()
         self.critic_optimizer.step()
         
         #  ========== actor ネットワークの更新 ==========
         #  ========== アドバンテージの計算 ==========
-        M = advantage_exp
+        M = advantage_exp.clone().detach()
         agent_perm = torch.randperm(self.num_agent)
+        topic_perm = torch.randperm(self.num_topic)
 
         for agent_id in agent_perm:
-            for topic_id in range(self.num_topic):
+            for topic_id in topic_perm:
                 actor_input1 = actor_obs_exp[:, topic_id, agent_id].reshape(-1, 9, 81, 81)
                 actor_input2 = actor_obs_topic_exp[:, topic_id,agent_id].reshape(-1, 3)
-                mask = actions_exp_onehot[:, :, topic_id, agent_id].bool()
+                mask = actions_exp_onehot[:, topic_id, agent_id].bool()
 
-                pi_new = self.actor.get_action(actor_input1.detach(), actor_input2.detach()).reshape(self.batch_size, self.episord_len, self.N_action)
+                pi_new = self.actor.get_action(actor_input1.detach(), actor_input2.detach()).reshape(self.batch_size, self.N_action)
 
-                rations = torch.exp(torch.log(pi_new[mask]) - torch.log(pi_exp[:, :, topic_id, agent_id][mask]))
+                rations = torch.exp(torch.log(pi_new[mask] + 1e-16) - torch.log(pi_exp[:, topic_id, agent_id][mask] + 1e-16))
 
                 rations_size = int(rations.numel())
 
                 if rations_size != 0:
+                    print(f"M = {M}")
                     surr1 = rations * M
                     surr2 = torch.clamp(rations, 1-self.eps_clip, 1+self.eps_clip) * M
 
 
                     actor_loss = torch.mean(torch.min(surr1, surr2))
 
+                    entropy = - torch.sum(pi_exp[:, topic_id, agent_id][mask] * torch.log(pi_exp[:, topic_id, agent_id][mask] + 1e-16))
+
+                    loss = - (actor_loss + 0.01*entropy)
+
+                    print(f"actor_loss = {actor_loss}, entropy = {entropy}")
+
                     self.actor_optimizer.zero_grad()
-                    actor_loss.backward(retain_graph=True)
+                    loss.backward(retain_graph=True)
                     self.actor_optimizer.step()
 
-                    pi_new_update = self.actor.get_action(actor_input1.detach(), actor_input2.detach()).reshape(self.batch_size, self.episord_len, self.N_action)
+                    pi_new_update = self.actor.get_action(actor_input1.detach(), actor_input2.detach()).reshape(self.batch_size, self.N_action)
 
-                    M = (torch.exp(torch.log(pi_new_update[mask]) - torch.log(pi_new[mask])) * M).detach()
+                    M = (torch.exp(torch.log(pi_new_update[mask] + 1e-16) - torch.log(pi_new[mask] + 1e-16)) * M).detach()
+
+        self.replay_buffer.reset()
+        self.train_iter += 1
         
