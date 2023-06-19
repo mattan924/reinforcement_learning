@@ -7,6 +7,7 @@ import os
 import glob
 import time as time_modu
 import random
+import concurrent.futures
 
 def read_train_curve(log_path):
     reward_history = []
@@ -20,7 +21,7 @@ def read_train_curve(log_path):
     return reward_history
 
 
-def simulate(env_path, epi_iter, agent, output):
+def simulate(env_path, agent, thread_id):
     #  環境のインスタンスの生成
     env = Env(env_path)
 
@@ -43,7 +44,7 @@ def simulate(env_path, epi_iter, agent, output):
     #  各エピソードにおける時間の推移
     for time in range(0, env.simulation_time, env.time_step):
         #  行動と確率分布の取得
-        actions, pi = agent.get_acction(actor_obs, actor_obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
+        actions, pi = agent.get_acction(actor_obs, actor_obs_topic, env, train_flag=True, pretrain_flag=False)
 
         # 報酬の受け取り
         reward = env.step(actions, time)
@@ -55,7 +56,7 @@ def simulate(env_path, epi_iter, agent, output):
         next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic = agent.process_input(next_obs, next_obs_topic)
 
         #  バッファへの追加
-        agent.collect(actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward)
+        agent.collect(actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward, thread_id)
 
         actor_obs = next_actor_obs
         actor_obs_topic = next_actor_obs_topic
@@ -88,6 +89,8 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
     pretrain_iter = 10
 
+    thread_num = 16
+
     #  標準エラー出力先の変更
     #sys.stderr = open(output + "_err.log", 'w')
 
@@ -107,7 +110,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
     episode_len = int(env.simulation_time / env.time_step)
 
     #  学習モデルの指定
-    agent = HAPPO(N_action, env.num_client, env.num_topic, buffer_size, batch_size, episode_len, eps_clip, device)
+    agent = HAPPO(N_action, env.num_client, env.num_topic, buffer_size, batch_size, episode_len, eps_clip, device, thread_num)
     #agent = HAPPO_single(N_action, env.num_client, env.num_topic, buffer_size, batch_size, episode_len, eps_clip, device)
 
     # 学習ループ
@@ -120,63 +123,20 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
             pretrain_flag = True
         else:
             pretrain_flag = False
+
+        print(f"simulate start")
         
-        #  環境のリセット
-        env.reset()
-
-        #  1エピソード中の reward の保持
-        reward_history = []
-
-        #  状態の観測
-        #  obs.shape = (num_agent, num_topic, obs_channel=9, obs_size=81, obs_size=81)
-        #  obs_topic.shape = (num_topic, channel=3)
-        obs, obs_topic = env.get_observation()
-        next_obs = None
-        next_obs_topic = None
-
-        #  各ネットワークの入力に加工
-        #  actor_obs.shape = (num_topic, num_agent, obs_channel=9, obs_size=81, obs_size=81)
-        #  actor_obs_topic.shape = (num_topic, num_agent, channel=3)
-        #  critic_obs.shape = (critic_obs_channel=14, obs_size=81, obs_size=81)
-        #  critic_obs_topic.shape = (9)
-        actor_obs, actor_obs_topic, critic_obs, critic_obs_topic = agent.process_input(obs, obs_topic)
-
-        #  各エピソードにおける時間の推移
-        for time in range(0, env.simulation_time, env.time_step):
-            #  行動と確率分布の取得
-            actions, pi = agent.get_acction(actor_obs, actor_obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
-
-            # 報酬の受け取り
-            reward = env.step(actions, time)
-            reward_history.append(reward)
-            reward = -reward
-
-            next_obs, next_obs_topic = env.get_observation()
-
-            next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic = agent.process_input(next_obs, next_obs_topic)
-
-            #  バッファへの追加
-            agent.collect(actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward)
-
-            actor_obs = next_actor_obs
-            actor_obs_topic = next_actor_obs_topic
-            critic_obs = next_critic_obs
-            critic_obs_topic = next_critic_obs_topic
-
-        with open(output +  "_pi.log", "a") as f:
-            for i in range(env.num_client):
-                f.write(f"agent {i} pi = {pi[0][i]}\n")
-
-        with open(output +  "_weight.log", "a") as f:
-            params = agent.actor.state_dict()
-
-            f.write(f"========== {epi_iter} ==========\n")
-            f.write(f"{params}")
-
+        with concurrent.futures.ThreadPoolExecutor(max_workers=thread_num, thread_name_prefix="thread") as executor:
+            result = []
+            for thread_id in range(16):
+                result.append(executor.submit(simulate, learning_data_index_path, agent, thread_id))
+  
         #  アドバンテージの計算
+        print(f"compute advantage start")
         agent.compute_advantage()
 
         # 学習
+        print(f"train start")
         agent.train(target_net_iter)
 
         if epi_iter % 1 == 0:
@@ -184,7 +144,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
             #print(f"total_reward = {sum(reward_history)}")
             #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
             with open(output + ".log", 'a') as f:
-                f.write(f"{(epi_iter/max_epi_itr)*100}%, {-sum(reward_history)}\n")
+                f.write(f"{(epi_iter/max_epi_itr)*100}%, {sum(result) / thread_num}\n")
 
         #  重みパラメータのバックアップ
         if epi_iter % backup_iter == 0:

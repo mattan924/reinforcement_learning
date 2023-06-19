@@ -138,7 +138,7 @@ class Critic(nn.Module):
 
 class HAPPO:
     
-    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, episord_len, eps_clip, device):
+    def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, episord_len, eps_clip, device, thread_num):
         self.N_action = N_action
         self.num_agent = num_agent
         self.num_topic = num_topic
@@ -152,7 +152,8 @@ class HAPPO:
         self.target_critic = Critic(self.N_action, num_topic)
         self.target_critic.load_state_dict(self.critic.state_dict())
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action)
-        self.tmp_buffer = []
+        self.thread_num = thread_num
+        self.tmp_buffer = [[] for _ in range(self.thread_num)]
         self.train_iter = 0
 
         # オプティマイザーの設定
@@ -258,57 +259,55 @@ class HAPPO:
         return actor_obs, actor_obs_topic, critic_obs, critic_obs_topic
 
     
-    def collect(self, actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward):
+    def collect(self, actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward, thread_id):
         #  ==========経験再生用バッファへの追加==========
         advantage = 0
 
         reward = reward / 100 + 5
 
-        print(f"reward = {reward}")
-
         reward = torch.FloatTensor([reward])
 
-        self.tmp_buffer.append([actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi.detach(), reward, advantage])
+        self.tmp_buffer[thread_id].append([actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi.detach(), reward, advantage])
 
     
     def compute_advantage(self):
-    
-        value = torch.zeros((self.episord_len))
-        value_target = torch.zeros((self.episord_len))
+        for thread_id in range(self.thread_num):
+            value = torch.zeros((self.episord_len))
+            value_target = torch.zeros((self.episord_len))
 
-        for time in range(self.episord_len):
-            data = self.tmp_buffer[time]
+            for time in range(self.episord_len):
+                data = self.tmp_buffer[thread_id][time]
 
-            state = data[2].unsqueeze(0).to(self.device)
-            state_topic = data[3].unsqueeze(0).to(self.device)
+                state = data[2].unsqueeze(0).to(self.device)
+                state_topic = data[3].unsqueeze(0).to(self.device)
 
-            state = torch.cat([state, state], dim=0)
-            state_topic = torch.cat([state_topic, state_topic], dim=0)
+                state = torch.cat([state, state], dim=0)
+                state_topic = torch.cat([state_topic, state_topic], dim=0)
 
-            value[time] = self.critic.get_value(state, state_topic)[0]
-            value_target[time] = self.target_critic.get_value(state, state_topic)[0]
+                value[time] = self.critic.get_value(state, state_topic)[0]
+                value_target[time] = self.target_critic.get_value(state, state_topic)[0]
 
-        value = value.detach()
-        value_target = value_target.detach()
+            value = value.detach()
+            value_target = value_target.detach()
 
-        data = self.tmp_buffer[-1]
-        reward = data[-2]
-        gae = reward - value[-1]
-        data[-1] = gae
-        
-        for time in reversed(range(self.episord_len-1)):
-            data = self.tmp_buffer[time]
+            data = self.tmp_buffer[thread_id][-1]
             reward = data[-2]
-
-            delta = reward + self.gamma*value_target[time+1] - value[time]
-            gae = delta + self.lamda*self.gamma*gae
-
+            gae = reward - value[-1]
             data[-1] = gae
+            
+            for time in reversed(range(self.episord_len-1)):
+                data = self.tmp_buffer[thread_id][time]
+                reward = data[-2]
 
-        for data in self.tmp_buffer:
-            self.replay_buffer.add(tuple(data))
+                delta = reward + self.gamma*value_target[time+1] - value[time]
+                gae = delta + self.lamda*self.gamma*gae
 
-        self.tmp_buffer = []
+                data[-1] = gae
+
+            for data in self.tmp_buffer[thread_id]:
+                self.replay_buffer.add(tuple(data))
+
+            self.tmp_buffer[thread_id] = []
     
 
     def train(self, target_net_iter):
