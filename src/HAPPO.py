@@ -264,8 +264,6 @@ class HAPPO:
 
         reward = reward / 100 + 5
 
-        print(f"reward = {reward}")
-
         reward = torch.FloatTensor([reward])
 
         self.tmp_buffer.append([actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi.detach(), reward, advantage])

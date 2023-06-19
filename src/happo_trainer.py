@@ -127,6 +127,9 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
         #  1エピソード中の reward の保持
         reward_history = []
 
+        if epi_iter == 0:
+            start = time_modu.perf_counter()
+
         #  状態の観測
         #  obs.shape = (num_agent, num_topic, obs_channel=9, obs_size=81, obs_size=81)
         #  obs_topic.shape = (num_topic, channel=3)
@@ -175,6 +178,11 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
         #  アドバンテージの計算
         agent.compute_advantage()
+
+        end = time_modu.perf_counter()
+
+        if len(agent.replay_buffer) >= buffer_size:
+            print(f"time = {end - start}")
 
         # 学習
         agent.train(target_net_iter)
