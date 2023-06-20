@@ -75,17 +75,17 @@ class Actor(nn.Module):
 
     def get_action(self, obs, obs_topic):
         out = self.batch_norm2d_1(obs)
-        out = F.relu(self.batch_norm2d_2(self.conv1(out)))
-        out = F.relu(self.batch_norm2d_3(self.conv2(out)))
+        out = F.selu(self.batch_norm2d_2(self.conv1(out)))
+        out = F.selu(self.batch_norm2d_3(self.conv2(out)))
         out = self.pool1(out)
-        out = F.relu(self.batch_norm2d_4(self.conv3(out)))
+        out = F.selu(self.batch_norm2d_4(self.conv3(out)))
         out = self.pool2(out)
         out = out.view(-1, 4*9*9)
 
         out1 = self.batch_norm1d_1(obs_topic)
         out = torch.cat([out, out1], 1)
-        out = F.relu(self.batch_norm1d_2(self.fc1(out)))
-        out = F.relu(self.batch_norm1d_3(self.fc2(out)))
+        out = F.selu(self.batch_norm1d_2(self.fc1(out)))
+        out = F.selu(self.batch_norm1d_3(self.fc2(out)))
         out = self.fc3(out)
         out = F.softmax(out, dim=1)
         
@@ -94,8 +94,9 @@ class Actor(nn.Module):
 
 class Critic(nn.Module):
 
-    def __init__(self, num_client, num_topic):
+    def __init__(self, N_action, num_client, num_topic):
         super(Critic, self).__init__()
+        self.N_action = N_action
         self.N_client = num_client
         self.N_topic = num_topic
 
@@ -104,6 +105,9 @@ class Critic(nn.Module):
         self.batch_norm2d_3 = nn.BatchNorm2d(4)
         self.batch_norm2d_4 = nn.BatchNorm2d(2)
         self.batch_norm_topic = nn.BatchNorm1d(3*self.N_topic)
+        self.batch_norm_action1 = nn.BatchNorm1d(512)
+        self.batch_norm_action2 = nn.BatchNorm1d(256)
+        self.batch_norm_action3 = nn.BatchNorm1d(64)
         self.batch_norm1d_1 = nn.BatchNorm1d(128)
         self.batch_norm1d_2 = nn.BatchNorm1d(64)
 
@@ -114,26 +118,79 @@ class Critic(nn.Module):
         self.pool1 = nn.MaxPool2d(3)
         self.pool2 = nn.MaxPool2d(3)
 
-        self.fc1 = nn.Linear(2*9*9+3*self.N_topic, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 1)
+        self.fc1 = nn.Linear(self.N_topic*self.N_client*self.N_action, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 64)
+
+        self.fc4 = nn.Linear(2*9*9+3*self.N_topic + 64, 128)
+        self.fc5 = nn.Linear(128, 64)
+        self.fc6 = nn.Linear(64, 1)
         
 
-    def get_value(self, S, S_topic):
+    def get_value(self, S, S_topic, A):
         out = self.conv1(self.batch_norm2d_1(S))
-        out = self.pool1(F.relu(self.batch_norm2d_2(out)))
-        out = self.pool2(F.relu(self.batch_norm2d_3(self.conv2(out))))
-        out = F.relu(self.batch_norm2d_4(self.conv3(out)))
+        out = self.pool1(F.selu(self.batch_norm2d_2(out)))
+        out = self.pool2(F.selu(self.batch_norm2d_3(self.conv2(out))))
+        out = F.selu(self.batch_norm2d_4(self.conv3(out)))
         out = out.view(-1, 2*9*9)
 
         out_topic = self.batch_norm_topic(S_topic)
+
+        out1_a = F.selu(self.batch_norm_action1(self.fc1(A)))
+        out2_a = F.selu(self.batch_norm_action2(self.fc2(out1_a)))
+        out3_a = F.selu(self.batch_norm_action3(self.fc3(out2_a)))
         
-        out = torch.cat([out, out_topic], 1)
-        out = F.relu(self.batch_norm1d_1(self.fc1(out)))
-        out = F.relu(self.batch_norm1d_2(self.fc2(out)))
+        out = torch.cat([out, out_topic, out3_a], 1)
+        out = F.selu(self.batch_norm1d_1(self.fc1(out)))
+        out = F.selu(self.batch_norm1d_2(self.fc2(out)))
         out = self.fc3(out)
 
         return out
+    
+
+class V_Net(nn.Module):
+
+    def __init__(self, num_topic):
+        super(V_Net, self).__init__()
+        self.N_topic = num_topic
+
+        self.batch_norm2d_1 = nn.BatchNorm2d(self.N_topic*4 + 2)
+        self.batch_norm2d_2 = nn.BatchNorm2d(self.N_topic*4 + 2)
+        self.batch_norm2d_3 = nn.BatchNorm2d(4)
+        self.batch_norm2d_4 = nn.BatchNorm2d(2)
+        self.batch_norm_topic = nn.BatchNorm1d(3*self.N_topic)
+        self.batch_norm1d_1 = nn.BatchNorm1d(64)
+        self.batch_norm1d_2 = nn.BatchNorm1d(16)
+
+        self.conv1 = nn.Conv2d(in_channels=self.N_topic*4+2, out_channels=self.N_topic*4+2, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=self.N_topic*4+2, out_channels=4, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=4, out_channels=2, kernel_size=3, padding=1)
+
+        self.pool1 = nn.MaxPool2d(3)
+        self.pool2 = nn.MaxPool2d(3)
+
+        self.fc1 = nn.Linear(2*9*9 + 3*self.N_topic, 64)
+        self.fc2 = nn.Linear(64, 16)
+        self.fc3 = nn.Linear(16, 1)
+
+
+    def get_value(self, S, S_topic):
+        out1 = self.conv1(self.batch_norm2d_1(S))
+        out2 = self.pool1(F.selu(self.batch_norm2d_2(out1)))
+        out3 = self.pool2(F.selu(self.batch_norm2d_3(self.conv2(out2))))
+        out4 = F.selu(self.batch_norm2d_4(self.conv3(out3)))
+
+        out5 = out4.view(-1, 2*9*9)
+
+        out_topic = self.batch_norm_topic(S_topic)
+
+        out6 = torch.cat([out5, out_topic], dim=1)
+
+        out7 = F.selu(self.batch_norm1d_1(self.fc1(out6)))
+        out8 = F.selu(self.batch_norm1d_2(self.fc2(out7)))
+        out9 = self.fc3(out8)
+
+        return out9
 
 
 class HAPPO:
@@ -148,9 +205,12 @@ class HAPPO:
         self.eps_clip = eps_clip
         self.device = device
         self.actor = Actor(self.N_action)
-        self.critic = Critic(self.N_action, num_topic)
-        self.target_critic = Critic(self.N_action, num_topic)
+        self.critic = Critic(self.N_action, self.num_agent, num_topic)
+        self.target_critic = Critic(self.N_action, self.num_agent, num_topic)
         self.target_critic.load_state_dict(self.critic.state_dict())
+        self.V_net = V_Net(self.num_topic)
+        self.target_V_net = V_Net(self.num_topic)
+        self.target_V_net.load_state_dict(self.V_net.state_dict())
         self.replay_buffer = ReplayBuffer(buffer_size=self.buffer_size, batch_size=self.batch_size, N_actions=self.N_action)
         self.tmp_buffer = []
         self.train_iter = 0
@@ -158,15 +218,19 @@ class HAPPO:
         # オプティマイザーの設定
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-3)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-3)
+        self.v_net_optimizer = torch.optim.Adam(self.V_net.parameters(), lr=1e-3)
 
         if self.device != 'cpu':
             self.actor.cuda(self.device)
             self.critic.cuda(self.device)
             self.target_critic.cuda(self.device)
+            self.V_net.cuda(self.device)
+            self.target_V_net(self.device)
 
         self.gamma = 0.95
         self.lamda = 0.95
         self.critic_loss_fn = torch.nn.MSELoss()
+        self.v_net_loss_fn = torch.nn.MSELoss()
 
 
     def get_acction(self, obs, obs_topic, env, train_flag, pretrain_flag):        
@@ -312,11 +376,11 @@ class HAPPO:
     def train(self, target_net_iter):
 
         if len(self.replay_buffer) < self.buffer_size:
-            print(f"replay buffer < buffer size ({len(self.replay_buffer)})")
+            #print(f"replay buffer < buffer size ({len(self.replay_buffer)})")
             return
         
         if self.train_iter == target_net_iter:
-            print(f"critic_target update")
+            #print(f"critic_target update")
             self.train_iter = 0
             self.target_critic.load_state_dict(self.critic.state_dict())
         
@@ -360,7 +424,7 @@ class HAPPO:
         Q_target = reward_exp + self.gamma*self.target_critic.get_value(next_critic_obs_exp, next_critic_obs_topic_exp)
         critic_loss = self.critic_loss_fn(Q_target, Q1)
 
-        print(f"critic_loss = {critic_loss}")
+        #print(f"critic_loss = {critic_loss}")
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
@@ -385,7 +449,7 @@ class HAPPO:
                 rations_size = int(rations.numel())
 
                 if rations_size != 0:
-                    print(f"M = {M}")
+                    #print(f"M = {M}")
                     surr1 = rations * M
                     surr2 = torch.clamp(rations, 1-self.eps_clip, 1+self.eps_clip) * M
 
@@ -396,7 +460,7 @@ class HAPPO:
 
                     loss = - (actor_loss + 0.01*entropy)
 
-                    print(f"actor_loss = {actor_loss}, entropy = {entropy}")
+                    #print(f"actor_loss = {actor_loss}, entropy = {entropy}")
 
                     self.actor_optimizer.zero_grad()
                     loss.backward(retain_graph=True)

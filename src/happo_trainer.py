@@ -20,51 +20,6 @@ def read_train_curve(log_path):
     return reward_history
 
 
-def simulate(env_path, epi_iter, agent, output):
-    #  環境のインスタンスの生成
-    env = Env(env_path)
-
-    reward_history = []
-
-    #  状態の観測
-    #  obs.shape = (num_agent, num_topic, obs_channel=9, obs_size=81, obs_size=81)
-    #  obs_topic.shape = (num_topic, channel=3)
-    obs, obs_topic = env.get_observation()
-    next_obs = None
-    next_obs_topic = None
-
-    #  各ネットワークの入力に加工
-    #  actor_obs.shape = (num_topic, num_agent, obs_channel=9, obs_size=81, obs_size=81)
-    #  actor_obs_topic.shape = (num_topic, num_agent, channel=3)
-    #  critic_obs.shape = (critic_obs_channel=14, obs_size=81, obs_size=81)
-    #  critic_obs_topic.shape = (9)
-    actor_obs, actor_obs_topic, critic_obs, critic_obs_topic = agent.process_input(obs, obs_topic)
-
-    #  各エピソードにおける時間の推移
-    for time in range(0, env.simulation_time, env.time_step):
-        #  行動と確率分布の取得
-        actions, pi = agent.get_acction(actor_obs, actor_obs_topic, env, train_flag=True, pretrain_flag=pretrain_flag)
-
-        # 報酬の受け取り
-        reward = env.step(actions, time)
-        reward_history.append(reward)
-        reward = -reward
-
-        next_obs, next_obs_topic = env.get_observation()
-
-        next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic = agent.process_input(next_obs, next_obs_topic)
-
-        #  バッファへの追加
-        agent.collect(actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward)
-
-        actor_obs = next_actor_obs
-        actor_obs_topic = next_actor_obs_topic
-        critic_obs = next_critic_obs
-        critic_obs_topic = next_critic_obs_topic
-
-    return - sum(reward_history)
-
-
 def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
@@ -89,7 +44,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
     pretrain_iter = 10
 
     #  標準エラー出力先の変更
-    #sys.stderr = open(output + "_err.log", 'w')
+    sys.stderr = open(output + "_err.log", 'w')
 
     if load_flag == False:
         with open(output + ".log", 'w') as f:
@@ -126,9 +81,6 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
         #  1エピソード中の reward の保持
         reward_history = []
-
-        if epi_iter == 0:
-            start = time_modu.perf_counter()
 
         #  状態の観測
         #  obs.shape = (num_agent, num_topic, obs_channel=9, obs_size=81, obs_size=81)
@@ -178,11 +130,6 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
         #  アドバンテージの計算
         agent.compute_advantage()
-
-        end = time_modu.perf_counter()
-
-        if len(agent.replay_buffer) >= buffer_size:
-            print(f"time = {end - start}")
 
         # 学習
         agent.train(target_net_iter)

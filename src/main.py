@@ -9,7 +9,7 @@ learning_data_index_path = "../dataset/learning_data/index/index_test.csv"
 
 # 各種パラメーター
 #  HAPPO
-max_epi_itr = 5000
+max_epi_itr = 50000
 buffer_size = 1200
 batch_size = 300
 eps_clip = 0.2
