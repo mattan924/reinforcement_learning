@@ -20,7 +20,7 @@ def read_train_curve(log_path):
     return reward_history
 
 
-def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
+def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
@@ -44,17 +44,32 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
     pretrain_iter = 10
 
     #  標準エラー出力先の変更
-    sys.stderr = open(output + "_err.log", 'w')
+    #sys.stderr = open(output + "_err.log", 'w')
 
     if load_flag == False:
         with open(output + ".log", 'w') as f:
             pass
 
-    with open(output +  "_pi.log", "w") as f:
-        pass
+        with open(output + "_pi.log", "w") as f:
+            pass
 
-    with open(output +  "_weight.log", "w") as f:
-        pass
+        with open(output + "_actor_weight.log", "w") as f:
+            pass
+
+        with open(output + "_actor_grad.log", "w") as f:
+            pass
+
+        with open(output + "_critic_grad.log", "w") as f:
+            pass
+
+        with open(output + "_v_net_grad.log", "w") as f:
+            pass
+
+        with open(output + "_advantage.log", "w") as f:
+            pass
+
+        with open(output + "_actor_loss.log", "w") as f:
+            pass
 
     #  環境のインスタンスの生成
     env = Env(learning_data_index_path)
@@ -69,7 +84,12 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
     for epi_iter in range(start_epi_itr, max_epi_itr):
         #  重みパラメータの読み込み
         if load_flag:
-            agent.load_model(load_parameter_path, actor_weight, critic_weight, start_epi_itr)
+            agent.load_model(load_parameter_path, actor_weight, critic_weight, V_net_weight, start_epi_itr)
+
+        if epi_iter % target_net_iter == 0:
+            target_net_flag = True
+        else:
+            target_net_flag = False
 
         if epi_iter % pretrain_iter == 0:
             pretrain_flag = True
@@ -113,26 +133,47 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
             #  バッファへの追加
             agent.collect(actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward)
 
+            # 学習
+            agent.train_critic(target_net_flag)
+
             actor_obs = next_actor_obs
             actor_obs_topic = next_actor_obs_topic
             critic_obs = next_critic_obs
             critic_obs_topic = next_critic_obs_topic
 
-        with open(output +  "_pi.log", "a") as f:
-            for i in range(env.num_client):
+        agent.train_actor(output, epi_iter)
+
+        with open(output + "_pi.log", "a") as f:
+            for i in range(5):
                 f.write(f"agent {i} pi = {pi[0][i]}\n")
 
-        with open(output +  "_weight.log", "a") as f:
+        with open(output + "_actor_weight.log", "a") as f:
             params = agent.actor.state_dict()
 
             f.write(f"========== {epi_iter} ==========\n")
-            f.write(f"{params}")
+            f.write(f"conv1.weight = {params['conv1.weight']}\n")
+            f.write(f"fc1.weight = {params['fc1.weight']}\n")
 
-        #  アドバンテージの計算
-        agent.compute_advantage()
+        with open(output + "_v_net_grad.log", "a") as f:
+            params = list(agent.V_net.parameters())
 
-        # 学習
-        agent.train(target_net_iter)
+            f.write(f"========== {epi_iter} ==========\n")
+            f.write(f"conv1.weight.grad = {params[14].grad}\n")
+            f.write(f"fc1.weight.grad = {params[20].grad}\n")
+
+        with open(output + "_critic_grad.log", "a") as f:
+            params = list(agent.critic.parameters())
+
+            f.write(f"========== {epi_iter} ==========\n")
+            f.write(f"conv1.weight.grad = {params[20].grad}\n")
+            f.write(f"fc1.weight.grad = {params[32].grad}\n")
+
+        with open(output + "_actor_grad.log", "a") as f:
+            params = list(agent.actor.parameters())
+
+            f.write(f"========== {epi_iter} ==========\n")
+            f.write(f"conv1.weight.grad = {params[14].grad}\n")
+            f.write(f"fc1.weight.grad = {params[22].grad}\n")
 
         if epi_iter % 1 == 0:
             #  ログの出力
@@ -143,7 +184,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
         #  重みパラメータのバックアップ
         if epi_iter % backup_iter == 0:
-            agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, epi_iter)
+            agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter)
 
     #  最適解の取り出し
     df_index = pd.read_csv(learning_data_index_path, index_col=0)
@@ -160,7 +201,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
     fig.savefig(output + ".png")
 
     #  重みパラメータの保存
-    agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, epi_iter+1)
+    agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter+1)
 
     #  標準エラー出力先を戻す
     sys.stderr = sys.__stderr__
