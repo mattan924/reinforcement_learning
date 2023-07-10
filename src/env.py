@@ -166,7 +166,7 @@ class Env:
         
         
     #  状態の観測
-    def get_observation(self):
+    def get_observation(self, debug=False):
         obs_channel = 9
         obs_topic_channel = 3
         obs_size = 81
@@ -233,12 +233,12 @@ class Env:
             block_index_x = int(edge.x / block_len_x)
             block_index_y = int(edge.y / block_len_y)
                 
-            storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.total_used_volume) / 1e5
-            cpu_info[block_index_y][block_index_x] = edge.cpu_power
+            storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.total_used_volume) / 1e7
+            cpu_info[block_index_y][block_index_x] = edge.cpu_power / 1e9
             cpu_used_client[block_index_y][block_index_x] = sum(edge.used_publishers)
 
             for t in range(self.num_topic):
-                topic_storage_info[t][block_index_y][block_index_x] = edge.used_volume[t]
+                topic_storage_info[t][block_index_y][block_index_x] = edge.used_volume[t] / 1e6
                 topic_cpu_used_client[t][block_index_y][block_index_x] = edge.used_publishers[t]
 
         obs[:, :, 0] = position_info[:, np.newaxis]
@@ -252,9 +252,24 @@ class Env:
         obs[:, :, 8] = cpu_used_client[np.newaxis, np.newaxis]
 
         for t, topic in enumerate(self.all_topic):
-            obs_topic[t, 0] = topic.require_cycle
-            obs_topic[t, 1] = topic.data_size
-            obs_topic[t, 2] = topic.volume
+            obs_topic[t, 0] = topic.require_cycle / 1e6
+            obs_topic[t, 1] = topic.data_size /1e4
+            obs_topic[t, 2] = topic.volume / 1e7
+
+        if debug:
+            print(f"position_info = {np.amax(position_info)}")
+            print(f"publisher_distribution = {np.amax(publisher_distribution)}")
+            print(f"subscriber_distribution = {np.amax(subscriber_distribution)}")
+            print(f"total_distribution = {np.amax(total_distribution)}")
+            print(f"topic_storage_info = {np.amax(topic_storage_info)}")
+            print(f"storage_info = {np.amax(storage_info)}")
+            print(f"cpu_info = {np.amax(cpu_info)}")
+            print(f"topic_cpu_used_client = {np.amax(topic_cpu_used_client)}")
+            print(f"cpu_used_client = {np.amax(cpu_used_client)}")
+
+            print(f"topic.require_cycle  = {np.amax(obs_topic[:, 0])}")
+            print(f"topic.data_size = {np.amax(obs_topic[:, 1])}")
+            print(f"topic.volume = {np.amax(obs_topic[:, 2])}")
 
         return obs, obs_topic
         
