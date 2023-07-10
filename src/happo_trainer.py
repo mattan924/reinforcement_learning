@@ -105,7 +105,8 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
         #  状態の観測
         #  obs.shape = (num_agent, num_topic, obs_channel=9, obs_size=81, obs_size=81)
         #  obs_topic.shape = (num_topic, channel=3)
-        obs, obs_topic = env.get_observation()
+        obs, obs_topic = env.get_observation(debug=False)
+        
         next_obs = None
         next_obs_topic = None
 
@@ -131,21 +132,22 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
             next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic = agent.process_input(next_obs, next_obs_topic)
 
             #  バッファへの追加
-            agent.collect(actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_actor_obs, next_actor_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward)
+            agent.collect_ppo(actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward)
 
             # 学習
-            agent.train_critic(target_net_flag)
+            agent.train_critic_ppo(target_net_flag)
 
             actor_obs = next_actor_obs
             actor_obs_topic = next_actor_obs_topic
             critic_obs = next_critic_obs
             critic_obs_topic = next_critic_obs_topic
 
-        agent.train_actor(output, epi_iter)
+            agent.train_actor_ppo(output, epi_iter, time)
 
-        with open(output + "_pi.log", "a") as f:
-            for i in range(5):
-                f.write(f"agent {i} pi = {pi[0][i]}\n")
+            with open(output + "_pi.log", "a") as f:
+                f.write(f"\n==========iter = {epi_iter}, time = {time} ==========\n")
+                for i in range(5):
+                    f.write(f"agent {i} : pi = {pi[0][i]}\n")
 
         with open(output + "_actor_weight.log", "a") as f:
             params = agent.actor.state_dict()
@@ -154,6 +156,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
             f.write(f"conv1.weight = {params['conv1.weight']}\n")
             f.write(f"fc1.weight = {params['fc1.weight']}\n")
 
+        """
         with open(output + "_v_net_grad.log", "a") as f:
             params = list(agent.V_net.parameters())
 
@@ -174,6 +177,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
             f.write(f"========== {epi_iter} ==========\n")
             f.write(f"conv1.weight.grad = {params[14].grad}\n")
             f.write(f"fc1.weight.grad = {params[22].grad}\n")
+        """
 
         if epi_iter % 1 == 0:
             #  ログの出力

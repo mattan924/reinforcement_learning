@@ -9,8 +9,8 @@ learning_data_index_path = "../dataset/learning_data/index/index_test.csv"
 
 # 各種パラメーター
 #  HAPPO
-max_epi_itr = 2500
-buffer_size = 3000
+max_epi_itr = 3000
+buffer_size = 15000
 batch_size = 300
 eps_clip = 0.2
 backup_iter = 100
@@ -23,7 +23,7 @@ backup_iter = 100
 
 device = "cuda:0"
 result_dir = "../result/temporary/happo_test/"
-file_name = "happo_coma_learning_data_test_"
+file_name = "happo_coma_learning_data_test_long"
 output_base = result_dir + file_name
 actor_weight_base = "actor_weight"
 critic_weight_base = "critic_weight"
