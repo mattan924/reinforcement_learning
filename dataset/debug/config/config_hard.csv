@@ -5,9 +5,9 @@ max_y,12
 simulation_time,300
 time_step,5
 num_client,30
-num_topic,1
+num_topic,3
 num_edge,9
-volume, 1
+volume, 0.8
 cpu_cycle,1.5
 cloud_time, 200
 cloud_cycle, 3
