@@ -21,7 +21,7 @@ class Client:
 
 class Edge:
 
-    def __init__(self, id, x, y, volume, cpu_power, num_topic):
+    def __init__(self, id, x, y, volume, cpu_cycle, num_topic):
         self.id = id
         self.x = x
         self.y = y
@@ -29,8 +29,8 @@ class Edge:
         self.used_volume = np.zeros(num_topic)
         self.total_used_volume = 0
         self.deploy_topic = np.zeros(num_topic)
-        self.cpu_power = cpu_power
-        self.power_allocation = cpu_power
+        self.cpu_cycle = cpu_cycle
+        self.power_allocation = cpu_cycle
         self.used_publishers = np.zeros(num_topic)
 
     
@@ -96,7 +96,7 @@ class Env:
         #  edge情報の読み込み
         edges = util.read_edge(self.edge_file)
 
-        self.all_edge = [Edge(e.id, e.x, e.y, e.volume, e.cpu_power, self.num_topic) for e in edges]
+        self.all_edge = [Edge(e.id, e.x, e.y, e.volume, e.cpu_cycle, self.num_topic) for e in edges]
 
         #  topic 情報の読み込み
         topics = util.read_topic(self.topic_file)
@@ -135,7 +135,7 @@ class Env:
         #  edge情報の読み込み
         edges = util.read_edge(self.edge_file)
 
-        self.all_edge_opt = [Edge(e.id, e.x, e.y, e.volume, e.cpu_power, self.num_topic) for e in edges]
+        self.all_edge_opt = [Edge(e.id, e.x, e.y, e.volume, e.cpu_cycle, self.num_topic) for e in edges]
 
         #  topic 情報の読み込み
         topics = util.read_topic(self.topic_file)
@@ -234,7 +234,7 @@ class Env:
             block_index_y = int(edge.y / block_len_y)
                 
             storage_info[block_index_y][block_index_x] = (edge.max_volume - edge.total_used_volume)
-            cpu_info[block_index_y][block_index_x] = edge.cpu_power
+            cpu_info[block_index_y][block_index_x] = edge.cpu_cycle
             cpu_used_client[block_index_y][block_index_x] = sum(edge.used_publishers)
 
             for t in range(self.num_topic):
@@ -310,9 +310,9 @@ class Env:
                     edge.used_volume[t] = self.all_topic[t].volume
                 
                 if num_user != 0:
-                    edge.power_allocation = edge.cpu_power / num_user
+                    edge.power_allocation = edge.cpu_cycle / num_user
                 else:
-                    edge.power_allocation = edge.cpu_power
+                    edge.power_allocation = edge.cpu_cycle
 
             edge.cal_used_volume()
 
