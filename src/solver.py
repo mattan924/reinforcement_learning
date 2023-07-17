@@ -132,13 +132,13 @@ class Solver:
             for edge in self.all_edge:
                 distance = util.cal_distance(client.x, client.y, edge.x, edge.y)
                 distance = (int)(distance*100)
-                d[client.id][edge.id] = (distance/100)*self.gamma
+                d[client.id][int(edge.id)] = (distance/100)*self.gamma
         
         for edge1 in self.all_edge:
             for edge2 in self.all_edge:
                 distance = util.cal_distance(edge1.x, edge1.y, edge2.x, edge2.y)
                 distance = (int)(distance*100)
-                d_s[edge1.id][edge2.id] = (distance/100)*self.gamma
+                d_s[int(edge1.id)][int(edge2.id)] = (distance/100)*self.gamma
 
         return d, d_s
     
@@ -638,23 +638,37 @@ def calmyModeltime_y_fix(m, m2, n, x, y, z, d, d_s, num_user, all_topic, all_edg
     topic = all_topic[n]
     num_data = topic.volume/topic.data_size
 
+    compute_time = 0.0
+    penalty = 0.0
+    comunication_time = 0.0
+
     for l in range(len(all_edge)):
         time += d[m][l]*x[m][n][l]
+        comunication_time += d[m][l]*x[m][n][l]
 
     for l in range(len(all_edge)):
         if x[m][n][l] == 1:
             time_front = (x[m][n][l]*topic.require_cycle * num_data)
             time_back = (x[m][n][l]*z[l][n]*(num_user[l]/all_edge[l].cpu_cycle) + (1 - z[l][n])*x[m][n][l]/cloud_cycle)
             time += time_front*time_back
+            compute_time += time_front*time_back
 
     for l in range(len(all_edge)):
         time += 2*cloud_time*(1-z[l][n])*x[m][n][l]
+        penalty += 2*cloud_time*(1-z[l][n])*x[m][n][l]
+
 
     for l in range(len(all_edge)):
         for l2 in range(len(all_edge)):
             time += z[l][n]*d_s[l][l2]*x[m][n][l]*y[m2][n][l2]
+            comunication_time += z[l][n]*d_s[l][l2]*x[m][n][l]*y[m2][n][l2]
 
     for l2 in range(len(all_edge)):
         time += d[m2][l2]*y[m2][n][l2]
+        comunication_time += d[m2][l2]*y[m2][n][l2]
+
+    print(f"comunication_time = {comunication_time}")
+    print(f"compute_time = {compute_time}")
+    print(f"penalty = {penalty}")
 
     return time
