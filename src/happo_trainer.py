@@ -43,9 +43,6 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
     pretrain_iter = 10
 
-    #  標準エラー出力先の変更
-    #sys.stderr = open(output + "_err.log", 'w')
-
     if load_flag == False:
         with open(output + ".log", 'w') as f:
             pass
@@ -206,6 +203,3 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
     #  重みパラメータの保存
     agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter+1)
-
-    #  標準エラー出力先を戻す
-    sys.stderr = sys.__stderr__
