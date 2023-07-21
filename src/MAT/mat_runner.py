@@ -46,6 +46,7 @@ class MATRunner:
 
         #  環境のインスタンスの生成
         if learning_data_index_path is not None:
+            self.learning_data_index_path = learning_data_index_path
             self.env = Env(learning_data_index_path)
             self.num_agent = self.env.num_client
             self.num_topic = self.env.num_topic
@@ -79,7 +80,7 @@ class MATRunner:
     def warmup(self, agent_perm, topic_perm):
         obs = self.env.get_observation_mat(agent_perm, topic_perm, obs_size=27)
 
-        self.buffer.obs[0][self.batch] = obs.copy()
+        self.buffer.obs[0][self.batch] = obs.reshape(self.num_agent*self.num_topic, self.obs_dim).copy()
         self.buffer.agent_perm[0][self.batch] = np.array(agent_perm)
         self.buffer.topic_perm[0][self.batch] = np.array(topic_perm)
 
@@ -91,23 +92,47 @@ class MATRunner:
 
         value, action, action_log_prob = self.trainer.policy.get_actions(self.buffer.obs[step][batch])
 
+        #  value.shape is torch.Size([num_agent*num_topic, 1])
+        #  action.shape is torch.Size([num_agent*num_topic, 1])
+        #  action_log_prob.shape is torch.Size([num_agent_num_topic, 1])
+
         #  [self.envs, agents, dim]
         #  _t2n: tensor → numpy
-        #  np.split: n_rollout_threads の数に分割
-        values = np.array(np.split(_t2n(value), self.batch_size))
-        actions = np.array(np.split(_t2n(action), self.batch_size))
-        action_log_probs = np.array(np.split(_t2n(action_log_prob), self.batch_size))
-
-        print(f"values.shape = {values.shape}")
-        print(f"actions.shape = {actions.shape}")
-        print(f"action_log_probs.shape = {action_log_probs.shape}")
+        values = np.array(_t2n(value))
+        actions = np.array(_t2n(action)).reshape(self.num_agent, self.num_topic)
+        action_log_probs = np.array(_t2n(action_log_prob))
 
         return values, actions, action_log_probs
     
 
-    def insert(self, obs, rewards, values, actions, action_log_probs):
+    def insert(self, batch, obs, rewards, values, actions, action_log_probs):
 
-        self.buffer.insert(obs, actions, action_log_probs, values, rewards)
+        self.buffer.insert(batch, obs, actions, action_log_probs, values, rewards)
+
+    
+    @torch.no_grad()
+    def compute(self, batch):
+        """Calculate returns for the collected data."""
+        #  transformer を評価用にセット
+        self.trainer.prep_rollout()
+
+        next_values = self.trainer.policy.get_values(np.concatenate(self.buffer.obs[-1][batch]))
+            
+        #  _t2n: tensor から numpy への変換
+        next_values = np.array(_t2n(next_values))
+        
+        self.buffer.compute_returns(batch, next_values, self.trainer.value_normalizer)
+
+    
+    def train(self):
+        #  Transformer を train に設定
+        self.trainer.prep_training()
+
+        train_infos = self.trainer.train(self.buffer)
+ 
+        self.buffer.after_update()
+
+        return train_infos
 
     
     def random_perm(self):
@@ -130,7 +155,7 @@ class MATRunner:
             load_flag = False
 
         #  学習モデルの指定
-        agent = MultiAgentTransformer(self.obs_dim, self.N_action, self.batch_size, self.num_agent, self.device)
+        agent = MultiAgentTransformer(self.obs_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, self.device)
 
         if load_flag == True:
             agent.load_model(load_parameter_path, start_epi_itr)
@@ -152,50 +177,47 @@ class MATRunner:
 
             #  各エピソードにおける時間の推移
             for time in range(0, self.env.simulation_time, self.env.time_step):
-                print(f"epi_iter, time = {epi_iter}, {time}")
+                print(f"batch, epi_iter, time = {self.batch}, {epi_iter}, {time}")
 
                 step = int(time / self.env.time_step)
 
                 #  行動と確率分布の取得
                 values, actions, action_log_probs = self.collect(self.batch, step)
-                print(f"collect is OK")
 
                 # 報酬の受け取り
                 reward = self.env.step(actions, time)
                 reward_history.append(reward)
                 reward = -reward
 
-                print(f"step is OK")
-
                 #  状態の観測
+                #  ランダムな順にいつか改修
                 agent_perm, topic_perm = self.random_perm()
 
                 obs = self.env.get_observation_mat(agent_perm, topic_perm, obs_size=27)
 
-                print(f"get observation is OK")
-
                 self.insert(self.batch, obs, reward, values, actions, action_log_probs)
-                print(f"inser buffer is OK")
 
-            if self.batch == self.trainer.ppo_epoch-1:
+            self.compute(self.batch)
+
+            if self.batch == self.batch_size-1:
                 # 学習
-                agent.train(obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic)
+                train_info = self.train()
             
-            self.batch = (self.batch + 1) % self.trainer.ppo_epoch
+            self.batch = (self.batch + 1) % self.batch_size
 
             if epi_iter % 1 == 0:
                 #  ログの出力
-                #print(f"total_reward = {sum(reward_history)}")
+                print(f"total_reward = {sum(reward_history)}")
                 #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
                 with open(output + ".log", 'a') as f:
                     f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {-sum(reward_history)}\n")
 
             #  重みパラメータのバックアップ
-            if epi_iter % self.backup_iter == 0:
-                agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter)
+            if epi_iter % self.backup_itr == 0:
+                self.policy.save(self.result_dir + 'model_parameter', epi_iter)
 
         #  最適解の取り出し
-        df_index = pd.read_csv(learning_data_index_path, index_col=0)
+        df_index = pd.read_csv(self.learning_data_index_path, index_col=0)
         opt = df_index.at['data', 'opt']
 
         train_curve = read_train_curve(output + ".log")
@@ -209,4 +231,4 @@ class MATRunner:
         fig.savefig(output + ".png")
 
         #  重みパラメータの保存
-        agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter+1)
+        self.policy.save(self.result_dir + 'model_parameter', epi_iter+1)

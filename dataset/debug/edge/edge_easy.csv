@@ -1,4 +1,4 @@
-id,x,y,volume,cpu_power
+id,x,y,volume,cpu_cycle
 0,2,2,1,1.5
 1,6,2,1,1.5
 2,10,2,1,1.5

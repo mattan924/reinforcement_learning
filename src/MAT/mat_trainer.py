@@ -17,7 +17,7 @@ class MATTrainer:
         self.device = device
         self.tpdv = dict(dtype=torch.float32, device=device)
         self.policy = policy  #  transformer_policy の TransformerPolicy
-        self.num_agents = num_agents  #  6
+        self.num_agents = num_agents
 
         self.clip_param = 0.05
         self.ppo_epoch = 8
@@ -79,25 +79,15 @@ class MATTrainer:
         :return imp_weights: (torch.Tensor) 重要度サンプリングの重み。
         """
 
-        share_obs_batch, obs_batch, rnn_states_batch, rnn_states_critic_batch, actions_batch, \
-        value_preds_batch, return_batch, masks_batch, active_masks_batch, old_action_log_probs_batch, \
-        adv_targ, available_actions_batch = sample
+        obs_batch, actions_batch, value_preds_batch, return_batch,old_action_log_probs_batch, adv_targ = sample
 
         old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
         adv_targ = check(adv_targ).to(**self.tpdv)
         value_preds_batch = check(value_preds_batch).to(**self.tpdv)
         return_batch = check(return_batch).to(**self.tpdv)
-        active_masks_batch = check(active_masks_batch).to(**self.tpdv)
 
         # Reshape to do in a single forward pass for all steps
-        values, action_log_probs, dist_entropy = self.policy.evaluate_actions(share_obs_batch,
-                                                                              obs_batch, 
-                                                                              rnn_states_batch, 
-                                                                              rnn_states_critic_batch, 
-                                                                              actions_batch, 
-                                                                              masks_batch, 
-                                                                              available_actions_batch,
-                                                                              active_masks_batch)
+        values, action_log_probs, dist_entropy = self.policy.evaluate_actions(obs_batch, actions_batch)
         
         # actor update
         imp_weights = torch.exp(action_log_probs - old_action_log_probs_batch)
@@ -105,27 +95,17 @@ class MATTrainer:
         surr1 = imp_weights * adv_targ
         surr2 = torch.clamp(imp_weights, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
 
-        #  self._use_policy_active_masks is True
-        if self._use_policy_active_masks:
-            print(f"torch.min(surr1, surr2).shape = {torch.min(surr1, surr2).shape}")
-            policy_loss = ((-torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True) * active_masks_batch).sum()) / active_masks_batch.sum()
-        else:
-            policy_loss = -torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True).mean()
+        policy_loss = -torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True).mean()
 
         # critic update
-        value_loss = self.cal_value_loss(values, value_preds_batch, return_batch, active_masks_batch)
+        value_loss = self.cal_value_loss(values, value_preds_batch, return_batch)
 
         loss = policy_loss - dist_entropy * self.entropy_coef + value_loss * self.value_loss_coef
 
         self.policy.optimizer.zero_grad()
         loss.backward()
 
-        #  self._use_max_grad_norm is True
-        if self._use_max_grad_norm:
-            #  勾配クリッピング
-            grad_norm = nn.utils.clip_grad_norm_(self.policy.transformer.parameters(), self.max_grad_norm)
-        else:
-            grad_norm = get_gard_norm(self.policy.transformer.parameters())
+        grad_norm = nn.utils.clip_grad_norm_(self.policy.transformer.parameters(), self.max_grad_norm)
 
         self.policy.optimizer.step()
 
@@ -141,8 +121,6 @@ class MATTrainer:
         """
 
         advantages_copy = buffer.advantages.copy()
-        #  active_masks: (np.ndarray) エージェントが環境内でアクティブかデッドかを表します。
-        advantages_copy[buffer.active_masks[:-1] == 0.0] = np.nan
         
         #  np.nanmean, np.nanstd: nan を含む配列の平均、標準偏差を求める
         mean_advantages = np.nanmean(advantages_copy)

@@ -15,7 +15,7 @@ def init_(m, gain=0.01, activate=False):
 
 class SelfAttention(nn.Module):
 
-    def __init__(self, n_embd, n_head, n_agent, masked=False):
+    def __init__(self, n_embd, n_head, n_agent, n_topic, masked=False):
         super(SelfAttention, self).__init__()
 
         assert n_embd % n_head == 0
@@ -31,15 +31,15 @@ class SelfAttention(nn.Module):
 
         # if self.masked:
         # causal mask to ensure that attention is only applied to the left in the input sequence
-        self.register_buffer("mask", torch.tril(torch.ones(n_agent + 1, n_agent + 1)).view(1, 1, n_agent + 1, n_agent + 1))
+        self.register_buffer("mask", torch.tril(torch.ones(n_agent*n_topic + 1, n_agent*n_topic + 1)).view(1, 1, n_agent*n_topic + 1, n_agent*n_topic + 1))
 
         self.att_bp = None
 
     def forward(self, key, value, query):
         B, L, D = query.size()
-        #  B = 100 or 1
-        #  L = 6 (agent number ?)
-        #  D = 64 (埋め込み後の次元 ?)
+        #  B = 1
+        #  L = num_agent*num_topic
+        #  D = n_embd
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         k = self.key(key).view(B, L, self.n_head, D // self.n_head).transpose(1, 2)  # (B, nh, L, hs)
@@ -68,12 +68,12 @@ class SelfAttention(nn.Module):
 class EncodeBlock(nn.Module):
     """ an unassuming Transformer block """
 
-    def __init__(self, n_embd, n_head, n_agent):
+    def __init__(self, n_embd, n_head, n_agent, n_topic):
         super(EncodeBlock, self).__init__()
 
         self.ln1 = nn.LayerNorm(n_embd)
         self.ln2 = nn.LayerNorm(n_embd)
-        self.attn = SelfAttention(n_embd, n_head, n_agent, masked=False)
+        self.attn = SelfAttention(n_embd, n_head, n_agent, n_topic, masked=False)
         self.mlp = nn.Sequential(
             init_(nn.Linear(n_embd, 1 * n_embd), activate=True),
             nn.GELU(),
@@ -89,14 +89,14 @@ class EncodeBlock(nn.Module):
 class DecodeBlock(nn.Module):
     """ an unassuming Transformer block """
 
-    def __init__(self, n_embd, n_head, n_agent):
+    def __init__(self, n_embd, n_head, n_agent, n_topic):
         super(DecodeBlock, self).__init__()
 
         self.ln1 = nn.LayerNorm(n_embd)
         self.ln2 = nn.LayerNorm(n_embd)
         self.ln3 = nn.LayerNorm(n_embd)
-        self.attn1 = SelfAttention(n_embd, n_head, n_agent, masked=True)
-        self.attn2 = SelfAttention(n_embd, n_head, n_agent, masked=True)
+        self.attn1 = SelfAttention(n_embd, n_head, n_agent, n_topic, masked=True)
+        self.attn2 = SelfAttention(n_embd, n_head, n_agent, n_topic, masked=True)
         self.mlp = nn.Sequential(
             init_(nn.Linear(n_embd, 1 * n_embd), activate=True),
             nn.GELU(),
@@ -112,7 +112,7 @@ class DecodeBlock(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, obs_dim, n_block, n_embd, n_head, n_agent):
+    def __init__(self, obs_dim, n_block, n_embd, n_head, n_agent, n_topic):
         super(Encoder, self).__init__()
 
         self.obs_dim = obs_dim  #  172
@@ -125,13 +125,12 @@ class Encoder(nn.Module):
         self.obs_encoder = nn.Sequential(nn.LayerNorm(obs_dim), init_(nn.Linear(obs_dim, n_embd), activate=True), nn.GELU())
 
         self.ln = nn.LayerNorm(n_embd)
-        self.blocks = nn.Sequential(*[EncodeBlock(n_embd, n_head, n_agent) for _ in range(n_block)])
+        self.blocks = nn.Sequential(*[EncodeBlock(n_embd, n_head, n_agent, n_topic) for _ in range(n_block)])
         self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(), nn.LayerNorm(n_embd),
                                   init_(nn.Linear(n_embd, 1)))
         
 
     def forward(self, obs):
-        # obs: (batch, n_agent, obs_dim)
 
         obs_embeddings = self.obs_encoder(obs)
         x = obs_embeddings
@@ -144,7 +143,7 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, obs_dim, action_dim, n_block, n_embd, n_head, n_agent):
+    def __init__(self, obs_dim, action_dim, n_block, n_embd, n_head, n_agent, n_topic):
         super(Decoder, self).__init__()
 
         self.action_dim = action_dim
@@ -155,24 +154,22 @@ class Decoder(nn.Module):
         
         self.obs_encoder = nn.Sequential(nn.LayerNorm(obs_dim), init_(nn.Linear(obs_dim, n_embd), activate=True), nn.GELU())
         self.ln = nn.LayerNorm(n_embd)
-        self.blocks = nn.Sequential(*[DecodeBlock(n_embd, n_head, n_agent) for _ in range(n_block)])
+        self.blocks = nn.Sequential(*[DecodeBlock(n_embd, n_head, n_agent, n_topic) for _ in range(n_block)])
         self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(), nn.LayerNorm(n_embd),
                                       init_(nn.Linear(n_embd, action_dim)))
 
 
-    # state, action, and return
+    #  state, action, and return
     def forward(self, action, obs_rep):
-        # action: (batch, n_agent, action_dim), one-hot/logits?
-        # obs_rep: (batch, n_agent, n_embd)
-        #  action = torch.Size([Batch, num_agent, action_dim + 1])
 
         action_embeddings = self.action_encoder(action)
+        #  action_embeddings.shape = torch.Size([1, num_agent*num_topic, n_embd])
 
-        #  action_embeddings.shape = torch.Size([Batch, num_agent, n_embd=64])
         x = self.ln(action_embeddings)
-        #  x.shape = torch.Size([Batch, num_aget, n_embd=64])
 
         for block in self.blocks:
+            #  x.shape = torch.Size([1, num_agent*num_topic, n_embd])
+            #  obs_rep.shape = torch.Size([1, num_agent*num_topic, n_embd])
             x = block(x, obs_rep)
 
         #  x.shape = torch.Size([Batch, num_agent, n_embd=64])
@@ -201,13 +198,13 @@ class MultiAgentTransformer(nn.Module):
         self.n_embd = 128
         self.n_head = 1
 
-        self.encoder = Encoder(obs_dim, self.n_block, self.n_embd, self.n_head, n_agent)
-        self.decoder = Decoder(obs_dim, action_dim, self.n_block, self.n_embd, self.n_head, n_agent)
+        self.encoder = Encoder(obs_dim, self.n_block, self.n_embd, self.n_head, n_agent, n_topic)
+        self.decoder = Decoder(obs_dim, action_dim, self.n_block, self.n_embd, self.n_head, n_agent, n_topic)
 
         self.to(device)
 
 
-    def forward(self, obs, action, available_actions=None):
+    def forward(self, obs, action):
         # obs: (batch, n_agent, obs_dim)
         # action: (batch, n_agent, 1)
         # available_actions: (batch, n_agent, act_dim)
@@ -215,13 +212,10 @@ class MultiAgentTransformer(nn.Module):
         obs = check(obs).to(**self.tpdv)
         action = check(action).to(**self.tpdv)
 
-        if available_actions is not None:
-            available_actions = check(available_actions).to(**self.tpdv)
-
         v_loc, obs_rep = self.encoder(obs)
 
         action = action.long()
-        action_log, entropy = self.discrete_parallel_act(self.decoder, obs_rep, action, self.batch_size, self.n_agent, self.action_dim, self.tpdv, available_actions)
+        action_log, entropy = self.discrete_parallel_act(obs_rep, action)
 
         return action_log, v_loc, entropy
 
@@ -230,29 +224,27 @@ class MultiAgentTransformer(nn.Module):
         #  torch.float32, cpu へ変換
         obs = check(obs).to(**self.tpdv)
 
-        print(f"obs.shape = {obs.shape}")
-
         #  obs を Encoder を用いてエンコード
         #  obs.shape = torch.Size([1, num_agents*num_topic, obs_dim=2255])
         v_loc, obs_rep = self.encoder(obs)
         #  v_loc.shape = torch.Size([1, num_agents*num_topic, 1])
         #  obs_rep = torch.Size([1, num_agents*num_topic, n_embd])
         
-        output_action, output_action_log = self.discrete_autoregreesive_act(self.decoder, obs_rep, deterministic=deterministic)
+        output_action, output_action_log = self.discrete_autoregreesive_act(obs_rep, deterministic=deterministic)
 
         return output_action, output_action_log, v_loc
 
 
-    def get_values(self, state, obs):
+    def get_values(self, obs):
 
         obs = check(obs).to(**self.tpdv)
 
-        v_tot, obs_rep = self.encoder(state, obs)
+        v_tot, obs_rep = self.encoder(obs)
         
         return v_tot
     
 
-    def discrete_autoregreesive_act(self, decoder, obs_rep, deterministic=False):
+    def discrete_autoregreesive_act(self, obs_rep, deterministic=False):
         batch_dim = obs_rep.shape[0]
 
         shifted_action = torch.zeros((batch_dim, self.n_agent*self.n_topic, self.action_dim + 1)).to(**self.tpdv)
@@ -264,10 +256,11 @@ class MultiAgentTransformer(nn.Module):
         for i in range(self.n_agent*self.n_topic):
             #  decoder の出力から agent i のものを取り出す
             #  shifted_action 自分より前の agent の行動の onehot_vector が入っている
-           
+
+            #  ここより下のデバッグ!!!!
             #  shifted_action.shape = torch.Size([1, num_agent*num_topic, N_action+1])
             #  obs_rep.shape = torch.Size([1, num_agent*num_topic, n_embd])
-            logit = decoder(shifted_action, obs_rep)[:, i, :]
+            logit = self.decoder(shifted_action, obs_rep)[:, i, :]
 
             distri = Categorical(logits=logit)
 
@@ -288,21 +281,17 @@ class MultiAgentTransformer(nn.Module):
 
 
     #  まとめて行動を選択
-    def discrete_parallel_act(self, decoder, obs_rep, action, batch_size, n_agent, action_dim, tpdv, available_actions=None):
+    def discrete_parallel_act(self, obs_rep, action):
         
         #  action_dim = 14
         #  action.shape = torch.Size([rollout_threads*episode_length, num_agent])
-        one_hot_action = F.one_hot(action.squeeze(-1), num_classes=action_dim)  # (batch, n_agent, action_dim)
+        one_hot_action = F.one_hot(action.squeeze(-1), num_classes=self.action_dim)  # (batch, n_agent, action_dim)
         #  one_hot_action.shape = torch.Size([rollout_threads*episode_length, num_agent, action_dim])
 
-        shifted_action = torch.zeros((batch_size, n_agent, action_dim + 1)).to(**tpdv)
+        shifted_action = torch.zeros((self.batch_size, self.n_agent*self.n_topic, self.action_dim + 1)).to(**self.tpdv)
         shifted_action[:, 0, 0] = 1
         shifted_action[:, 1:, 1:] = one_hot_action[:, :-1, :]
-        logit = decoder(shifted_action, obs_rep)
-
-        #  available_actions is not None
-        if available_actions is not None:
-            logit[available_actions == 0] = -1e10
+        logit = self.decoder(shifted_action, obs_rep)
 
         distri = Categorical(logits=logit)
         action_log = distri.log_prob(action.squeeze(-1)).unsqueeze(-1)

@@ -396,7 +396,7 @@ class Env:
 
         for t in range(self.num_topic):
             for publisher in self.publishers[t]:
-                publisher.pub_edge[t] = actions[t][publisher.id]
+                publisher.pub_edge[t] = actions[publisher.id][t]
 
                 edge = self.all_edge[int(publisher.pub_edge[t])]
                 edge.used_publishers[t] += 1

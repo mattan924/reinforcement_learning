@@ -76,78 +76,43 @@ class TransformerPolicy:
 
         return values, actions, action_log_probs
 
-    def get_values(self, cent_obs, obs, rnn_states_critic, masks, available_actions=None):
+    def get_values(self, obs):
         """
         値関数の予測値を取得します。
-        :param cent_obs (np.ndarray): 評論家への集中入力。
-        :param rnn_states_critic: (np.ndarray)criticがRNNの場合、criticのRNN状態。
-        :param masks: (np.ndarray)RNNの状態をリセットするポイントを示す。
-
-        :return values: (torch.Tensor)予測値の関数。
         """
 
-        cent_obs = cent_obs.reshape(-1, self.num_agents, self.share_obs_dim)
-        obs = obs.reshape(-1, self.num_agents, self.obs_dim)
-        if available_actions is not None:
-            available_actions = available_actions.reshape(-1, self.num_agents, self.act_dim)
+        obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
+        #  obs.shape = (1, num_agent*num_topic, obs_dim=2255)
 
-        # cent_obs.shape = (n_rollout_threads, num_agent, share_obs_dim=213)
-        # obs.shape = (n_rollout_threads, num_agent, obs_dim=172)
-        # available_actions.shape = (n_rollout_threads, num_agent, action_dim=14)
-        values = self.transformer.get_values(cent_obs, obs, available_actions)
-        # values.shape = torch.Size([n_rollout_threads, num_agent, 1])
+        values = self.transformer.get_values(obs)
 
         values = values.view(-1, 1)
-        # values.shape = torch.Size([n_rollout_threads*num_agent, 1])
+        #  values.shape = torch.Size([num_agent*num_topic, 1])
 
         return values
     
 
-    def evaluate_actions(self, cent_obs, obs, rnn_states_actor, rnn_states_critic, actions, masks, available_actions=None, active_masks=None):
+    def evaluate_actions(self, obs, actions):
         """
         アクタ更新のためのアクションログ確率 / エントロピー / value関数予測を取得します。
-        :param cent_obs (np.ndarray): 評論家への集中入力．
         :param obs (np.ndarray): アクタへのローカルエージェント入力．
-        :param rnn_states_actor: (np.ndarray) アクターがRNNの場合、アクターのRNN状態。
-        :param rnn_states_critic: (np.ndarray)criticがRNNの場合、criticのRNN状態。
         :param actions: (np.ndarray) 対数確率とエントロピーを計算するアクション。
-        :param masks: (np.ndarray)RNNの状態をリセットするポイントを示す。
-        :param available_actions: (np.ndarray)エージェントが利用可能なアクションを示す。 (Noneの場合、全てのアクションが利用可能)
-        :param active_masks: (torch.Tensor)エージェントがアクティブかデッドかを示す。
 
         :return values: (torch.Tensor) 値関数の予測値。
         :return action_log_probs: (torch.Tensor) 入力アクションのログ確率。
         :return dist_entropy: (torch.Tensor) 与えられた入力に対するアクションの分布エントロピー。
         """
 
-        cent_obs = cent_obs.reshape(-1, self.num_agents, self.share_obs_dim)
-        obs = obs.reshape(-1, self.num_agents, self.obs_dim)
-        actions = actions.reshape(-1, self.num_agents, self.act_num)
+        obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
+        actions = actions.reshape(-1, self.num_agents*self.num_topic, self.act_num)
 
-        #  cent_obs.shape = (episode_length*n_rollout_threads, num_agent, share_obs_dim=213)
-        #  obs.shape = (episode_length*n_rollout_threads, num_agent, obs_dim=172)
-        #  actions.shape = (episode_length*n_rollout_threads, num_agent, 1)
-
-        #  available_action is not None
-        if available_actions is not None:
-            available_actions = available_actions.reshape(-1, self.num_agents, self.act_dim)
-
-        action_log_probs, values, entropy = self.transformer(cent_obs, obs, actions, available_actions)
+        action_log_probs, values, entropy = self.transformer(obs, actions)
 
         action_log_probs = action_log_probs.view(-1, self.act_num)
         values = values.view(-1, 1)
         entropy = entropy.view(-1, self.act_num)
 
-        #  action_log_probs.shape = torch.Size([episode_length*n_rollout_threads*num_agent, 1])
-        #  values.shape = torch.Size([episode_length*n_rollout_threads*num_agent, 1])
-        #  entropy.shape = torch.Size([episode_length*n_rollout_threads*num_agent, 1])
-
-        #  self._use_policy_active_masks is True
-        #  active_masks is not None
-        if self._use_policy_active_masks and active_masks is not None:
-            entropy = (entropy*active_masks).sum()/active_masks.sum()
-        else:
-            entropy = entropy.mean()
+        entropy = entropy.mean()
 
         return values, action_log_probs, entropy
 
