@@ -50,9 +50,6 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device,
     #  何エピソードごとにターゲットネットワークを更新するか
     target_net_iter = 3
 
-    #  標準エラー出力先の変更
-    sys.stderr = open(output + "_err.log", 'w')
-
     if load_flag == False:
         with open(output + ".log", 'w') as f:
             pass
@@ -138,9 +135,6 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device,
     #  重みパラメータの保存
     agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter+1)
 
-    #  標準エラー出力先を戻す
-    sys.stderr = sys.__stderr__
-
 
 def train_loop_dataset(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_dir, test_data_index_dir, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
@@ -171,9 +165,6 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, backup_iter, device
 
     #  何エピソードごとにテストを実行するか
     test_iter = 100
-
-    #  標準エラー出力先の変更
-    sys.stderr = open(output + "_err.log", 'w')
 
     if load_flag == False:
         with open(output + ".log", 'w') as f:
@@ -297,6 +288,3 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, backup_iter, device
 
     #  重みパラメータの保存
     agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter+1)
-
-    #  標準エラー出力先を戻す
-    sys.stderr = sys.__stderr__

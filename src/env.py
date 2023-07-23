@@ -166,10 +166,9 @@ class Env:
         
         
     #  状態の観測
-    def get_observation(self, debug=False):
+    def get_observation(self, obs_size=81, debug=False):
         obs_channel = 9
         obs_topic_channel = 3
-        obs_size = 81
 
         #  観測値
         obs = np.zeros((self.num_client, self.num_topic, obs_channel, obs_size, obs_size))
@@ -272,6 +271,119 @@ class Env:
             print(f"topic.volume = {np.amax(obs_topic[:, 2])}")
 
         return obs, obs_topic
+    
+
+    #  状態の観測
+    def get_observation_mat(self, agent_perm, topic_perm, obs_size=81, debug=False):
+        channel_dim = obs_size*obs_size
+
+        #  観測値
+        obs = np.zeros((self.num_client, self.num_topic, obs_size*obs_size*3 + 9*5 + 23))
+        #  0~1      : クライアントの位置 (x, y)
+        #  1~730    : あるトピックの publisher の分布
+        #  731~1459 : あるトピックの subscriber の分布
+        #  1460~2188: クライアントの分布
+        #  2189~2206: edge の位置 (x, y)*9
+        #  2208~2215: あるトピックが使用しているストレージ状況
+        #  2216~2224: ストレージの空き状況
+        #  2225~2233: CPU の最大クロック数
+        #  2234~2242: あるトピックの publisher がどのエッジを何人使用しているか
+        #  2243~2251: 各エッジを使用中ののクライアントの数
+        #  2252     : あるトピックの処理に必要なクロック数
+        #  2253     : 1メッセージあたりのデータサイズ
+        #  2254     : ストレージサイズ
+
+        block_len_x = (self.max_x-self.min_x)/obs_size
+        block_len_y = (self.max_y-self.min_y)/obs_size
+
+        #  各クライアントの位置
+        position_info_client = np.zeros((self.num_client, 2))
+        position_info_edge = np.zeros((self.num_edge*2))
+        #  クライアント全体の分布
+        total_distribution = np.zeros((channel_dim))
+        #  ある topic の publisher/subscriber の分布
+        publisher_distribution = np.zeros((self.num_topic, channel_dim))
+        subscriber_distribution = np.zeros((self.num_topic, channel_dim))
+
+        #  ある topic が使用しているストレージ状況
+        topic_storage_info = np.zeros((self.num_topic, self.num_edge))
+        #  ストレージの空き状況
+        storage_info = np.zeros((self.num_edge))
+        #  cpu の最大クロック数
+        cpu_info = np.zeros((self.num_edge))
+        #  使用中のクライアントの数
+        topic_cpu_used_client = np.zeros((self.num_topic, self.num_edge))
+        cpu_used_client = np.zeros((self.num_edge))
+
+        for client in self.clients:
+            block_index_x = int(client.x / block_len_x)
+            block_index_y = int(client.y / block_len_y)
+
+            if block_index_x == obs_size:
+                block_index_x = obs_size-1
+            if block_index_y == obs_size:
+                block_index_y = obs_size-1
+
+            position_info_client[client.id][0] = client.x
+            position_info_client[client.id][1] = client.y
+
+            for t in range(self.num_topic):
+                if client.pub_topic[t] == 1:
+                    publisher_distribution[t][block_index_y*obs_size + block_index_x] += 1
+
+                if client.sub_topic[t] == 1:
+                    subscriber_distribution[t][block_index_y*obs_size + block_index_x] += 1
+
+            total_distribution[block_index_y*obs_size + block_index_x] += 1
+
+        for edge in self.all_edge:
+            edge_id = int(edge.id)
+            position_info_edge[edge_id*2] = edge.x
+            position_info_edge[edge_id*2 + 1] = edge.y
+                
+            storage_info[edge_id] = (edge.max_volume - edge.total_used_volume)
+            cpu_info[edge_id] = edge.cpu_cycle
+            cpu_used_client[edge_id] = sum(edge.used_publishers)
+
+            for t in range(self.num_topic):
+                topic_storage_info[t][edge_id] = edge.used_volume[t]
+                topic_cpu_used_client[t][edge_id] = edge.used_publishers[t]
+
+
+        obs[:, :, 0:2] = position_info_client[:, np.newaxis]
+        obs[:, :, 2:2+channel_dim] = publisher_distribution[np.newaxis]
+        obs[:, :, 2+channel_dim:2+channel_dim*2] = subscriber_distribution[np.newaxis]
+        obs[:, :, 2+channel_dim*2:2+channel_dim*3] = total_distribution[np.newaxis, np.newaxis]
+        obs[:, :, 2+channel_dim*3:2+channel_dim*3 + 2*9] = position_info_edge[np.newaxis, np.newaxis]
+        obs[:, :, 2+channel_dim*3 + 2*9:20+channel_dim*3 + 9] = topic_storage_info[np.newaxis]
+        obs[:, :, 20+channel_dim*3 + 9:29+channel_dim*3 + 9] = storage_info[np.newaxis, np.newaxis]
+        obs[:, :, 29+channel_dim*3 + 9:38+channel_dim*3 + 9] = cpu_info[np.newaxis, np.newaxis]
+        obs[:, :, 38+channel_dim*3 + 9:47+channel_dim*3 + 9] = topic_cpu_used_client[np.newaxis]
+        obs[:, :, 47+channel_dim*3 + 9:56+channel_dim*3 + 9] = cpu_used_client[np.newaxis, np.newaxis]
+
+
+        for topic in self.all_topic:
+            obs[:, topic.id, -3] = topic.require_cycle
+            obs[:, topic.id, -2] = topic.data_size
+            obs[:, topic.id, -1] = topic.volume
+            
+
+        if debug:
+            print(f"position_info = {np.amax(position_info_client)}")
+            print(f"publisher_distribution = {np.amax(publisher_distribution)}")
+            print(f"subscriber_distribution = {np.amax(subscriber_distribution)}")
+            print(f"total_distribution = {np.amax(total_distribution)}")
+            print(f"topic_storage_info = {np.amax(topic_storage_info)}")
+            print(f"storage_info = {np.amax(storage_info)}")
+            print(f"cpu_info = {np.amax(cpu_info)}")
+            print(f"topic_cpu_used_client = {np.amax(topic_cpu_used_client)}")
+            print(f"cpu_used_client = {np.amax(cpu_used_client)}")
+
+            print(f"topic.require_cycle  = {np.amax(obs[0, :, 0])}")
+            print(f"topic.data_size = {np.amax(obs[0, :, 1])}")
+            print(f"topic.volume = {np.amax(obs[0, :, 2])}")
+
+        return obs
         
  
     #  環境を進める
@@ -284,7 +396,7 @@ class Env:
 
         for t in range(self.num_topic):
             for publisher in self.publishers[t]:
-                publisher.pub_edge[t] = actions[t][publisher.id]
+                publisher.pub_edge[t] = actions[publisher.id][t]
 
                 edge = self.all_edge[int(publisher.pub_edge[t])]
                 edge.used_publishers[t] += 1
