@@ -2,7 +2,7 @@ import happo_trainer
 import coma_trainer
 
 
-learning_data_index_path = "../dataset/debug/index/index_easy.csv"
+learning_data_index_path = "../dataset/debug/index/index_hard.csv"
 #learning_data_index_dir = "../dataset/data_set_hard/index/"
 
 #test_data_index_dir = "../dataset/test_data_set_hard/index/"
@@ -23,7 +23,7 @@ backup_iter = 100
 
 device = "cuda:0"
 result_dir = "../result/temporary/debug/"
-file_name = "easy_coma"
+file_name = "hard_coma"
 output_base = result_dir + file_name
 actor_weight_base = "actor_weight"
 critic_weight_base = "critic_weight"
