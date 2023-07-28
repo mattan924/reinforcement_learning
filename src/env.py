@@ -279,10 +279,10 @@ class Env:
 
         #  観測値
         obs = np.zeros((self.num_client, self.num_topic, obs_size*obs_size*3 + 9*5 + 23))
-        #  0~1      : クライアントの位置 (x, y)
-        #  1~730    : あるトピックの publisher の分布
-        #  731~1459 : あるトピックの subscriber の分布
-        #  1460~2188: クライアントの分布
+        #  0~728    : あるトピックの publisher の分布
+        #  729~14557: あるトピックの subscriber の分布
+        #  1458~2186: クライアントの分布
+        #  2187~2188: クライアントの位置 (x, y)
         #  2189~2206: edge の位置 (x, y)*9
         #  2208~2215: あるトピックが使用しているストレージ状況
         #  2216~2224: ストレージの空き状況
@@ -315,7 +315,9 @@ class Env:
         topic_cpu_used_client = np.zeros((self.num_topic, self.num_edge))
         cpu_used_client = np.zeros((self.num_edge))
 
-        for client in self.clients:
+        for i in range(self.num_client):
+            client_id = agent_perm[i]
+            client = self.clients[client_id]
             block_index_x = int(client.x / block_len_x)
             block_index_y = int(client.y / block_len_y)
 
@@ -324,14 +326,15 @@ class Env:
             if block_index_y == obs_size:
                 block_index_y = obs_size-1
 
-            position_info_client[client.id][0] = client.x
-            position_info_client[client.id][1] = client.y
+            position_info_client[i][0] = client.x
+            position_info_client[i][1] = client.y
 
             for t in range(self.num_topic):
-                if client.pub_topic[t] == 1:
+                topic_id = topic_perm[t]
+                if client.pub_topic[topic_id] == 1:
                     publisher_distribution[t][block_index_y*obs_size + block_index_x] += 1
 
-                if client.sub_topic[t] == 1:
+                if client.sub_topic[topic_id] == 1:
                     subscriber_distribution[t][block_index_y*obs_size + block_index_x] += 1
 
             total_distribution[block_index_y*obs_size + block_index_x] += 1
@@ -346,14 +349,15 @@ class Env:
             cpu_used_client[edge_id] = sum(edge.used_publishers)
 
             for t in range(self.num_topic):
-                topic_storage_info[t][edge_id] = edge.used_volume[t]
-                topic_cpu_used_client[t][edge_id] = edge.used_publishers[t]
+                topic_id = topic_perm[t]
+                topic_storage_info[t][edge_id] = edge.used_volume[topic_id]
+                topic_cpu_used_client[t][edge_id] = edge.used_publishers[topic_id]
 
 
-        obs[:, :, 0:2] = position_info_client[:, np.newaxis]
-        obs[:, :, 2:2+channel_dim] = publisher_distribution[np.newaxis]
-        obs[:, :, 2+channel_dim:2+channel_dim*2] = subscriber_distribution[np.newaxis]
-        obs[:, :, 2+channel_dim*2:2+channel_dim*3] = total_distribution[np.newaxis, np.newaxis]
+        obs[:, :, 0:channel_dim] = publisher_distribution[np.newaxis]
+        obs[:, :, channel_dim:channel_dim*2] = subscriber_distribution[np.newaxis]
+        obs[:, :, channel_dim*2:channel_dim*3] = total_distribution[np.newaxis, np.newaxis]
+        obs[:, :, channel_dim*3:channel_dim*3+2] = position_info_client[:, np.newaxis]
         obs[:, :, 2+channel_dim*3:2+channel_dim*3 + 2*9] = position_info_edge[np.newaxis, np.newaxis]
         obs[:, :, 2+channel_dim*3 + 2*9:20+channel_dim*3 + 9] = topic_storage_info[np.newaxis]
         obs[:, :, 20+channel_dim*3 + 9:29+channel_dim*3 + 9] = storage_info[np.newaxis, np.newaxis]
@@ -362,10 +366,12 @@ class Env:
         obs[:, :, 47+channel_dim*3 + 9:56+channel_dim*3 + 9] = cpu_used_client[np.newaxis, np.newaxis]
 
 
-        for topic in self.all_topic:
-            obs[:, topic.id, -3] = topic.require_cycle
-            obs[:, topic.id, -2] = topic.data_size
-            obs[:, topic.id, -1] = topic.volume
+        for t in range(self.num_topic):
+            topic_id = topic_perm[t]
+            topic = self.all_topic[topic_id]
+            obs[:, t, -3] = topic.require_cycle * 1e5
+            obs[:, t, -2] = topic.data_size * 1e5
+            obs[:, t, -1] = topic.volume * 1e2
             
 
         if debug:
@@ -384,10 +390,32 @@ class Env:
             print(f"topic.volume = {np.amax(obs[0, :, 2])}")
 
         return obs
-        
+    
+
+    def get_near_action(self, agent_perm, topic_perm):
+        near_actions = np.zeros((1, self.num_client*self.num_topic, 1))
+
+        for i in range(self.num_client):
+            client_id = agent_perm[i]
+            client = self.clients[client_id]
+
+            min_idx = -1
+            min_dis = 100000
+            for edge in self.all_edge:
+                dis = self.cal_distance(client.x, client.y, edge.x, edge.y)
+
+                if dis < min_dis:
+                    min_idx = edge.id
+                    min_dis = dis
+
+            for t in range(self.num_topic):
+                near_actions[0][i*self.num_topic + t] = min_idx
+
+        return near_actions
+
  
     #  環境を進める
-    def step(self, actions, time):
+    def step(self, actions, agent_perm, topic_perm, time):
         for edge in self.all_edge:
             edge.used_publishers = np.zeros(self.num_topic)
 
@@ -395,13 +423,16 @@ class Env:
         block_len_y = (self.max_y-self.min_y)/3
 
         for t in range(self.num_topic):
-            for publisher in self.publishers[t]:
-                publisher.pub_edge[t] = actions[publisher.id][t]
+            topic_id = topic_perm[t]
 
-                edge = self.all_edge[int(publisher.pub_edge[t])]
-                edge.used_publishers[t] += 1
+            for publisher in self.publishers[topic_id]:
+                agent_idx = agent_perm.index(publisher.id)
+                publisher.pub_edge[topic_id] = actions[agent_idx][topic_id]
 
-            for subscriber in self.subscribers[t]:
+                edge = self.all_edge[int(publisher.pub_edge[topic_id])]
+                edge.used_publishers[topic_id] += 1
+
+            for subscriber in self.subscribers[topic_id]:
                 block_index_x = int(subscriber.x / block_len_x)
                 block_index_y = int(subscriber.y / block_len_y)
 
@@ -410,7 +441,7 @@ class Env:
                 if block_index_y == 3:
                     block_index_y = 2
 
-                subscriber.sub_edge[t] = block_index_y*3+block_index_x
+                subscriber.sub_edge[topic_id] = block_index_y*3+block_index_x
 
         for edge in self.all_edge:
             edge.used_volume = np.zeros(self.num_topic)
@@ -418,8 +449,10 @@ class Env:
             num_user = edge.used_publishers.sum()
 
             for t in range(self.num_topic):
-                if edge.used_publishers[t] > 0:
-                    edge.used_volume[t] = self.all_topic[t].volume
+                topic_id = topic_perm[t]
+
+                if edge.used_publishers[topic_id] > 0:
+                    edge.used_volume[topic_id] = self.all_topic[topic_id].volume
                 
                 if num_user != 0:
                     edge.power_allocation = edge.cpu_cycle / num_user

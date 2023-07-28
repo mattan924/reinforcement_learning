@@ -16,7 +16,7 @@ class TransformerPolicy:
     param device: (torch.device) 実行するデバイスを指定します（cpu/gpu）。
     """
 
-    def __init__(self, obs_dim, act_dim, batch_size, num_agents, num_topic, device=torch.device("cpu")):
+    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, num_agents, num_topic, device=torch.device("cpu")):
         self.device = device
         self.lr = 0.0005
         self.opti_eps = 1e-05
@@ -24,6 +24,8 @@ class TransformerPolicy:
         self._use_policy_active_masks = True
 
         self.obs_dim = obs_dim
+        self.obs_distri_dim = obs_distri_dim
+        self.obs_info_dim = obs_info_dim
 
         self.act_dim = act_dim
         self.act_num = 1
@@ -39,13 +41,13 @@ class TransformerPolicy:
         self.tpdv = dict(dtype=torch.float32, device=device)
         
         #  MAT インスタンスの生成
-        self.transformer = MAT(self.obs_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic,device=device)
+        self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, device=device)
 
 
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
 
 
-    def get_actions(self, obs, deterministic=False):
+    def get_actions(self, obs, near_action, deterministic=False):
         """
         与えられた入力に対するアクションと値関数の予測を計算します。
         param obs (np.ndarray): actor へのローカルエージェント入力．
@@ -60,7 +62,7 @@ class TransformerPolicy:
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
         #  obs.shape = (1, num_agent*num_topic, obs_dim=2255)
 
-        actions, action_log_probs, values = self.transformer.get_actions(obs, deterministic)
+        actions, action_log_probs, action_distribution, values = self.transformer.get_actions(obs, near_action, deterministic)
         
         #  actions.shape = torch.Size([n_rollout_threads, num_agent, 1])
         #  actions_log_probs = torch.Size([n_rollout_threads, num_agent, 1])
@@ -74,7 +76,7 @@ class TransformerPolicy:
         #  actions_log_probs = torch.Size([n_rollout_threads*num_agent, 1])
         #  values.shape = torch.Size([n_rollout_threads*num_agent, 1])
 
-        return values, actions, action_log_probs
+        return values, actions, action_log_probs, action_distribution
 
     def get_values(self, obs):
         """
@@ -139,8 +141,8 @@ class TransformerPolicy:
 
         return actions, rnn_states_actor
 
-    def save(self, save_dir, episode):
-        torch.save(self.transformer.state_dict(), str(save_dir) + "/transformer_" + str(episode) + ".pt")
+    def save(self, save_dir, transformer_weight, episode):
+        torch.save(self.transformer.state_dict(), str(save_dir) + "/" + transformer_weight + "_" + str(episode) + ".pt")
 
     def restore(self, model_dir):
         transformer_state_dict = torch.load(model_dir)
