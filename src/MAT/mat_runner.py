@@ -147,7 +147,7 @@ class MATRunner:
         return agent_perm, topic_perm
     
 
-    def train_loop_single(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
+    def train_single_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
 
         if load_parameter_path is not None:
             self.policy.restore(load_parameter_path)
