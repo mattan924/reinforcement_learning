@@ -20,7 +20,7 @@ class MATTrainer:
         self.num_agents = num_agents
 
         self.clip_param = 0.05
-        self.ppo_epoch = 8
+        self.ppo_epoch = 16
         self.num_mini_batch = 1
         self.data_chunk_length = 10
         self.value_loss_coef = 1
@@ -79,7 +79,7 @@ class MATTrainer:
         :return imp_weights: (torch.Tensor) 重要度サンプリングの重み。
         """
 
-        obs_batch, actions_batch, value_preds_batch, return_batch,old_action_log_probs_batch, adv_targ = sample
+        obs_batch, actions_batch, value_preds_batch, return_batch,old_action_log_probs_batch, adv_targ, mask_batch = sample
 
         old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
         adv_targ = check(adv_targ).to(**self.tpdv)
@@ -87,18 +87,20 @@ class MATTrainer:
         return_batch = check(return_batch).to(**self.tpdv)
 
         # Reshape to do in a single forward pass for all steps
-        values, action_log_probs, dist_entropy = self.policy.evaluate_actions(obs_batch, actions_batch)
+        values, action_log_probs, dist_entropy = self.policy.evaluate_actions(obs_batch, actions_batch, mask_batch)
+
+        mask_batch = mask_batch.reshape(-1)
         
         # actor update
-        imp_weights = torch.exp(action_log_probs - old_action_log_probs_batch)
+        imp_weights = torch.exp(action_log_probs - old_action_log_probs_batch[mask_batch])
 
-        surr1 = imp_weights * adv_targ
-        surr2 = torch.clamp(imp_weights, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+        surr1 = imp_weights * adv_targ[mask_batch]
+        surr2 = torch.clamp(imp_weights, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ[mask_batch]
 
         policy_loss = -torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True).mean()
 
         # critic update
-        value_loss = self.cal_value_loss(values, value_preds_batch, return_batch)
+        value_loss = self.cal_value_loss(values, value_preds_batch[mask_batch], return_batch[mask_batch])
 
         loss = policy_loss - dist_entropy * self.entropy_coef + value_loss * self.value_loss_coef
 
@@ -121,10 +123,11 @@ class MATTrainer:
         """
 
         advantages_copy = buffer.advantages.copy()
+        mask = buffer.mask[:-1].copy()
         
         #  np.nanmean, np.nanstd: nan を含む配列の平均、標準偏差を求める
-        mean_advantages = np.nanmean(advantages_copy)
-        std_advantages = np.nanstd(advantages_copy)
+        mean_advantages = np.nanmean(advantages_copy[mask])
+        std_advantages = np.nanstd(advantages_copy[mask])
         advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
         
         train_info = {}

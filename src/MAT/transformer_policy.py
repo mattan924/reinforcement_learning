@@ -47,7 +47,7 @@ class TransformerPolicy:
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
 
 
-    def get_actions(self, obs, near_action, deterministic=False):
+    def get_actions(self, obs, mask, near_action, deterministic=False):
         """
         与えられた入力に対するアクションと値関数の予測を計算します。
         param obs (np.ndarray): actor へのローカルエージェント入力．
@@ -62,29 +62,25 @@ class TransformerPolicy:
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
         #  obs.shape = (1, num_agent*num_topic, obs_dim=2255)
 
-        actions, action_log_probs, action_distribution, values = self.transformer.get_actions(obs, near_action, deterministic)
-        
-        #  actions.shape = torch.Size([n_rollout_threads, num_agent, 1])
-        #  actions_log_probs = torch.Size([n_rollout_threads, num_agent, 1])
-        #  values.shape = torch.Size([n_rollout_threads, num_agent, 1])
+        obs = obs[:, mask]
 
+        actions, action_log_probs, action_distribution, values = self.transformer.get_actions(obs, near_action, mask, deterministic)
+        
         actions = actions.view(-1, self.act_num)
         action_log_probs = action_log_probs.view(-1, self.act_num)
         values = values.view(-1, 1)
 
-        #  actions.shape = torch.Size([n_rollout_threads*num_agent, 1])
-        #  actions_log_probs = torch.Size([n_rollout_threads*num_agent, 1])
-        #  values.shape = torch.Size([n_rollout_threads*num_agent, 1])
-
         return values, actions, action_log_probs, action_distribution
 
-    def get_values(self, obs):
+    def get_values(self, obs, mask):
         """
         値関数の予測値を取得します。
         """
 
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
-        #  obs.shape = (1, num_agent*num_topic, obs_dim=2255)
+        #  obs.shape = (1, num_agent*num_topic, obs_dim)
+
+        obs = obs[:, mask]
 
         values = self.transformer.get_values(obs)
 
@@ -94,7 +90,7 @@ class TransformerPolicy:
         return values
     
 
-    def evaluate_actions(self, obs, actions):
+    def evaluate_actions(self, obs, actions, mask):
         """
         アクタ更新のためのアクションログ確率 / エントロピー / value関数予測を取得します。
         :param obs (np.ndarray): アクタへのローカルエージェント入力．
@@ -108,7 +104,7 @@ class TransformerPolicy:
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
         actions = actions.reshape(-1, self.num_agents*self.num_topic, self.act_num)
 
-        action_log_probs, values, entropy = self.transformer(obs, actions)
+        action_log_probs, values, entropy = self.transformer(obs, actions, mask)
 
         action_log_probs = action_log_probs.view(-1, self.act_num)
         values = values.view(-1, 1)
@@ -118,39 +114,19 @@ class TransformerPolicy:
 
         return values, action_log_probs, entropy
 
-    def act(self, cent_obs, obs, rnn_states_actor, masks, available_actions=None, deterministic=True):
-        """
-        Compute actions using the given inputs.
-        :param obs (np.ndarray): local agent inputs to the actor.
-        :param rnn_states_actor: (np.ndarray) if actor is RNN, RNN states for actor.
-        :param masks: (np.ndarray) denotes points at which RNN states should be reset.
-        :param available_actions: (np.ndarray) denotes which actions are available to agent
-                                  (if None, all actions available)
-        :param deterministic: (bool) whether the action should be mode of distribution or should be sampled.
-        """
-
-        # this function is just a wrapper for compatibility
-        rnn_states_critic = np.zeros_like(rnn_states_actor)
-        _, actions, _, rnn_states_actor, _ = self.get_actions(cent_obs,
-                                                              obs,
-                                                              rnn_states_actor,
-                                                              rnn_states_critic,
-                                                              masks,
-                                                              available_actions,
-                                                              deterministic)
-
-        return actions, rnn_states_actor
 
     def save(self, save_dir, transformer_weight, episode):
-        torch.save(self.transformer.state_dict(), str(save_dir) + "/" + transformer_weight + "_" + str(episode) + ".pt")
+        torch.save(self.transformer.state_dict(), str(save_dir) + "/" + transformer_weight + "_" + str(episode) + ".pth")
 
-    def restore(self, model_dir):
-        transformer_state_dict = torch.load(model_dir)
-        self.transformer.load_state_dict(transformer_state_dict)
-        # self.transformer.reset_std()
+
+    def restore(self, model_path):
+        print(f"model_dir = {model_path}")
+        self.transformer.load_state_dict(torch.load(model_path))
+
 
     def train(self):
         self.transformer.train()
+        
 
     def eval(self):
         self.transformer.eval()

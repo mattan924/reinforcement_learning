@@ -278,27 +278,27 @@ class Env:
         channel_dim = obs_size*obs_size
 
         #  観測値
-        obs = np.zeros((self.num_client, self.num_topic, obs_size*obs_size*3 + 9*5 + 23))
-        #  0~728    : あるトピックの publisher の分布
-        #  729~14557: あるトピックの subscriber の分布
-        #  1458~2186: クライアントの分布
-        #  2187~2188: クライアントの位置 (x, y)
-        #  2189~2206: edge の位置 (x, y)*9
-        #  2208~2215: あるトピックが使用しているストレージ状況
-        #  2216~2224: ストレージの空き状況
-        #  2225~2233: CPU の最大クロック数
-        #  2234~2242: あるトピックの publisher がどのエッジを何人使用しているか
-        #  2243~2251: 各エッジを使用中ののクライアントの数
-        #  2252     : あるトピックの処理に必要なクロック数
-        #  2253     : 1メッセージあたりのデータサイズ
-        #  2254     : ストレージサイズ
+        obs = np.zeros((self.num_client, self.num_topic, obs_size*obs_size*9 + 3))
+        #  0~80   : クライアントの位置
+        #  81~161 : あるトピックの publisher の分布
+        #  161~242: あるトピックの subscriber の分布
+        #  243~323: クライアントの分布
+        #  324~404: あるトピックが使用しているストレージ状況
+        #  405~485: ストレージの空き状況
+        #  486~566: CPU の最大クロック数
+        #  567~647: あるトピックの publisher がどのエッジを何人使用しているか
+        #  648~728: 各エッジを使用中ののクライアントの数
+        #  729    : あるトピックの処理に必要なクロック数
+        #  730    : 1メッセージあたりのデータサイズ
+        #  731    : ストレージサイズ
+
+        mask = np.zeros((self.num_client, self.num_topic))
 
         block_len_x = (self.max_x-self.min_x)/obs_size
         block_len_y = (self.max_y-self.min_y)/obs_size
 
         #  各クライアントの位置
-        position_info_client = np.zeros((self.num_client, 2))
-        position_info_edge = np.zeros((self.num_edge*2))
+        position_info_client = np.zeros((self.num_client, channel_dim))
         #  クライアント全体の分布
         total_distribution = np.zeros((channel_dim))
         #  ある topic の publisher/subscriber の分布
@@ -306,14 +306,14 @@ class Env:
         subscriber_distribution = np.zeros((self.num_topic, channel_dim))
 
         #  ある topic が使用しているストレージ状況
-        topic_storage_info = np.zeros((self.num_topic, self.num_edge))
+        topic_storage_info = np.zeros((self.num_topic, channel_dim))
         #  ストレージの空き状況
-        storage_info = np.zeros((self.num_edge))
+        storage_info = np.zeros((channel_dim))
         #  cpu の最大クロック数
-        cpu_info = np.zeros((self.num_edge))
+        cpu_info = np.zeros((channel_dim))
         #  使用中のクライアントの数
-        topic_cpu_used_client = np.zeros((self.num_topic, self.num_edge))
-        cpu_used_client = np.zeros((self.num_edge))
+        topic_cpu_used_client = np.zeros((self.num_topic, channel_dim))
+        cpu_used_client = np.zeros((channel_dim))
 
         for i in range(self.num_client):
             client_id = agent_perm[i]
@@ -326,13 +326,13 @@ class Env:
             if block_index_y == obs_size:
                 block_index_y = obs_size-1
 
-            position_info_client[i][0] = client.x
-            position_info_client[i][1] = client.y
+            position_info_client[i][block_index_y*obs_size + block_index_x] = 1000
 
             for t in range(self.num_topic):
                 topic_id = topic_perm[t]
                 if client.pub_topic[topic_id] == 1:
                     publisher_distribution[t][block_index_y*obs_size + block_index_x] += 1
+                    mask[i][t] = 1
 
                 if client.sub_topic[topic_id] == 1:
                     subscriber_distribution[t][block_index_y*obs_size + block_index_x] += 1
@@ -340,38 +340,40 @@ class Env:
             total_distribution[block_index_y*obs_size + block_index_x] += 1
 
         for edge in self.all_edge:
-            edge_id = int(edge.id)
-            position_info_edge[edge_id*2] = edge.x
-            position_info_edge[edge_id*2 + 1] = edge.y
+            block_index_x = int(edge.x / block_len_x)
+            block_index_y = int(edge.y / block_len_y)
+
+            if block_index_x == obs_size:
+                block_index_x = obs_size-1
+            if block_index_y == obs_size:
+                block_index_y = obs_size-1
                 
-            storage_info[edge_id] = (edge.max_volume - edge.total_used_volume)
-            cpu_info[edge_id] = edge.cpu_cycle
-            cpu_used_client[edge_id] = sum(edge.used_publishers)
+            storage_info[block_index_y*obs_size + block_index_x] = (edge.max_volume - edge.total_used_volume)
+            cpu_info[block_index_y*obs_size + block_index_x] = edge.cpu_cycle
+            cpu_used_client[block_index_y*obs_size + block_index_x] = sum(edge.used_publishers)
 
             for t in range(self.num_topic):
                 topic_id = topic_perm[t]
-                topic_storage_info[t][edge_id] = edge.used_volume[topic_id]
-                topic_cpu_used_client[t][edge_id] = edge.used_publishers[topic_id]
+                topic_storage_info[t][block_index_y*obs_size + block_index_x] = edge.used_volume[topic_id]
+                topic_cpu_used_client[t][block_index_y*obs_size + block_index_x] = edge.used_publishers[topic_id]
 
-
-        obs[:, :, 0:channel_dim] = publisher_distribution[np.newaxis]
-        obs[:, :, channel_dim:channel_dim*2] = subscriber_distribution[np.newaxis]
-        obs[:, :, channel_dim*2:channel_dim*3] = total_distribution[np.newaxis, np.newaxis]
-        obs[:, :, channel_dim*3:channel_dim*3+2] = position_info_client[:, np.newaxis]
-        obs[:, :, 2+channel_dim*3:2+channel_dim*3 + 2*9] = position_info_edge[np.newaxis, np.newaxis]
-        obs[:, :, 2+channel_dim*3 + 2*9:20+channel_dim*3 + 9] = topic_storage_info[np.newaxis]
-        obs[:, :, 20+channel_dim*3 + 9:29+channel_dim*3 + 9] = storage_info[np.newaxis, np.newaxis]
-        obs[:, :, 29+channel_dim*3 + 9:38+channel_dim*3 + 9] = cpu_info[np.newaxis, np.newaxis]
-        obs[:, :, 38+channel_dim*3 + 9:47+channel_dim*3 + 9] = topic_cpu_used_client[np.newaxis]
-        obs[:, :, 47+channel_dim*3 + 9:56+channel_dim*3 + 9] = cpu_used_client[np.newaxis, np.newaxis]
+        obs[:, :, 0:channel_dim] = position_info_client[:, np.newaxis]
+        obs[:, :, channel_dim:channel_dim*2] = publisher_distribution[np.newaxis]
+        obs[:, :, channel_dim*2:channel_dim*3] = subscriber_distribution[np.newaxis]
+        obs[:, :, channel_dim*3:channel_dim*4] = total_distribution[np.newaxis, np.newaxis]
+        obs[:, :, channel_dim*4:channel_dim*5] = topic_storage_info[np.newaxis]
+        obs[:, :, channel_dim*5:channel_dim*6] = storage_info[np.newaxis, np.newaxis]
+        obs[:, :, channel_dim*6:channel_dim*7] = cpu_info[np.newaxis, np.newaxis]
+        obs[:, :, channel_dim*7:channel_dim*8] = topic_cpu_used_client[np.newaxis]
+        obs[:, :, channel_dim*8:channel_dim*9] = cpu_used_client[np.newaxis, np.newaxis]
 
 
         for t in range(self.num_topic):
             topic_id = topic_perm[t]
             topic = self.all_topic[topic_id]
-            obs[:, t, -3] = topic.require_cycle * 1e5
-            obs[:, t, -2] = topic.data_size * 1e5
-            obs[:, t, -1] = topic.volume * 1e2
+            obs[:, t, -3] = topic.require_cycle * 1e4
+            obs[:, t, -2] = topic.data_size * 1e4
+            obs[:, t, -1] = topic.volume * 1e1
             
 
         if debug:
@@ -389,7 +391,7 @@ class Env:
             print(f"topic.data_size = {np.amax(obs[0, :, 1])}")
             print(f"topic.volume = {np.amax(obs[0, :, 2])}")
 
-        return obs
+        return obs, mask
     
 
     def get_near_action(self, agent_perm, topic_perm):
@@ -416,32 +418,61 @@ class Env:
  
     #  環境を進める
     def step(self, actions, agent_perm, topic_perm, time):
+        actions = actions.reshape(-1).tolist()
+
         for edge in self.all_edge:
             edge.used_publishers = np.zeros(self.num_topic)
 
         block_len_x = (self.max_x-self.min_x)/3
         block_len_y = (self.max_y-self.min_y)/3
 
-        for t in range(self.num_topic):
-            topic_id = topic_perm[t]
+        for i in range(self.num_client):
+            agent_idx = agent_perm[i]
+            client = self.clients[agent_idx]
 
-            for publisher in self.publishers[topic_id]:
-                agent_idx = agent_perm.index(publisher.id)
-                publisher.pub_edge[topic_id] = actions[agent_idx][topic_id]
+            for t in range(self.num_topic):
+                topic_id = topic_perm[t]
 
-                edge = self.all_edge[int(publisher.pub_edge[topic_id])]
-                edge.used_publishers[topic_id] += 1
+                if client.pub_topic[topic_id] == 1:
+                    client.pub_edge[topic_id] = actions.pop(0)
 
-            for subscriber in self.subscribers[topic_id]:
-                block_index_x = int(subscriber.x / block_len_x)
-                block_index_y = int(subscriber.y / block_len_y)
+                    edge = self.all_edge[int(client.pub_edge[topic_id])]
+                    edge.used_publishers[topic_id] += 1
 
-                if block_index_x == 3:
-                    block_index_x = 2
-                if block_index_y == 3:
-                    block_index_y = 2
+                    # print(f"client.id, pub_edge = {client.id}, {client.pub_edge[topic_id]}")
 
-                subscriber.sub_edge[topic_id] = block_index_y*3+block_index_x
+                if  client.sub_topic[topic_id] == 1:
+                    block_index_x = int(client.x / block_len_x)
+                    block_index_y = int(client.y / block_len_y)
+
+                    if block_index_x == 3:
+                        block_index_x = 2
+                    if block_index_y == 3:
+                        block_index_y = 2
+
+                    # client.sub_edge[topic_id] = block_index_y*3+block_index_x
+
+
+        # for t in range(self.num_topic):
+        #     topic_id = topic_perm[t]
+
+        #     for publisher in self.publishers[topic_id]:
+        #         agent_idx = agent_perm.index(publisher.id)
+        #         publisher.pub_edge[topic_id] = actions[agent_idx][topic_id]
+
+        #         edge = self.all_edge[int(publisher.pub_edge[topic_id])]
+        #         edge.used_publishers[topic_id] += 1
+
+        #     for subscriber in self.subscribers[topic_id]:
+        #         block_index_x = int(subscriber.x / block_len_x)
+        #         block_index_y = int(subscriber.y / block_len_y)
+
+        #         if block_index_x == 3:
+        #             block_index_x = 2
+        #         if block_index_y == 3:
+        #             block_index_y = 2
+
+        #         subscriber.sub_edge[topic_id] = block_index_y*3+block_index_x
 
         for edge in self.all_edge:
             edge.used_volume = np.zeros(self.num_topic)
