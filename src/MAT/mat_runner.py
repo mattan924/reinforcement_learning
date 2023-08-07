@@ -44,6 +44,7 @@ class MATRunner:
         self.backup_itr = backup_itr
 
         self.obs_size = 27
+        self.random_flag = False
 
         #  環境のインスタンスの生成
         if learning_data_index_path is not None:
@@ -51,7 +52,7 @@ class MATRunner:
             self.env = Env(learning_data_index_path)
             self.num_agent = self.env.num_client
             self.num_topic = self.env.num_topic
-            agent_perm, topic_perm = self.get_perm()
+            agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
             obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
             self.obs_dim = obs[0][0].shape[0]
             if self.env.simulation_time % self.env.time_step == 0:
@@ -168,7 +169,7 @@ class MATRunner:
             #  環境のリセット
             self.env.reset()
 
-            agent_perm, topic_perm = self.get_perm(random_flag=False)
+            agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
 
             self.warmup(agent_perm, topic_perm)
 
@@ -203,7 +204,7 @@ class MATRunner:
 
                 #  状態の観測
                 #  ランダムな順にいつか改修
-                agent_perm, topic_perm = self.get_perm(random_flag=False)
+                agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
 
                 obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
 
