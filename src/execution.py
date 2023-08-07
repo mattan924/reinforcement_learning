@@ -15,9 +15,9 @@ if __name__ == '__main__':
 
         #  読み込む重みパラメータ
         load_parameter = "../result/temporary/pretrain_hard_long/model_parameter/"
-        critic_weight = "critic_weight_coma0"
-        actor_weight = "actor_weight_coma0"
-        v_net_weight = "V_net_weight_coma0"
+        # critic_weight = "critic_weight_coma0"
+        # actor_weight = "actor_weight_coma0"
+        # v_net_weight = "V_net_weight_coma0"
 
         #  結果出力先ファイル
         output_file_base = "../dataset/execution_data/pretrain_hard_long/solution/coma"

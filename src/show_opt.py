@@ -3,10 +3,10 @@ sys.path.append("../../dataset_visualization/src/")
 import animation
 
 
-index_file = "../dataset/learning_data/index/index_multi2.csv"
+index_file = "../dataset/debug/index/index_onetopic.csv"
 
-opt_solution_file = "../dataset/learning_data/solution/solution_multi_opt2.csv"
+opt_solution_file = "../dataset/debug/solution/solution_onetopic_opt.csv"
 
-output_file = "../dataset/learning_data/animation/animation_multi_opt2.gif"
+output_file = "../dataset/debug/animation/animation_onetopic_opt.gif"
 
-animation.create_opt_animation(index_file, output_file, opt_solution_file, 10)
+animation.create_opt_animation_onetopic(index_file, output_file, opt_solution_file, 10)
