@@ -32,7 +32,7 @@ def _t2n(x):
 
 
 class MATRunner:
-    def __init__(self, max_epi_itr, batch_size, device, result_dir, backup_itr, learning_data_index_path=None):
+    def __init__(self, max_epi_itr, batch_size, device, result_dir, backup_itr, learning_data_index_path, max_agent, max_topic):
 
         if not os.path.isdir(result_dir + "model_parameter"):
             sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
@@ -44,31 +44,28 @@ class MATRunner:
         self.backup_itr = backup_itr
 
         self.obs_size = 27
-        self.random_flag = False
+        self.random_flag = True 
 
         #  環境のインスタンスの生成
-        if learning_data_index_path is not None:
-            self.learning_data_index_path = learning_data_index_path
-            self.env = Env(learning_data_index_path)
-            self.num_agent = self.env.num_client
-            self.num_topic = self.env.num_topic
-            agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-            obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
-            self.obs_dim = obs[0][0].shape[0]
-            if self.env.simulation_time % self.env.time_step == 0:
-                self.episode_length = int(self.env.simulation_time / self.env.time_step)
-            else:
-                sys.exit("simulation_time が time_step の整数倍になっていません")
+        self.learning_data_index_path = learning_data_index_path
+        self.env = Env(learning_data_index_path)
+        self.num_agent = self.env.num_client
+        self.num_topic = self.env.num_topic
+        agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+        obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+        self.obs_dim = obs[0][0].shape[0]
+        if self.env.simulation_time % self.env.time_step == 0:
+            self.episode_length = int(self.env.simulation_time / self.env.time_step)
         else:
-            sys.exit("学習するデータを指定して下さい")
-
+            sys.exit("simulation_time が time_step の整数倍になっていません")
+        
         # 各種パラメーター
         self.N_action = 9
 
         self.obs_distri_dim = self.obs_size*self.obs_size
         self.obs_info_dim = self.obs_dim - self.obs_distri_dim*9
 
-        self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, self.device)
+        self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, max_agent, max_topic, self.device)
 
         self.trainer = MATTrainer(self.policy, self.num_agent, self.device)
 

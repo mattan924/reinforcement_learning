@@ -16,7 +16,7 @@ class TransformerPolicy:
     param device: (torch.device) 実行するデバイスを指定します（cpu/gpu）。
     """
 
-    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, num_agents, num_topic, device=torch.device("cpu")):
+    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, num_agents, num_topic, max_agent, max_topic, device=torch.device("cpu")):
         self.device = device
         self.lr = 0.0005
         self.opti_eps = 1e-05
@@ -41,7 +41,7 @@ class TransformerPolicy:
         self.tpdv = dict(dtype=torch.float32, device=device)
         
         #  MAT インスタンスの生成
-        self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, device=device)
+        self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
 
 
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
