@@ -9,6 +9,7 @@ import sys
 import os
 import glob
 import random
+import time as time_module
 import torch
 import numpy as np
 
@@ -292,6 +293,99 @@ class MATRunner:
 
         #  重みパラメータの保存
         self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter+1)
+
+    
+    def train_single_env_multi_process(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
+
+        if load_parameter_path is not None:
+            self.policy.restore(load_parameter_path)
+            if start_epi_itr == 0:
+                with open(output + ".log", 'w') as f:
+                    pass
+        else:
+            with open(output + ".log", 'w') as f:
+                pass
+
+        multi_envs = [Env(self.learning_data_index_path) for _ in range(self.batch_size)]
+
+        # 学習ループ
+        for epi_iter in range(start_epi_itr, self.max_epi_itr):
+            start_time = time_module.perf_counter()
+
+            #  1エピソード中の reward の保持
+            reward_history = [[] for _ in range(self.batch_size)]
+
+            #  環境のリセット
+            for idx in range(self.batch_size):
+                env = multi_envs[idx]
+                env.reset()
+
+                agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+
+                self.warmup(env, idx, agent_perm, topic_perm)
+
+                #  各エピソードにおける時間の推移
+                for time in range(0, env.simulation_time, env.time_step):
+                    #  print(f"batch, epi_iter, time = {self.batch}, {epi_iter}, {time}")
+
+                    step = int(time / env.time_step)
+
+                    #  行動と確率分布の取得
+                    values, actions, action_log_probs, action_distribution = self.collect(idx, step)
+
+                    # 報酬の受け取り
+                    reward = env.step(actions, agent_perm, topic_perm, time)
+                    reward_history[idx].append(reward)
+                    reward = -reward
+
+                    #  状態の観測
+                    #  ランダムな順にいつか改修
+                    agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+
+                    obs, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+
+                    self.insert(idx, obs, mask, reward, values, actions, action_log_probs, agent_perm, topic_perm)
+
+                self.compute(idx)
+
+                train_info = self.train()
+
+                end_time = time_module.perf_counter()
+            
+            print(f"1 step time = {end_time - start_time}")
+
+            if epi_iter % 1 == 0:
+                #  ログの出力
+                #print(f"total_reward = {sum(reward_history)}")
+                #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
+                with open(output + ".log", 'a') as f:
+                    reward_average = 0
+                    for idx in range(self.batch_size):
+                        reward_average += sum(reward_history[idx])/self.batch_size
+
+                    f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {reward_average}\n")
+
+            #  重みパラメータのバックアップ
+            if epi_iter % self.backup_itr == 0:
+                self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter)
+
+        #  最適解の取り出し
+        df_index = pd.read_csv(self.learning_data_index_path, index_col=0)
+        opt = df_index.at['data', 'opt']
+
+        train_curve = read_train_curve(output + ".log")
+
+        #  学習曲線の描画
+        fig = plt.figure()
+        wind = fig.add_subplot(1, 1, 1)
+        wind.grid()
+        wind.plot(train_curve, linewidth=1, label='COMA')
+        wind.axhline(y=-opt, c='r')
+        fig.savefig(output + ".png")
+
+        #  重みパラメータの保存
+        self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter+1)
+
 
 
     def train_multi_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):

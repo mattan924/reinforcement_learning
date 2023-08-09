@@ -104,6 +104,10 @@ class TransformerPolicy:
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
         actions = actions.reshape(-1, self.num_agents*self.num_topic, self.act_num)
 
+        # obs.shape is (960, 90, 6564)
+        # actions.shape is (960, 90, 1)
+        # mask.shape is (960, 90)
+
         action_log_probs, values, entropy = self.transformer(obs, actions, mask)
 
         action_log_probs = action_log_probs.view(-1, self.act_num)
