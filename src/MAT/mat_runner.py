@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 import os
+import glob
 import random
 import torch
 import numpy as np
@@ -32,7 +33,7 @@ def _t2n(x):
 
 
 class MATRunner:
-    def __init__(self, max_epi_itr, batch_size, device, result_dir, backup_itr, learning_data_index_path, max_agent, max_topic):
+    def __init__(self, max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_path=None, learning_data_index_dir=None, test_data_index_dir=None):
 
         if not os.path.isdir(result_dir + "model_parameter"):
             sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
@@ -43,28 +44,62 @@ class MATRunner:
         self.result_dir = result_dir
         self.backup_itr = backup_itr
 
-        self.obs_size = 27
-        self.random_flag = True 
-
-        #  環境のインスタンスの生成
-        self.learning_data_index_path = learning_data_index_path
-        self.env = Env(learning_data_index_path)
-        self.num_agent = self.env.num_client
-        self.num_topic = self.env.num_topic
-        agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-        obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
-        self.obs_dim = obs[0][0].shape[0]
-        if self.env.simulation_time % self.env.time_step == 0:
-            self.episode_length = int(self.env.simulation_time / self.env.time_step)
-        else:
-            sys.exit("simulation_time が time_step の整数倍になっていません")
-        
         # 各種パラメーター
         self.N_action = 9
-
+        self.obs_size = 27
+        self.obs_dim = self.obs_size * self.obs_size * 9 + 3
         self.obs_distri_dim = self.obs_size*self.obs_size
         self.obs_info_dim = self.obs_dim - self.obs_distri_dim*9
 
+        self.random_flag = True
+        self.test_iter = 10
+
+
+        #  環境のインスタンスの生成
+        if learning_data_index_path is not None:
+            self.learning_data_index_path = learning_data_index_path
+            self.env = Env(learning_data_index_path)
+            self.num_agent = self.env.num_client
+            self.num_topic = self.env.num_topic
+            if self.env.simulation_time % self.env.time_step == 0:
+                self.episode_length = int(self.env.simulation_time / self.env.time_step)
+            else:
+                sys.exit("simulation_time が time_step の整数倍になっていません")
+        elif learning_data_index_dir is not None:
+            if test_data_index_dir is None:
+                sys.exit("評価用の test_data_index_dir を指定して下さい")
+
+            self.learning_data_index_dir = learning_data_index_dir
+
+            train_dir_path = os.path.join(learning_data_index_dir, "*")
+            train_index_path = glob.glob(train_dir_path)
+
+            test_dir_path = os.path.join(test_data_index_dir, "*")
+            test_index_path = glob.glob(test_dir_path)
+
+            self.env_list = []
+            for idx in range(len(train_index_path)):
+                self.env_list.append(Env(train_index_path[idx]))
+
+            self.env_list_shuffle = random.sample(self.env_list, len(self.env_list))
+
+            self.test_env_list = []
+            for idx in range(len(test_index_path)):
+                self.test_env_list.append(Env(test_index_path[idx]))
+
+            self.num_agent = self.env_list[0].num_client
+            self.num_topic = self.env_list[0].num_topic
+
+            if self.env_list[0].simulation_time % self.env_list[0].time_step == 0:
+                self.episode_length = int(self.env_list[0].simulation_time / self.env_list[0].time_step)
+            else:
+                sys.exit("simulation_time が time_step の整数倍になっていません")
+
+            self.test_buffer = SharedReplayBuffer(self.episode_length, len(self.test_env_list), self.num_agent, self.num_topic, self.obs_dim, self.N_action)
+
+        else:
+            sys.exit("学習に使用するデータを指定して下さい")         
+        
         self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, max_agent, max_topic, self.device)
 
         self.trainer = MATTrainer(self.policy, self.num_agent, self.device)
@@ -74,24 +109,34 @@ class MATRunner:
         self.batch = 0
 
         
-    def warmup(self, agent_perm, topic_perm):
-        obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+    def warmup(self, env, batch, agent_perm, topic_perm, train=True):
+        obs, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
 
-        self.buffer.obs[0][self.batch] = obs.reshape(self.num_agent*self.num_topic, self.obs_dim).copy()
-        self.buffer.mask[0][self.batch] = np.bool_(mask.reshape(self.num_agent*self.num_topic).copy())
+        if train:
+            self.buffer.obs[0][batch] = obs.reshape(self.num_agent*self.num_topic, self.obs_dim).copy()
+            self.buffer.mask[0][batch] = np.bool_(mask.reshape(self.num_agent*self.num_topic).copy())
 
-        self.buffer.agent_perm[0][self.batch]
-        self.buffer.topic_perm[0][self.batch]
+            self.buffer.agent_perm[0][batch]
+            self.buffer.topic_perm[0][batch]
+        else:
+            self.test_buffer.obs[0][batch] = obs.reshape(self.num_agent*self.num_topic, self.obs_dim).copy()
+            self.test_buffer.mask[0][batch] = np.bool_(mask.reshape(self.num_agent*self.num_topic).copy())
 
-    
+            self.test_buffer.agent_perm[0][batch]
+            self.test_buffer.topic_perm[0][batch]
+            
+
     @torch.no_grad()
-    def collect(self, batch, step, near_action):
+    def collect(self, batch, step, train=True):
         #  TransformerPolicy を学習用に設定
         self.trainer.prep_rollout()
 
         action_distribution = torch.ones((1, self.num_agent*self.num_topic, self.N_action))*-1
 
-        value, action, action_log_prob, action_distribution[:, self.buffer.mask[step][batch]] = self.trainer.policy.get_actions(self.buffer.obs[step][batch], self.buffer.mask[step][batch], near_action)
+        if train:
+            value, action, action_log_prob, action_distribution[:, self.buffer.mask[step][batch]] = self.trainer.policy.get_actions(self.buffer.obs[step][batch], self.buffer.mask[step][batch])
+        else:
+            value, action, action_log_prob, action_distribution[:, self.test_buffer.mask[step][batch]] = self.trainer.policy.get_actions(self.test_buffer.obs[step][batch], self.test_buffer.mask[step][batch])
 
         #  _t2n: tensor → numpy
         values = np.array(_t2n(value))
@@ -102,9 +147,12 @@ class MATRunner:
         return values, actions, action_log_probs, action_distribution
     
 
-    def insert(self, batch, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm):
+    def insert(self, batch, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm, train=True):
 
-        self.buffer.insert(batch, obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
+        if train:
+            self.buffer.insert(batch, obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
+        else:
+            self.test_buffer.insert(batch, obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
 
     
     @torch.no_grad()
@@ -168,12 +216,7 @@ class MATRunner:
 
             agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
 
-            self.warmup(agent_perm, topic_perm)
-
-            if epi_iter % 10 == 0:
-                pre_train = False
-            else:
-                pre_train = False
+            self.warmup(self.env, self.batch, agent_perm, topic_perm)
 
             #  1エピソード中の reward の保持
             reward_history = []        
@@ -185,14 +228,7 @@ class MATRunner:
                 step = int(time / self.env.time_step)
 
                 #  行動と確率分布の取得
-                if pre_train:
-                    near_action = self.env.get_near_action(agent_perm, topic_perm)
-                    # print(f"time = {time}")
-                    # print(f"near_action = {near_action[:, self.buffer.mask[step][self.batch]]}")
-                    values, actions, action_log_probs, action_distribution = self.collect(self.batch, step, near_action)
-                    # print(f"actuin = {actions}")
-                else:
-                    values, actions, action_log_probs, action_distribution = self.collect(self.batch, step, near_action=None)
+                values, actions, action_log_probs, action_distribution = self.collect(self.batch, step)
 
                 # 報酬の受け取り
                 reward = self.env.step(actions, agent_perm, topic_perm, time)
@@ -253,6 +289,119 @@ class MATRunner:
         wind.plot(train_curve, linewidth=1, label='COMA')
         wind.axhline(y=-opt, c='r')
         fig.savefig(output + ".png")
+
+        #  重みパラメータの保存
+        self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter+1)
+
+
+    def train_multi_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
+
+        if load_parameter_path is not None:
+            self.policy.restore(load_parameter_path)
+            if start_epi_itr == 0:
+                with open(output + ".log", 'w') as f:
+                    pass
+                
+                for idx in range(len(self.test_env_list)):
+                    with open(output + "_test" + str(idx) + ".log", 'w') as f:
+                        pass
+        else:
+            with open(output + ".log", 'w') as f:
+                pass
+
+            for idx in range(len(self.test_env_list)):
+                    with open(output + "_test" + str(idx) + ".log", 'w') as f:
+                        pass
+
+        # 学習ループ
+        for epi_iter in range(start_epi_itr, self.max_epi_itr):
+            #  環境のリセット
+            if len(self.env_list_shuffle) == 0:
+                self.env_list_shuffle = random.sample(self.env_list, len(self.env_list))
+
+            self.env = self.env_list_shuffle.pop(0)
+            self.env.reset()
+
+            agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+
+            self.warmup(self.env, self.batch, agent_perm, topic_perm)
+
+            #  1エピソード中の reward の保持
+            reward_history = []        
+
+            #  各エピソードにおける時間の推移
+            for time in range(0, self.env.simulation_time, self.env.time_step):
+                #  print(f"batch, epi_iter, time = {self.batch}, {epi_iter}, {time}")
+
+                step = int(time / self.env.time_step)
+
+                #  行動と確率分布の取得
+                values, actions, action_log_probs, action_distribution = self.collect(self.batch, step)
+
+                # 報酬の受け取り
+                reward = self.env.step(actions, agent_perm, topic_perm, time)
+                reward_history.append(reward)
+                reward = -reward
+
+                #  状態の観測
+                #  ランダムな順にいつか改修
+                agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+
+                obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+
+                self.insert(self.batch, obs, mask, reward, values, actions, action_log_probs, agent_perm, topic_perm)
+
+            self.compute(self.batch)
+
+            if self.batch == self.batch_size-1:
+                # 学習
+                train_info = self.train()
+
+            if epi_iter % 1 == 0:
+                #  ログの出力
+                #print(f"total_reward = {sum(reward_history)}")
+                #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
+                with open(output + ".log", 'a') as f:
+                    f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {-sum(reward_history)}\n")
+
+            if epi_iter % self.test_iter == 0:
+                for idx in range(len(self.test_env_list)):
+                    test_env = self.test_env_list[idx]
+                    test_env.reset()
+
+                    agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+
+                    self.warmup(test_env, idx, agent_perm, topic_perm, train=False)
+
+                    #  各エピソードにおける時間の推移
+                    reward_history = []
+                    for time in range(0, test_env.simulation_time, test_env.time_step):
+                        step = int(time / test_env.time_step)
+
+                        #  行動と確率分布の取得
+                        values, actions, action_log_probs, action_distribution = self.collect(idx, step, train=False)
+
+                        # 報酬の受け取り
+                        reward = test_env.step(actions, agent_perm, topic_perm, time)
+                        reward_history.append(reward)
+                        reward = -reward
+
+                        #  状態の観測
+                        #  ランダムな順にいつか改修
+                        agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+
+                        obs, mask = test_env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+
+                        self.insert(idx, obs, mask, reward, values, actions, action_log_probs, agent_perm, topic_perm, train=False)
+
+                    with open(output + "_test" + str(idx) + ".log", 'a') as f:
+                        f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {-sum(reward_history)}\n")
+
+            self.batch = (self.batch + 1) % self.batch_size
+
+            #  重みパラメータのバックアップ
+            if epi_iter % self.backup_itr == 0:
+                self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter)
 
         #  重みパラメータの保存
         self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter+1)

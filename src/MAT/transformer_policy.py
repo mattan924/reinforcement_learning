@@ -47,7 +47,7 @@ class TransformerPolicy:
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
 
 
-    def get_actions(self, obs, mask, near_action, deterministic=False):
+    def get_actions(self, obs, mask, deterministic=False):
         """
         与えられた入力に対するアクションと値関数の予測を計算します。
         param obs (np.ndarray): actor へのローカルエージェント入力．
@@ -64,7 +64,7 @@ class TransformerPolicy:
 
         obs = obs[:, mask]
 
-        actions, action_log_probs, action_distribution, values = self.transformer.get_actions(obs, near_action, mask, deterministic)
+        actions, action_log_probs, action_distribution, values = self.transformer.get_actions(obs, mask, deterministic)
         
         actions = actions.view(-1, self.act_num)
         action_log_probs = action_log_probs.view(-1, self.act_num)

@@ -4,10 +4,9 @@ from MAT.mat_runner import MATRunner
 import sys
 
 
-learning_data_index_path = "../dataset/debug/index/index_easy.csv"
-#learning_data_index_dir = "../dataset/data_set_hard/index/"
-
-#test_data_index_dir = "../dataset/test_data_set_hard/index/"
+learning_data_index_path = "../dataset/debug/debug/index/index_hard.csv"
+#learning_data_index_dir = "../dataset/debug/onetopic/train/index/"
+#test_data_index_dir = "../dataset/debug/onetopic/test/index/"
 
 # 各種パラメーター
 #  HAPPO
@@ -30,8 +29,8 @@ backup_itr = 1000
 
 
 device = "cuda:0"
-result_dir = "../result/temporary/debug/"
-file_name = "easy_mat_long"
+result_dir = "../result/temporary/debug/hard/"
+file_name = "hard_mat_long"
 output_base = result_dir + file_name
 # actor_weight_base = "actor_weight"
 # critic_weight_base = "critic_weight"
@@ -64,12 +63,13 @@ for i in range(1):
     transformer_weight = transformer_weight_base + "_" + file_name + str(i)
 
     #  標準エラー出力先の変更
-    sys.stderr = open(output + "_err.log", 'w')
+    #sys.stderr = open(output + "_err.log", 'w')
 
     #happo_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight,V_net_weight, learning_data_index_path, output)
     #coma_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output)
-    runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, learning_data_index_path, max_agent, max_topic)
+    runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_path=learning_data_index_path)
     runner.train_single_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
+    #runner.train_multi_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
 
 
 #  標準エラー出力先を戻す
