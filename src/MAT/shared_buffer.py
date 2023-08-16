@@ -44,21 +44,22 @@ class SharedReplayBuffer(object):
         self.act_dim = act_dim
 
         self.obs = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents*self.num_topic, self.obs_dim), dtype=np.float32)
+        self.mask = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents*self.num_topic), dtype=np.bool)
 
         self.value_preds = np.zeros((self.episode_length + 1, self.batch_size, num_agents*num_topic, 1), dtype=np.float32)
         self.returns = np.zeros_like(self.value_preds)
         self.advantages = np.zeros((self.episode_length, self.batch_size, num_agents*num_topic, 1), dtype=np.float32)
         
-        self.actions = np.zeros((self.episode_length, self.batch_size, num_agents*num_topic, 1), dtype=np.float32)
+        self.actions = np.ones((self.episode_length, self.batch_size, num_agents*num_topic, 1), dtype=np.float32)*-1
         self.action_log_probs = np.zeros((self.episode_length, self.batch_size, num_agents*num_topic, 1), dtype=np.float32)
         self.rewards = np.zeros((self.episode_length, self.batch_size, num_agents*num_topic, 1), dtype=np.float32)
 
-        self.agent_perm = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents))
-        self.topic_perm = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic))
+        self.agent_perm = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents), dtype=np.int64)
+        self.topic_perm = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic), dtype=np.int64)
 
         self.step = 0
 
-    def insert(self, batch, obs, actions, action_log_probs, value_preds, rewards):
+    def insert(self, batch, obs, mask, actions, action_log_probs, value_preds, rewards, agent_perm, topic_perm):
         """
         バッファにデータを挿入します。
         param obs: (np.ndarray) ローカルエージェントのオブザベーション。
@@ -69,60 +70,15 @@ class SharedReplayBuffer(object):
         """
 
         self.obs[self.step + 1][batch] = obs.reshape(self.num_agents*self.num_topic, self.obs_dim).copy()
-        self.actions[self.step][batch] = actions.reshape(self.num_agents*self.num_topic, 1).copy()
-        self.action_log_probs[self.step][batch] = action_log_probs.copy()
-        self.value_preds[self.step][batch] = value_preds.copy()
-        self.rewards[self.step][batch] = rewards.copy()
+        self.mask[self.step + 1][batch] = np.bool_(mask.reshape(self.num_agents*self.num_topic).copy())
+        self.actions[self.step][batch][self.mask[self.step][batch]] = actions.copy()
+        self.action_log_probs[self.step][batch][self.mask[self.step][batch]] = action_log_probs.copy()
+        self.value_preds[self.step][batch][self.mask[self.step][batch]] = value_preds.copy()
+        self.rewards[self.step][batch][self.mask[self.step][batch]] = rewards.copy()
+        self.agent_perm[self.step + 1][batch] = agent_perm.copy()
+        self.topic_perm[self.step + 1][batch] = topic_perm.copy()
 
         self.step = (self.step + 1) % self.episode_length
-
-    def chooseinsert(self, share_obs, obs, rnn_states, rnn_states_critic, actions, action_log_probs,
-                     value_preds, rewards, masks, bad_masks=None, active_masks=None, available_actions=None):
-        """
-        Insert data into the buffer. This insert function is used specifically for Hanabi, which is turn based.
-        :param share_obs: (argparse.Namespace) arguments containing relevant model, policy, and env information.
-        :param obs: (np.ndarray) local agent observations.
-        :param rnn_states_actor: (np.ndarray) RNN states for actor network.
-        :param rnn_states_critic: (np.ndarray) RNN states for critic network.
-        :param actions:(np.ndarray) actions taken by agents.
-        :param action_log_probs:(np.ndarray) log probs of actions taken by agents
-        :param value_preds: (np.ndarray) value function prediction at each step.
-        :param rewards: (np.ndarray) reward collected at each step.
-        :param masks: (np.ndarray) denotes whether the environment has terminated or not.
-        :param bad_masks: (np.ndarray) denotes indicate whether whether true terminal state or due to episode limit
-        :param active_masks: (np.ndarray) denotes whether an agent is active or dead in the env.
-        :param available_actions: (np.ndarray) actions available to each agent. If None, all actions are available.
-        """
-        self.share_obs[self.step] = share_obs.copy()
-        self.obs[self.step] = obs.copy()
-        self.rnn_states[self.step + 1] = rnn_states.copy()
-        self.rnn_states_critic[self.step + 1] = rnn_states_critic.copy()
-        self.actions[self.step] = actions.copy()
-        self.action_log_probs[self.step] = action_log_probs.copy()
-        self.value_preds[self.step] = value_preds.copy()
-        self.rewards[self.step] = rewards.copy()
-        self.masks[self.step + 1] = masks.copy()
-        if bad_masks is not None:
-            self.bad_masks[self.step + 1] = bad_masks.copy()
-        if active_masks is not None:
-            self.active_masks[self.step] = active_masks.copy()
-        if available_actions is not None:
-            self.available_actions[self.step] = available_actions.copy()
-
-        self.step = (self.step + 1) % self.episode_length
-
-
-    def after_update(self):
-        """Copy last timestep data to first index. Called after update to model."""
-        self.obs[0] = self.obs[-1].copy()
-
-
-    def chooseafter_update(self):
-        """Copy last timestep data to first index. This method is used for Hanabi."""
-        self.rnn_states[0] = self.rnn_states[-1].copy()
-        self.rnn_states_critic[0] = self.rnn_states_critic[-1].copy()
-        self.masks[0] = self.masks[-1].copy()
-        self.bad_masks[0] = self.bad_masks[-1].copy()
 
 
     def compute_returns(self, batch, next_value, value_normalizer=None):
@@ -132,16 +88,16 @@ class SharedReplayBuffer(object):
         :param value_normalizer: (PopArt) Noneでない場合、PopArt値のノーマライザインスタンス。
         """
 
-        self.value_preds[-1][batch] = next_value
+        self.value_preds[-1][batch][self.mask[-1][batch]] = next_value
         gae = 0
 
         for step in reversed(range(self.episode_length)):
-            delta = self.rewards[step] + self.gamma * value_normalizer.denormalize(self.value_preds[step + 1]) - value_normalizer.denormalize(self.value_preds[step])
+            delta = self.rewards[step][self.mask[step]] + self.gamma * value_normalizer.denormalize(self.value_preds[step + 1][self.mask[step + 1]]) - value_normalizer.denormalize(self.value_preds[step][self.mask[step]])
                 
             gae = delta + self.gamma * self.gae_lambda * gae
 
-            self.advantages[step] = gae
-            self.returns[step] = gae + value_normalizer.denormalize(self.value_preds[step])
+            self.advantages[step][self.mask[step]] = gae
+            self.returns[step][self.mask[step]] = gae + value_normalizer.denormalize(self.value_preds[step][self.mask[step]])
 
 
     def feed_forward_generator_transformer(self, advantages, num_mini_batch=None, mini_batch_size=None):
@@ -158,25 +114,32 @@ class SharedReplayBuffer(object):
 
         if mini_batch_size is None:
             
-            mini_batch_size = self.batch_size // num_mini_batch
+            mini_batch_size = self.batch_size*self.episode_length // num_mini_batch
 
-        rand = torch.randperm(self.batch_size).numpy()
+        rand = torch.randperm(self.batch_size*self.episode_length).numpy()
         sampler = [rand[i * mini_batch_size:(i + 1) * mini_batch_size] for i in range(num_mini_batch)]
         
-        rows, cols = _shuffle_agent_grid(self.batch_size, self.num_agents*self.num_topic)
+        rows, cols = _shuffle_agent_grid(self.batch_size*self.episode_length, self.num_agents*self.num_topic)
 
         # keep (num_agent, dim)
         obs = self.obs[:-1].reshape(-1, *self.obs.shape[2:])
+        mask = self.mask[:-1].reshape(-1, *self.mask.shape[2:])
+
         obs = obs[rows, cols]
+        mask = mask[rows, cols]
+
         actions = self.actions.reshape(-1, *self.actions.shape[2:])
         actions = actions[rows, cols]
 
         value_preds = self.value_preds[:-1].reshape(-1, *self.value_preds.shape[2:])
         value_preds = value_preds[rows, cols]
+
         returns = self.returns[:-1].reshape(-1, *self.returns.shape[2:])
         returns = returns[rows, cols]
+
         action_log_probs = self.action_log_probs.reshape(-1, *self.action_log_probs.shape[2:])
         action_log_probs = action_log_probs[rows, cols]
+
         advantages = advantages.reshape(-1, *advantages.shape[2:])
         advantages = advantages[rows, cols]
 
@@ -184,6 +147,7 @@ class SharedReplayBuffer(object):
             # [L,T,N,Dim]-->[L*T,N,Dim]-->[index,N,Dim]-->[index*N, Dim]
             #  L: episode_length, T: n_rollout_threads, N: num_agent?
             obs_batch = obs[indices].reshape(-1, *obs.shape[2:])
+            mask_batch = mask[indices].reshape(-1, *mask.shape[1:])
             actions_batch = actions[indices].reshape(-1, *actions.shape[2:])
 
             value_preds_batch = value_preds[indices].reshape(-1, *value_preds.shape[2:])
@@ -196,4 +160,4 @@ class SharedReplayBuffer(object):
                 adv_targ = advantages[indices].reshape(-1, *advantages.shape[2:])
 
             #  yield 文: return 文みたいに値を返すが、関数は終了せず for 文を継続する
-            yield obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ
+            yield obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch
