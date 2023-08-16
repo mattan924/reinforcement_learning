@@ -219,8 +219,6 @@ class MultiAgentTransformer(nn.Module):
         batch = obs.shape[0]
         obs_dim = obs.shape[-1]
 
-        print(f"obs.shape = {check(obs).to(**self.tpdv)[mask].shape}")
-
         obs = check(obs).to(**self.tpdv)[mask].reshape(batch, -1, obs_dim)
         action = check(action).to(**self.tpdv)
 

@@ -58,17 +58,16 @@ class TransformerPolicy:
         :return action_log_probs: (torch.Tensor) 選択されたアクションのログ確率。
         """
 
-        #  obs.shape = (num_agents, num_topic, obs_dim=2255)
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
-        #  obs.shape = (1, num_agent*num_topic, obs_dim=2255)
+        batch = obs.shape[0]
 
-        obs = obs[:, mask]
+        obs = obs[mask].reshape(batch, -1, self.obs_dim)
 
         actions, action_log_probs, action_distribution, values = self.transformer.get_actions(obs, mask, deterministic)
         
-        actions = actions.view(-1, self.act_num)
-        action_log_probs = action_log_probs.view(-1, self.act_num)
-        values = values.view(-1, 1)
+        actions = actions.view(batch, -1, self.act_num)
+        action_log_probs = action_log_probs.view(batch, -1, self.act_num)
+        values = values.view(batch, -1, 1)
 
         return values, actions, action_log_probs, action_distribution
 
@@ -78,9 +77,8 @@ class TransformerPolicy:
         """
 
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
-        #  obs.shape = (1, num_agent*num_topic, obs_dim)
-
-        obs = obs[:, mask]
+        batch = obs.shape[0]
+        obs = obs[mask].reshape(batch, -1, self.obs_dim)
 
         values = self.transformer.get_values(obs)
 
