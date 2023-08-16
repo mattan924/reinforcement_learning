@@ -177,7 +177,7 @@ class MATRunner:
 
             #  各エピソードにおける時間の推移
             for time in range(0, self.env.simulation_time, self.env.time_step):
-                print(f"batch, epi_iter, time = {self.batch}, {epi_iter}, {time}")
+                #print(f"batch, epi_iter, time = {self.batch}, {epi_iter}, {time}")
 
                 step = int(time / self.env.time_step)
 
