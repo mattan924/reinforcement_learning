@@ -29,6 +29,7 @@ batch_size = 16
 backup_itr = 100
 
 
+
 device = "cuda:1"
 result_dir = "../result/temporary/debug/"
 file_name = "easy_mat_fixperm"
