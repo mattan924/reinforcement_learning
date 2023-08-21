@@ -1,0 +1,2 @@
+,config_file,edge_file,topic_file,traking_file,traking_seed,assign_file,assign_seed,solve_file,opt
+data,../../reinforcement_learning/dataset/debug/onetopic/train/config/config_onetopic.csv,../../reinforcement_learning/dataset/debug/onetopic/train/edge/edge_onetopic_23.csv,../../reinforcement_learning/dataset/debug/onetopic/train/topic/topic_onetopic_23.csv,../../reinforcement_learning/dataset/debug/onetopic/train/traking/traking_onetopic_23.csv,66716594,../../reinforcement_learning/dataset/debug/onetopic/train/assign/assign_onetopic_23.csv,53608961,,

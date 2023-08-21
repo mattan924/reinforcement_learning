@@ -189,7 +189,7 @@ class Decoder(nn.Module):
 
 class MultiAgentTransformer(nn.Module):
 
-    def __init__(self, obs_distri_dim, obs_info_dim, action_dim, batch_size, n_agent, n_topic, device=torch.device("cpu")):
+    def __init__(self, obs_distri_dim, obs_info_dim, action_dim, batch_size, n_agent, n_topic, max_agent, max_topic, device=torch.device("cpu")):
         super(MultiAgentTransformer, self).__init__()
 
         self.n_agent = n_agent
@@ -205,8 +205,8 @@ class MultiAgentTransformer(nn.Module):
         self.n_embd = 9
         self.n_head = 1
 
-        self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, n_agent, n_topic)
-        self.decoder = Decoder(action_dim, self.n_block, self.n_embd, self.n_head, n_agent, n_topic)
+        self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
+        self.decoder = Decoder(action_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
 
         self.to(device)
 
@@ -230,7 +230,7 @@ class MultiAgentTransformer(nn.Module):
         return action_log, v_loc, entropy
 
 
-    def get_actions(self, obs, near_action, mask, deterministic=False):
+    def get_actions(self, obs, mask, deterministic=False):
         #  torch.float32, cpu へ変換
         obs = check(obs).to(**self.tpdv)
 
@@ -240,7 +240,7 @@ class MultiAgentTransformer(nn.Module):
         #  v_loc.shape = torch.Size([1, num_agents*num_topic, 1])
         #  obs_rep = torch.Size([1, num_agents*num_topic, n_embd])
         
-        output_action, output_action_log, output_distribution = self.discrete_autoregreesive_act(obs_rep, near_action, mask, deterministic=deterministic)
+        output_action, output_action_log, output_distribution = self.discrete_autoregreesive_act(obs_rep, mask, deterministic=deterministic)
 
         return output_action, output_action_log, output_distribution, v_loc
 
@@ -254,7 +254,7 @@ class MultiAgentTransformer(nn.Module):
         return v_tot
     
 
-    def discrete_autoregreesive_act(self, obs_rep, near_action, mask, deterministic=False):
+    def discrete_autoregreesive_act(self, obs_rep, mask, deterministic=False):
         batch_dim = obs_rep.shape[0]
         action_len = obs_rep.shape[1]
 
@@ -264,9 +264,6 @@ class MultiAgentTransformer(nn.Module):
         output_action = torch.zeros((batch_dim, action_len, 1), dtype=torch.long)
         output_action_log = torch.zeros_like(output_action, dtype=torch.float32)
         output_distribution = torch.zeros((batch_dim, action_len, self.action_dim))
-
-        if near_action is not None:
-            near_action = check(near_action[:, mask]).to(self.device, torch.int64)
 
         for i in range(action_len):
             #  decoder の出力から agent i のものを取り出す
@@ -280,10 +277,8 @@ class MultiAgentTransformer(nn.Module):
 
             if deterministic:
                 action = distri.probs.argmax(dim=-1)
-            elif near_action is None:
-                action = distri.sample()
             else:
-                action = near_action[0][i]
+                action = distri.sample()
 
             action_log = distri.log_prob(action)
             #  action_log.shape = torch.Size([n_rollout_threads])

@@ -80,6 +80,29 @@ class SharedReplayBuffer(object):
 
         self.step = (self.step + 1) % self.episode_length
 
+    
+    def insert_batch(self, obs, mask, actions, action_log_probs, value_preds, rewards, agent_perm, topic_perm):
+        """
+        バッファにデータを挿入します。
+        param obs: (np.ndarray) ローカルエージェントのオブザベーション。
+        :param actions:(np.ndarray) エージェントが取った行動。
+        param action_log_probs:(np.ndarray) エージェントが取った行動のログ確率。
+        param value_preds: (np.ndarray) 各ステップにおける値関数の予測値．
+        param rewards: (np.ndarray) 各ステップで収集した報酬。
+        """
+
+        self.obs[self.step + 1] = obs.reshape(self.batch_size, self.num_agents*self.num_topic, self.obs_dim).copy()
+        self.mask[self.step + 1] = np.bool_(mask.reshape(self.batch_size, self.num_agents*self.num_topic).copy())
+        self.actions[self.step][self.mask[self.step]] = actions.reshape(-1, 1).copy()
+        self.action_log_probs[self.step][self.mask[self.step]] = action_log_probs.reshape(-1, 1).copy()
+        self.value_preds[self.step][self.mask[self.step]] = value_preds.reshape(-1, 1).copy()
+        for batch in range(self.batch_size):
+            self.rewards[self.step][batch][self.mask[self.step][batch]] = rewards[batch].copy()
+        self.agent_perm[self.step + 1] = agent_perm.copy()
+        self.topic_perm[self.step + 1] = topic_perm.copy()
+
+        self.step = (self.step + 1) % self.episode_length
+
 
     def compute_returns(self, batch, next_value, value_normalizer=None):
         """
@@ -92,8 +115,27 @@ class SharedReplayBuffer(object):
         gae = 0
 
         for step in reversed(range(self.episode_length)):
-            delta = self.rewards[step][self.mask[step]] + self.gamma * value_normalizer.denormalize(self.value_preds[step + 1][self.mask[step + 1]]) - value_normalizer.denormalize(self.value_preds[step][self.mask[step]])
+            delta = self.rewards[step][batch][self.mask[step][batch]] + self.gamma * value_normalizer.denormalize(self.value_preds[step + 1][batch][self.mask[step + 1][batch]]) - value_normalizer.denormalize(self.value_preds[step][batch][self.mask[step][batch]])
                 
+            gae = delta + self.gamma * self.gae_lambda * gae
+
+            self.advantages[step][batch][self.mask[step][batch]] = gae
+            self.returns[step][batch][self.mask[step][batch]] = gae + value_normalizer.denormalize(self.value_preds[step][batch][self.mask[step][batch]])
+
+    
+    def compute_returns_batch(self, next_value, value_normalizer=None):
+        """
+        報酬の割引和として、または GAE を使用してリターンを計算します。
+        :param next_value: (np.ndarray) 最後のエピソードステップの次のステップの値予測。
+        :param value_normalizer: (PopArt) Noneでない場合、PopArt値のノーマライザインスタンス。
+        """
+
+        self.value_preds[-1][self.mask[-1]] = next_value
+
+        gae = 0
+
+        for step in reversed(range(self.episode_length)):
+            delta = self.rewards[step][self.mask[step]] + self.gamma * value_normalizer.denormalize(self.value_preds[step + 1][self.mask[step + 1]]) - value_normalizer.denormalize(self.value_preds[step][self.mask[step]])
             gae = delta + self.gamma * self.gae_lambda * gae
 
             self.advantages[step][self.mask[step]] = gae
@@ -128,20 +170,28 @@ class SharedReplayBuffer(object):
         obs = obs[rows, cols]
         mask = mask[rows, cols]
 
+        # obs.shape = (960, 90, 6564)
+        # mask.shape = (960, 90)
+
         actions = self.actions.reshape(-1, *self.actions.shape[2:])
         actions = actions[rows, cols]
+        # actions.shape = (960, 90, 1)
 
         value_preds = self.value_preds[:-1].reshape(-1, *self.value_preds.shape[2:])
         value_preds = value_preds[rows, cols]
+        # value_preds.shape = (960, 90, 1)
 
         returns = self.returns[:-1].reshape(-1, *self.returns.shape[2:])
         returns = returns[rows, cols]
+        # returns.shape = (960, 90, 1)
 
         action_log_probs = self.action_log_probs.reshape(-1, *self.action_log_probs.shape[2:])
         action_log_probs = action_log_probs[rows, cols]
+        # action_log_probs.shape = (960, 90, 1)
 
         advantages = advantages.reshape(-1, *advantages.shape[2:])
         advantages = advantages[rows, cols]
+        # advantages.shape = (960, 90, 1)
 
         for indices in sampler:
             # [L,T,N,Dim]-->[L*T,N,Dim]-->[index,N,Dim]-->[index*N, Dim]
@@ -150,14 +200,23 @@ class SharedReplayBuffer(object):
             mask_batch = mask[indices].reshape(-1, *mask.shape[1:])
             actions_batch = actions[indices].reshape(-1, *actions.shape[2:])
 
+            # obs_batch.shape = (86400, 6564)
+            # mask_batch.shape = (960, 90)
+            # actions_batch.shape = (86400, 1)
+
             value_preds_batch = value_preds[indices].reshape(-1, *value_preds.shape[2:])
             return_batch = returns[indices].reshape(-1, *returns.shape[2:])
             old_action_log_probs_batch = action_log_probs[indices].reshape(-1, *action_log_probs.shape[2:])
+
+            # value_preds_batch.shape = (86400, 1)
+            # returns_batch.shape = (86400, 1)
+            # old_action_log_probs_batch = (86400, 1)
 
             if advantages is None:
                 adv_targ = None
             else:
                 adv_targ = advantages[indices].reshape(-1, *advantages.shape[2:])
+                # adv_targ.shape = (86400, 1)
 
             #  yield 文: return 文みたいに値を返すが、関数は終了せず for 文を継続する
             yield obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch

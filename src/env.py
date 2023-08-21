@@ -450,7 +450,7 @@ class Env:
                     if block_index_y == 3:
                         block_index_y = 2
 
-                    # client.sub_edge[topic_id] = block_index_y*3+block_index_x
+                    client.sub_edge[topic_id] = block_index_y*3+block_index_x
 
 
         # for t in range(self.num_topic):

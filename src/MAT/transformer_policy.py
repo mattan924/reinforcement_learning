@@ -16,7 +16,7 @@ class TransformerPolicy:
     param device: (torch.device) 実行するデバイスを指定します（cpu/gpu）。
     """
 
-    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, num_agents, num_topic, device=torch.device("cpu")):
+    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, num_agents, num_topic, max_agent, max_topic, device=torch.device("cpu")):
         self.device = device
         self.lr = 0.0005
         self.opti_eps = 1e-05
@@ -41,13 +41,13 @@ class TransformerPolicy:
         self.tpdv = dict(dtype=torch.float32, device=device)
         
         #  MAT インスタンスの生成
-        self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, device=device)
+        self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
 
 
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
 
 
-    def get_actions(self, obs, mask, near_action, deterministic=False):
+    def get_actions(self, obs, mask, deterministic=False):
         """
         与えられた入力に対するアクションと値関数の予測を計算します。
         param obs (np.ndarray): actor へのローカルエージェント入力．
@@ -58,17 +58,16 @@ class TransformerPolicy:
         :return action_log_probs: (torch.Tensor) 選択されたアクションのログ確率。
         """
 
-        #  obs.shape = (num_agents, num_topic, obs_dim=2255)
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
-        #  obs.shape = (1, num_agent*num_topic, obs_dim=2255)
+        batch = obs.shape[0]
 
-        obs = obs[:, mask]
+        obs = obs[mask].reshape(batch, -1, self.obs_dim)
 
-        actions, action_log_probs, action_distribution, values = self.transformer.get_actions(obs, near_action, mask, deterministic)
+        actions, action_log_probs, action_distribution, values = self.transformer.get_actions(obs, mask, deterministic)
         
-        actions = actions.view(-1, self.act_num)
-        action_log_probs = action_log_probs.view(-1, self.act_num)
-        values = values.view(-1, 1)
+        actions = actions.view(batch, -1, self.act_num)
+        action_log_probs = action_log_probs.view(batch, -1, self.act_num)
+        values = values.view(batch, -1, 1)
 
         return values, actions, action_log_probs, action_distribution
 
@@ -78,9 +77,8 @@ class TransformerPolicy:
         """
 
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
-        #  obs.shape = (1, num_agent*num_topic, obs_dim)
-
-        obs = obs[:, mask]
+        batch = obs.shape[0]
+        obs = obs[mask].reshape(batch, -1, self.obs_dim)
 
         values = self.transformer.get_values(obs)
 
@@ -103,6 +101,10 @@ class TransformerPolicy:
 
         obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
         actions = actions.reshape(-1, self.num_agents*self.num_topic, self.act_num)
+
+        # obs.shape is (960, 90, 6564)
+        # actions.shape is (960, 90, 1)
+        # mask.shape is (960, 90)
 
         action_log_probs, values, entropy = self.transformer(obs, actions, mask)
 
