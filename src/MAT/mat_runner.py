@@ -85,8 +85,6 @@ class MATRunner:
             for idx in range(len(train_index_path)):
                 self.env_list.append(Env(train_index_path[idx]))
 
-            self.env_list_shuffle = random.sample(self.env_list, len(self.env_list))
-
             self.test_env_list = []
             for idx in range(len(test_index_path)):
                 self.test_env_list.append(Env(test_index_path[idx]))
@@ -365,91 +363,116 @@ class MATRunner:
                     with open(output + "_test" + str(idx) + ".log", 'w') as f:
                         pass
 
+
         # 学習ループ
         for epi_iter in range(start_epi_itr, self.max_epi_itr):
             #  環境のリセット
-            if len(self.env_list_shuffle) == 0:
-                self.env_list_shuffle = random.sample(self.env_list, len(self.env_list))
-
-            self.env = self.env_list_shuffle.pop(0)
-            self.env.reset()
-
-            agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-
-            self.warmup(self.env, self.batch, agent_perm, topic_perm)
+            self.env_list_shuffle = random.sample(self.env_list, self.batch_size)
 
             #  1エピソード中の reward の保持
-            reward_history = []        
+            reward_history = [[] for _ in range(self.batch_size)]
 
+            #  環境のリセット            
+            for idx in range(self.batch_size):
+                env = self.env_list_shuffle[idx]
+
+                self.warmup(env, idx)
+                        
             #  各エピソードにおける時間の推移
-            for time in range(0, self.env.simulation_time, self.env.time_step):
-                #  print(f"batch, epi_iter, time = {self.batch}, {epi_iter}, {time}")
+            for time in range(0, self.simulation_time, self.time_step):
 
-                step = int(time / self.env.time_step)
+                step = int(time / self.time_step)
 
                 #  行動と確率分布の取得
-                values, actions, action_log_probs, action_distribution = self.collect(self.batch, step)
+                values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect_batch(step)
+
+                reward_batch = np.zeros((self.batch_size), dtype=np.float32)
+
+                agent_perm_batch = np.zeros((self.batch_size, self.num_agent), dtype=np.int64)
+                topic_perm_batch = np.zeros((self.batch_size, self.num_topic), dtype=np.int64)
+
+                obs_batch = np.zeros((self.batch_size, self.num_agent, self.num_topic, self.obs_dim), dtype=np.float32)
+                mask_batch = np.zeros((self.batch_size, self.num_agent, self.num_topic), dtype=np.bool)
 
                 # 報酬の受け取り
-                reward = self.env.step(actions, agent_perm, topic_perm, time)
-                reward_history.append(reward)
-                reward = -reward
+                for idx in range(self.batch_size):
+                    env = self.env_list_shuffle[idx]
+                    reward = env.step(actions_batch[idx], self.buffer.agent_perm[step][idx], self.buffer.topic_perm[step][idx], time)
+                    reward_history[idx].append(reward)
+                    reward_batch[idx] = -reward
 
-                #  状態の観測
-                #  ランダムな順にいつか改修
-                agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+                    #  状態の観測
+                    #  ランダムな順にいつか改修
+                    agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+                    agent_perm_batch[idx] = agent_perm
+                    topic_perm_batch[idx] = topic_perm
 
-                obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+                    obs, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+                    obs_batch[idx] = obs
+                    mask_batch[idx] = mask
+                
+                self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
 
-                self.insert(self.batch, obs, mask, reward, values, actions, action_log_probs, agent_perm, topic_perm)
+            self.compute_batch()
 
-            self.compute(self.batch)
-
-            if self.batch == self.batch_size-1:
-                # 学習
-                train_info = self.train()
-
+            self.train()
+            
             if epi_iter % 1 == 0:
                 #  ログの出力
                 #print(f"total_reward = {sum(reward_history)}")
                 #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
                 with open(output + ".log", 'a') as f:
-                    f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {-sum(reward_history)}\n")
+                    reward_average = 0
+                    for idx in range(self.batch_size):
+                        reward_average += sum(reward_history[idx])/self.batch_size
+
+                    f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {reward_average * -1}\n")
 
             if epi_iter % self.test_iter == 0:
                 for idx in range(len(self.test_env_list)):
                     test_env = self.test_env_list[idx]
-                    test_env.reset()
-
-                    agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
 
                     self.warmup(test_env, idx, agent_perm, topic_perm, train=False)
 
-                    #  各エピソードにおける時間の推移
-                    reward_history = []
-                    for time in range(0, test_env.simulation_time, test_env.time_step):
-                        step = int(time / test_env.time_step)
+                #  各エピソードにおける時間の推移
+                reward_history_test = [[] for _ in range(len(self.test_env_list))]
 
-                        #  行動と確率分布の取得
-                        values, actions, action_log_probs, action_distribution = self.collect(idx, step, train=False)
+                for time in range(0, test_env.simulation_time, test_env.time_step):
+                    step = int(time / test_env.time_step)
 
-                        # 報酬の受け取り
-                        reward = test_env.step(actions, agent_perm, topic_perm, time)
-                        reward_history.append(reward)
-                        reward = -reward
+                    #  行動と確率分布の取得
+                    values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect_batch(idx, step, train=False)
+
+                    reward_batch = np.zeros((len(self.test_env_list)), dtype=np.float32)
+
+                    agent_perm_batch = np.zeros((len(self.test_env_list), self.num_agent), dtype=np.int64)
+                    topic_perm_batch = np.zeros((len(self.test_env_list), self.num_topic), dtype=np.int64)
+
+                    obs_batch = np.zeros((len(self.test_env_list), self.num_agent, self.num_topic, self.obs_dim), dtype=np.float32)
+                    mask_batch = np.zeros((len(self.test_env_list), self.num_agent, self.num_topic), dtype=np.bool)
+
+                    # 報酬の受け取り
+                    for idx in range(len(self.test_env_list)):
+                        test_env = self.test_env_list[idx]
+                        reward = test_env.step(actions_batch[idx], self.test_buffer.agent_perm[step][idx], self.test_buffer.topic_perm[step][idx], time)
+                        reward_history_test[idx].append(reward)
+                        reward_batch[idx] = -reward
 
                         #  状態の観測
                         #  ランダムな順にいつか改修
                         agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+                        agent_perm_batch[idx] = agent_perm
+                        topic_perm_batch[idx] = topic_perm
 
                         obs, mask = test_env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+                        obs_batch[idx] = obs
+                        mask_batch[idx] = mask
 
-                        self.insert(idx, obs, mask, reward, values, actions, action_log_probs, agent_perm, topic_perm, train=False)
+                    self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch, train=False)
 
+                for idx in range(len(self.test_env_list)):
                     with open(output + "_test" + str(idx) + ".log", 'a') as f:
                         f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {-sum(reward_history)}\n")
-
-            self.batch = (self.batch + 1) % self.batch_size
 
             #  重みパラメータのバックアップ
             if epi_iter % self.backup_itr == 0:
