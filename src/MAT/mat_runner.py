@@ -3,6 +3,7 @@ from MAT.ma_transformer import MultiAgentTransformer
 from MAT.transformer_policy import TransformerPolicy
 from MAT.mat_trainer import MATTrainer
 from MAT.shared_buffer import SharedReplayBuffer
+from multiprocessing import Pool
 import matplotlib.pyplot as plt
 import pandas as pd
 import sys
@@ -112,7 +113,10 @@ class MATRunner:
         self.batch = 0
 
         
-    def warmup(self, env, batch, agent_perm, topic_perm, train=True):
+    def warmup(self, env, batch, train=True):
+        env.reset()
+
+        agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
         obs, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
 
         if train:
@@ -121,13 +125,14 @@ class MATRunner:
 
             self.buffer.agent_perm[0][batch] = agent_perm
             self.buffer.topic_perm[0][batch] = topic_perm
+
         else:
             self.test_buffer.obs[0][batch] = obs.reshape(self.num_agent*self.num_topic, self.obs_dim).copy()
             self.test_buffer.mask[0][batch] = np.bool_(mask.reshape(self.num_agent*self.num_topic).copy())
 
             self.test_buffer.agent_perm[0][batch] = agent_perm
             self.test_buffer.topic_perm[0][batch] = topic_perm
-            
+              
 
     @torch.no_grad()
     def collect(self, batch, step, train=True):
@@ -238,109 +243,8 @@ class MATRunner:
 
         return agent_perm, topic_perm
     
-
-    def train_single_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
-
-        if load_parameter_path is not None:
-            self.policy.restore(load_parameter_path)
-            if start_epi_itr == 0:
-                with open(output + ".log", 'w') as f:
-                    pass
-                with open(output + "_pi.log", "w") as f:
-                    pass  
-        else:
-            with open(output + ".log", 'w') as f:
-                pass
-
-            with open(output + "_pi.log", "w") as f:
-                pass   
-
-        # 学習ループ
-        for epi_iter in range(start_epi_itr, self.max_epi_itr):
-            #  環境のリセット
-            self.env.reset()
-
-            agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-
-            self.warmup(self.env, self.batch, agent_perm, topic_perm)
-
-            #  1エピソード中の reward の保持
-            reward_history = []        
-
-            #  各エピソードにおける時間の推移
-            for time in range(0, self.env.simulation_time, self.env.time_step):
-                #  print(f"batch, epi_iter, time = {self.batch}, {epi_iter}, {time}")
-
-                step = int(time / self.env.time_step)
-
-                #  行動と確率分布の取得
-                values, actions, action_log_probs, action_distribution = self.collect(self.batch, step)
-
-                # 報酬の受け取り
-                reward = self.env.step(actions, agent_perm, topic_perm, time)
-                reward_history.append(reward)
-                reward = -reward
-
-                #  状態の観測
-                #  ランダムな順にいつか改修
-                agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-
-                obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
-
-                self.insert(self.batch, obs, mask, reward, values, actions, action_log_probs, agent_perm, topic_perm)
-
-            self.compute(self.batch)
-
-            if self.batch == self.batch_size-1:
-                # 学習
-                train_info = self.train()
-
-            if epi_iter % 1 == 0:
-                #  ログの出力
-                #print(f"total_reward = {sum(reward_history)}")
-                #print(f"train is {(epi_iter/max_epi_itr)*100}% complited.")
-                with open(output + ".log", 'a') as f:
-                    f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {-sum(reward_history)}\n")
-
-                with open(output + "_pi.log", "a") as f:
-                    f.write(f"\n==========iter = {epi_iter} ==========\n")
-                    f.write(f"agent_perm = {self.buffer.agent_perm[-2][self.batch]}\n")
-                    f.write(f"topic_perm = {self.buffer.topic_perm[-2][self.batch]}\n")
-                    f.write(f"agent_actions = {actions}\n")
-
-                    action_distribution = action_distribution.reshape(-1, self.num_agent, self.num_topic, self.N_action)
-
-                    for i in range(self.num_agent):
-                        agent_idx = self.buffer.agent_perm[-2][self.batch].tolist().index(i)
-                        for t in range(self.num_topic):
-                            topic_idx = self.buffer.topic_perm[-2][self.batch].tolist().index(t)
-                            f.write(f"agent {i} topic {t} : pi = {action_distribution[0][agent_idx][topic_idx]}\n")
-
-            self.batch = (self.batch + 1) % self.batch_size
-
-            #  重みパラメータのバックアップ
-            if epi_iter % self.backup_itr == 0:
-                self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter)
-
-        #  最適解の取り出し
-        df_index = pd.read_csv(self.learning_data_index_path, index_col=0)
-        opt = df_index.at['data', 'opt']
-
-        train_curve = read_train_curve(output + ".log")
-
-        #  学習曲線の描画
-        fig = plt.figure()
-        wind = fig.add_subplot(1, 1, 1)
-        wind.grid()
-        wind.plot(train_curve, linewidth=1, label='COMA')
-        wind.axhline(y=-opt, c='r')
-        fig.savefig(output + ".png")
-
-        #  重みパラメータの保存
-        self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter+1)
-
     
-    def train_single_env_multi_process(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
+    def train_single_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
 
         if load_parameter_path is not None:
             self.policy.restore(load_parameter_path)
@@ -360,17 +264,14 @@ class MATRunner:
             #  1エピソード中の reward の保持
             reward_history = [[] for _ in range(self.batch_size)]
 
-            #  環境のリセット
+            #  環境のリセット            
             for idx in range(self.batch_size):
                 env = multi_envs[idx]
-                env.reset()
 
-                agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-                self.warmup(env, idx, agent_perm, topic_perm)
-
+                self.warmup(env, idx)
+                        
             #  各エピソードにおける時間の推移
             for time in range(0, self.simulation_time, self.time_step):
-                #  print(f"batch, epi_iter, time = {self.batch}, {epi_iter}, {time}")
 
                 step = int(time / self.time_step)
 
@@ -401,17 +302,13 @@ class MATRunner:
                     obs, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
                     obs_batch[idx] = obs
                     mask_batch[idx] = mask
-
+                
                 self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
 
             self.compute_batch()
 
-            train_info = self.train()
-
-            end_time = time_module.perf_counter()
+            self.train()
             
-            # print(f"1 step time = {end_time - start_time}")
-
             if epi_iter % 1 == 0:
                 #  ログの出力
                 #print(f"total_reward = {sum(reward_history)}")
@@ -426,6 +323,10 @@ class MATRunner:
             #  重みパラメータのバックアップ
             if epi_iter % self.backup_itr == 0:
                 self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter)
+
+            end_time = time_module.perf_counter()
+
+            print(f"1 step time = {end_time - start_time}")
 
         #  最適解の取り出し
         df_index = pd.read_csv(self.learning_data_index_path, index_col=0)
@@ -443,7 +344,6 @@ class MATRunner:
 
         #  重みパラメータの保存
         self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter+1)
-
 
 
     def train_multi_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):

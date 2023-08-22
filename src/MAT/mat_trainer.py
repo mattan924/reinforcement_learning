@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import time
 from MAT.utils.util import get_gard_norm, huber_loss, check
 from MAT.utils.valuenorm import ValueNorm
 
@@ -65,7 +66,7 @@ class MATTrainer:
         return value_loss
     
 
-    def ppo_update(self, sample):
+    def ppo_update(self, obs_batch, actions_batch, value_preds_batch, return_batch,old_action_log_probs_batch, adv_targ, mask_batch):
         """
         アクターとクリティックのネットワークを更新します。
         param sample: (タプル) ネットワークを更新するデータバッチを含みます。
@@ -78,8 +79,6 @@ class MATTrainer:
         :return actor_grad_norm: (torch.Tensor) アクタの更新からの勾配ノルム。
         :return imp_weights: (torch.Tensor) 重要度サンプリングの重み。
         """
-
-        obs_batch, actions_batch, value_preds_batch, return_batch,old_action_log_probs_batch, adv_targ, mask_batch = sample
 
         old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
         adv_targ = check(adv_targ).to(**self.tpdv)
@@ -129,36 +128,12 @@ class MATTrainer:
         mean_advantages = np.nanmean(advantages_copy[mask])
         std_advantages = np.nanstd(advantages_copy[mask])
         advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
-        
-        train_info = {}
-
-        train_info['value_loss'] = 0
-        train_info['policy_loss'] = 0
-        train_info['dist_entropy'] = 0
-        train_info['actor_grad_norm'] = 0
-        train_info['critic_grad_norm'] = 0
-        train_info['ratio'] = 0
-
+                
         for _ in range(self.ppo_epoch):
-            data_generator = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
+            obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
 
-            for sample in data_generator:
+            self.ppo_update(obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch)
 
-                value_loss, critic_grad_norm, policy_loss, dist_entropy, actor_grad_norm, imp_weights = self.ppo_update(sample)
-
-                train_info['value_loss'] += value_loss.item()
-                train_info['policy_loss'] += policy_loss.item()
-                train_info['dist_entropy'] += dist_entropy.item()
-                train_info['actor_grad_norm'] += actor_grad_norm
-                train_info['critic_grad_norm'] += critic_grad_norm
-                train_info['ratio'] += imp_weights.mean()
-
-        num_updates = self.ppo_epoch * self.num_mini_batch
-
-        for k in train_info.keys():
-            train_info[k] /= num_updates
- 
-        return train_info
 
     def prep_training(self):
         self.policy.train()

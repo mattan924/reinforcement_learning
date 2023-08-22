@@ -159,7 +159,7 @@ class SharedReplayBuffer(object):
             mini_batch_size = self.batch_size*self.episode_length // num_mini_batch
 
         rand = torch.randperm(self.batch_size*self.episode_length).numpy()
-        sampler = [rand[i * mini_batch_size:(i + 1) * mini_batch_size] for i in range(num_mini_batch)]
+        indices = rand[:mini_batch_size]
         
         rows, cols = _shuffle_agent_grid(self.batch_size*self.episode_length, self.num_agents*self.num_topic)
 
@@ -193,30 +193,29 @@ class SharedReplayBuffer(object):
         advantages = advantages[rows, cols]
         # advantages.shape = (960, 90, 1)
 
-        for indices in sampler:
-            # [L,T,N,Dim]-->[L*T,N,Dim]-->[index,N,Dim]-->[index*N, Dim]
-            #  L: episode_length, T: n_rollout_threads, N: num_agent?
-            obs_batch = obs[indices].reshape(-1, *obs.shape[2:])
-            mask_batch = mask[indices].reshape(-1, *mask.shape[1:])
-            actions_batch = actions[indices].reshape(-1, *actions.shape[2:])
+        # [L,T,N,Dim]-->[L*T,N,Dim]-->[index,N,Dim]-->[index*N, Dim]
+        #  L: episode_length, T: n_rollout_threads, N: num_agent?
+        obs_batch = obs[indices].reshape(-1, *obs.shape[2:])
+        mask_batch = mask[indices].reshape(-1, *mask.shape[1:])
+        actions_batch = actions[indices].reshape(-1, *actions.shape[2:])
 
-            # obs_batch.shape = (86400, 6564)
-            # mask_batch.shape = (960, 90)
-            # actions_batch.shape = (86400, 1)
+        # obs_batch.shape = (86400, 6564)
+        # mask_batch.shape = (960, 90)
+        # actions_batch.shape = (86400, 1)
 
-            value_preds_batch = value_preds[indices].reshape(-1, *value_preds.shape[2:])
-            return_batch = returns[indices].reshape(-1, *returns.shape[2:])
-            old_action_log_probs_batch = action_log_probs[indices].reshape(-1, *action_log_probs.shape[2:])
+        value_preds_batch = value_preds[indices].reshape(-1, *value_preds.shape[2:])
+        return_batch = returns[indices].reshape(-1, *returns.shape[2:])
+        old_action_log_probs_batch = action_log_probs[indices].reshape(-1, *action_log_probs.shape[2:])
 
-            # value_preds_batch.shape = (86400, 1)
-            # returns_batch.shape = (86400, 1)
-            # old_action_log_probs_batch = (86400, 1)
+        #value_preds_batch.shape = (86400, 1)
+        # returns_batch.shape = (86400, 1)
+        # old_action_log_probs_batch = (86400, 1)
 
-            if advantages is None:
-                adv_targ = None
-            else:
-                adv_targ = advantages[indices].reshape(-1, *advantages.shape[2:])
-                # adv_targ.shape = (86400, 1)
+        if advantages is None:
+            adv_targ = None
+        else:
+            adv_targ = advantages[indices].reshape(-1, *advantages.shape[2:])
+            # adv_targ.shape = (86400, 1)
 
-            #  yield 文: return 文みたいに値を返すが、関数は終了せず for 文を継続する
-            yield obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch
+        #  yield 文: return 文みたいに値を返すが、関数は終了せず for 文を継続する
+        return obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch
