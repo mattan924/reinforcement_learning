@@ -6,7 +6,7 @@ import sys
 
 #learning_data_index_path = "../dataset/debug/debug/index/index_hard.csv"
 learning_data_index_dir = "../dataset/debug/easy/train/index/"
-#test_data_index_dir = "../dataset/debug/onetopic/test/index/"
+test_data_index_dir = "../dataset/debug/easy/test/index/"
 
 # 各種パラメーター
 #  HAPPO
@@ -58,7 +58,7 @@ for i in range(1):
 
     #happo_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight,V_net_weight, learning_data_index_path, output)
     #coma_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output)
-    runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_path=learning_data_index_path)
+    runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_dir=learning_data_index_dir, test_data_index_dir=test_data_index_dir)
     runner.train_multi_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
     #runner.train_multi_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
 
