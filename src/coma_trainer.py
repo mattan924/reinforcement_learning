@@ -155,7 +155,7 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, backup_iter, device
     pretrain_flag = False
 
     #  pre_train を行うエピソードの周期 (pre_train_iter = 10の時10回に一回 pre_train を実行)
-    pre_train_iter = 10
+    pre_train_iter = 2
 
     #  ターゲットネットワークの同期
     target_net_flag = False

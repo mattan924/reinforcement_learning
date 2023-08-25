@@ -5,6 +5,7 @@ import util
 import pandas as pd
 import numpy as np
 import math
+import copy
 
 
 class Client:
@@ -394,8 +395,8 @@ class Env:
         return obs, mask
     
 
-    def get_near_action(self, agent_perm, topic_perm):
-        near_actions = np.zeros((1, self.num_client*self.num_topic, 1))
+    def get_near_action(self, agent_perm):
+        near_actions = np.zeros((self.num_client*self.num_topic, 1), dtype=np.int64)
 
         for i in range(self.num_client):
             client_id = agent_perm[i]
@@ -411,7 +412,7 @@ class Env:
                     min_dis = dis
 
             for t in range(self.num_topic):
-                near_actions[0][i*self.num_topic + t] = min_idx
+                near_actions[i*self.num_topic + t] = min_idx
 
         return near_actions
 
@@ -439,7 +440,7 @@ class Env:
                     edge = self.all_edge[int(client.pub_edge[topic_id])]
                     edge.used_publishers[topic_id] += 1
 
-                    # print(f"client.id, pub_edge = {client.id}, {client.pub_edge[topic_id]}")
+                    #print(f"client.id, pub_edge = {client.id}, {client.pub_edge[topic_id]}")
 
                 if  client.sub_topic[topic_id] == 1:
                     block_index_x = int(client.x / block_len_x)
@@ -451,28 +452,6 @@ class Env:
                         block_index_y = 2
 
                     client.sub_edge[topic_id] = block_index_y*3+block_index_x
-
-
-        # for t in range(self.num_topic):
-        #     topic_id = topic_perm[t]
-
-        #     for publisher in self.publishers[topic_id]:
-        #         agent_idx = agent_perm.index(publisher.id)
-        #         publisher.pub_edge[topic_id] = actions[agent_idx][topic_id]
-
-        #         edge = self.all_edge[int(publisher.pub_edge[topic_id])]
-        #         edge.used_publishers[topic_id] += 1
-
-        #     for subscriber in self.subscribers[topic_id]:
-        #         block_index_x = int(subscriber.x / block_len_x)
-        #         block_index_y = int(subscriber.y / block_len_y)
-
-        #         if block_index_x == 3:
-        #             block_index_x = 2
-        #         if block_index_y == 3:
-        #             block_index_y = 2
-
-        #         subscriber.sub_edge[topic_id] = block_index_y*3+block_index_x
 
         for edge in self.all_edge:
             edge.used_volume = np.zeros(self.num_topic)
@@ -518,7 +497,7 @@ class Env:
         # 報酬の計算
         reward = self.cal_reward()
 
-        self.pre_time_clients = self.clients.copy()
+        self.pre_time_clients = copy.deepcopy(self.clients)
     
         if time != self.simulation_time-self.time_step:
             self.clients = []

@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torch.nn.functional as F
+import time
 
 
 def _flatten(T, N, x):
@@ -161,38 +162,31 @@ class SharedReplayBuffer(object):
         rand = torch.randperm(self.batch_size*self.episode_length).numpy()
         indices = rand[:mini_batch_size]
         
-        rows, cols = _shuffle_agent_grid(self.batch_size*self.episode_length, self.num_agents*self.num_topic)
-
         # keep (num_agent, dim)
         obs = self.obs[:-1].reshape(-1, *self.obs.shape[2:])
         mask = self.mask[:-1].reshape(-1, *self.mask.shape[2:])
-
-        obs = obs[rows, cols]
-        mask = mask[rows, cols]
 
         # obs.shape = (960, 90, 6564)
         # mask.shape = (960, 90)
 
         actions = self.actions.reshape(-1, *self.actions.shape[2:])
-        actions = actions[rows, cols]
         # actions.shape = (960, 90, 1)
 
         value_preds = self.value_preds[:-1].reshape(-1, *self.value_preds.shape[2:])
-        value_preds = value_preds[rows, cols]
         # value_preds.shape = (960, 90, 1)
 
         returns = self.returns[:-1].reshape(-1, *self.returns.shape[2:])
-        returns = returns[rows, cols]
         # returns.shape = (960, 90, 1)
 
         action_log_probs = self.action_log_probs.reshape(-1, *self.action_log_probs.shape[2:])
-        action_log_probs = action_log_probs[rows, cols]
         # action_log_probs.shape = (960, 90, 1)
 
         advantages = advantages.reshape(-1, *advantages.shape[2:])
-        advantages = advantages[rows, cols]
         # advantages.shape = (960, 90, 1)
 
+        #  一旦 データのシャッフルを停止
+        #  複数 env での学習の際に効果があるのかを再検証
+        """
         # [L,T,N,Dim]-->[L*T,N,Dim]-->[index,N,Dim]-->[index*N, Dim]
         #  L: episode_length, T: n_rollout_threads, N: num_agent?
         obs_batch = obs[indices].reshape(-1, *obs.shape[2:])
@@ -217,5 +211,31 @@ class SharedReplayBuffer(object):
             adv_targ = advantages[indices].reshape(-1, *advantages.shape[2:])
             # adv_targ.shape = (86400, 1)
 
-        #  yield 文: return 文みたいに値を返すが、関数は終了せず for 文を継続する
+        return obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch
+        """
+
+        # [L,T,N,Dim]-->[L*T,N,Dim]-->[index,N,Dim]-->[index*N, Dim]
+        #  L: episode_length, T: n_rollout_threads, N: num_agent?
+        obs_batch = obs.reshape(-1, *obs.shape[2:])
+        mask_batch = mask.reshape(-1, *mask.shape[1:])
+        actions_batch = actions.reshape(-1, *actions.shape[2:])
+
+        # obs_batch.shape = (86400, 6564)
+        # mask_batch.shape = (960, 90)
+        # actions_batch.shape = (86400, 1)
+
+        value_preds_batch = value_preds.reshape(-1, *value_preds.shape[2:])
+        return_batch = returns.reshape(-1, *returns.shape[2:])
+        old_action_log_probs_batch = action_log_probs.reshape(-1, *action_log_probs.shape[2:])
+
+        #value_preds_batch.shape = (86400, 1)
+        # returns_batch.shape = (86400, 1)
+        # old_action_log_probs_batch = (86400, 1)
+
+        if advantages is None:
+            adv_targ = None
+        else:
+            adv_targ = advantages.reshape(-1, *advantages.shape[2:])
+            # adv_targ.shape = (86400, 1)
+
         return obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch

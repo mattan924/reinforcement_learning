@@ -92,7 +92,10 @@ class MATRunner:
             self.num_agent = self.env_list[0].num_client
             self.num_topic = self.env_list[0].num_topic
 
-            if self.env_list[0].simulation_time % self.env_list[0].time_step == 0:
+            self.simulation_time = self.env_list[0].simulation_time
+            self.time_step = self.env_list[0].time_step
+
+            if self.simulation_time % self.time_step == 0:
                 self.episode_length = int(self.env_list[0].simulation_time / self.env_list[0].time_step)
             else:
                 sys.exit("simulation_time が time_step の整数倍になっていません")
@@ -324,11 +327,68 @@ class MATRunner:
 
             end_time = time_module.perf_counter()
 
-            print(f"1 step time = {end_time - start_time}")
+            #print(f"1 step time = {end_time - start_time}")
 
         #  最適解の取り出し
         df_index = pd.read_csv(self.learning_data_index_path, index_col=0)
         opt = df_index.at['data', 'opt']
+
+        #  近傍サーバを選択した際の遅延を計算
+        reward_history = [[] for _ in range(self.batch_size)]
+
+        #  環境のリセット            
+        for idx in range(self.batch_size):
+            env = multi_envs[idx]
+
+            self.warmup(env, idx)
+
+        for time in range(0, self.simulation_time, self.time_step):
+
+            step = int(time / self.time_step)
+
+            #  行動と確率分布の取得
+            values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect_batch(step)
+
+            actions_batch = np.zeros((self.batch_size, self.num_agent*self.num_topic, 1))
+
+            for idx in range(self.batch_size):
+                actions = self.env.get_near_action(self.buffer.agent_perm[step][idx])
+                actions_batch[idx] = actions
+
+            actions_batch = actions_batch[self.buffer.mask[step]].reshape(self.batch_size, -1, 1)
+
+            reward_batch = np.zeros((self.batch_size), dtype=np.float32)
+
+            agent_perm_batch = np.zeros((self.batch_size, self.num_agent), dtype=np.int64)
+            topic_perm_batch = np.zeros((self.batch_size, self.num_topic), dtype=np.int64)
+
+            obs_batch = np.zeros((self.batch_size, self.num_agent, self.num_topic, self.obs_dim), dtype=np.float32)
+            mask_batch = np.zeros((self.batch_size, self.num_agent, self.num_topic), dtype=np.bool)
+
+            # 報酬の受け取り
+            for idx in range(self.batch_size):
+                env = multi_envs[idx]
+                reward = env.step(actions_batch[idx], self.buffer.agent_perm[step][idx], self.buffer.topic_perm[step][idx], time)
+                reward_history[idx].append(reward)
+                reward_batch[idx] = -reward
+
+                #  状態の観測
+                #  ランダムな順にいつか改修
+                agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
+                agent_perm_batch[idx] = agent_perm
+                topic_perm_batch[idx] = topic_perm
+
+                obs, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+                obs_batch[idx] = obs
+                mask_batch[idx] = mask
+                
+            self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+
+        reward_average = 0
+        for idx in range(self.batch_size):
+            reward_average += sum(reward_history[idx])/self.batch_size
+
+        print(f"reward_average = {reward_average}")
 
         train_curve = read_train_curve(output + ".log")
 
@@ -336,8 +396,9 @@ class MATRunner:
         fig = plt.figure()
         wind = fig.add_subplot(1, 1, 1)
         wind.grid()
-        wind.plot(train_curve, linewidth=1, label='COMA')
-        wind.axhline(y=-opt, c='r')
+        wind.plot(train_curve, linewidth=1, label='')
+        wind.axhline(y=-opt, c='r', label='opt')
+        wind.axhline(y=-reward_average, c='g', label='nearest')
         fig.savefig(output + ".png")
 
         #  重みパラメータの保存

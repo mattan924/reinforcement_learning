@@ -21,7 +21,7 @@ class MATTrainer:
         self.num_agents = num_agents
 
         self.clip_param = 0.05
-        self.ppo_epoch = 8
+        self.ppo_epoch = 16
         self.num_mini_batch = 1
         self.data_chunk_length = 10
         self.value_loss_coef = 1
