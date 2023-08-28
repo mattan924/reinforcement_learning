@@ -11,6 +11,7 @@ import os
 import glob
 import random
 import time as time_module
+import datetime
 import torch
 import numpy as np
 
@@ -133,37 +134,14 @@ class MATRunner:
 
             self.test_buffer.agent_perm[0][batch] = agent_perm
             self.test_buffer.topic_perm[0][batch] = topic_perm
-              
+                  
 
     @torch.no_grad()
-    def collect(self, batch, step, train=True):
-        #  TransformerPolicy を学習用に設定
-        self.trainer.prep_rollout()
-
-        action_distribution = torch.ones((1, self.num_agent*self.num_topic, self.N_action))*-1
-
-        if train:
-            value, action, action_log_prob, action_distribution[:, self.buffer.mask[step][batch]] = self.trainer.policy.get_actions(self.buffer.obs[step][batch], self.buffer.mask[step][batch])
-        else:
-            value, action, action_log_prob, action_distribution[:, self.test_buffer.mask[step][batch]] = self.trainer.policy.get_actions(self.test_buffer.obs[step][batch], self.test_buffer.mask[step][batch])
-
-        #  _t2n: tensor → numpy
-        values = np.array(_t2n(value))
-        actions = np.array(_t2n(action))
-        action_log_probs = np.array(_t2n(action_log_prob))
-        action_distribution = np.array(_t2n(action_distribution))
-
-        return values, actions, action_log_probs, action_distribution
-    
-
-    @torch.no_grad()
-    def collect_batch(self, step, train=True):
+    def collect(self, step, train=True):
         #  TransformerPolicy を学習用に設定
         self.trainer.prep_rollout()
 
         if train:
-            # mask.shape = (16, 90)
-            # action_distribution.shape = torch.Size([16, 90, 9])
             value, action, action_log_prob, action_distribution = self.trainer.policy.get_actions(self.buffer.obs[step], self.buffer.mask[step])
         else:
             value, action, action_log_prob, action_distribution = self.trainer.policy.get_actions(self.test_buffer.obs[step], self.test_buffer.mask[step], deterministic=True)
@@ -177,15 +155,7 @@ class MATRunner:
         return values, actions, action_log_probs, action_distribution
     
 
-    def insert(self, batch, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm, train=True):
-
-        if train:
-            self.buffer.insert(batch, obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
-        else:
-            self.test_buffer.insert(batch, obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
-
-
-    def insert_batch(self, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm, train=True):
+    def insert(self, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm, train=True):
 
         if train:
             self.buffer.insert_batch(obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
@@ -194,21 +164,7 @@ class MATRunner:
 
     
     @torch.no_grad()
-    def compute(self, batch):
-        """Calculate returns for the collected data."""
-        #  transformer を評価用にセット
-        self.trainer.prep_rollout()
-
-        next_values = self.trainer.policy.get_values(np.concatenate(self.buffer.obs[-1][batch]), self.buffer.mask[-1][batch])
-            
-        #  _t2n: tensor から numpy への変換
-        next_values = np.array(_t2n(next_values))
-        
-        self.buffer.compute_returns(batch, next_values, self.trainer.value_normalizer)
-
-    
-    @torch.no_grad()
-    def compute_batch(self):
+    def compute(self):
         """Calculate returns for the collected data."""
         #  transformer を評価用にセット
         self.trainer.prep_rollout()
@@ -246,6 +202,8 @@ class MATRunner:
     
     
     def train_single_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
+        timezone_jst = datetime.timezone(datetime.timedelta(hours=9))
+        start_process = datetime.datetime.now(timezone_jst)
 
         if load_parameter_path is not None:
             self.policy.restore(load_parameter_path)
@@ -277,7 +235,7 @@ class MATRunner:
                 step = int(time / self.time_step)
 
                 #  行動と確率分布の取得
-                values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect_batch(step)
+                values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect(step)
 
                 reward_batch = np.zeros((self.batch_size), dtype=np.float32)
 
@@ -304,9 +262,9 @@ class MATRunner:
                     obs_batch[idx] = obs
                     mask_batch[idx] = mask
                 
-                self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+                self.insert(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
 
-            self.compute_batch()
+            self.compute()
 
             self.train()
             
@@ -327,7 +285,12 @@ class MATRunner:
 
             end_time = time_module.perf_counter()
 
-            #print(f"1 step time = {end_time - start_time}")
+            if epi_iter == 0:
+                print(f"1 step time = {end_time - start_time}")
+
+                process_time = datetime.timedelta(seconds=(end_time - start_time)*self.max_epi_itr)
+                finish_time = start_process + process_time
+                print(f"終了予定時刻は {finish_time}")
 
         #  最適解の取り出し
         df_index = pd.read_csv(self.learning_data_index_path, index_col=0)
@@ -347,7 +310,7 @@ class MATRunner:
             step = int(time / self.time_step)
 
             #  行動と確率分布の取得
-            values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect_batch(step)
+            values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect(step)
 
             actions_batch = np.zeros((self.batch_size, self.num_agent*self.num_topic, 1))
 
@@ -382,7 +345,7 @@ class MATRunner:
                 obs_batch[idx] = obs
                 mask_batch[idx] = mask
                 
-            self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+            self.insert(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
 
         reward_average = 0
         for idx in range(self.batch_size):
@@ -406,6 +369,8 @@ class MATRunner:
 
 
     def train_multi_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
+        timezone_jst = datetime.timezone(datetime.timedelta(hours=9))
+        start_process = datetime.datetime.now(timezone_jst)
 
         if load_parameter_path is not None:
             self.policy.restore(load_parameter_path)
@@ -427,6 +392,8 @@ class MATRunner:
 
         # 学習ループ
         for epi_iter in range(start_epi_itr, self.max_epi_itr):
+            start_time = time_module.perf_counter()
+
             #  環境のリセット
             self.env_list_shuffle = random.sample(self.env_list, self.batch_size)
 
@@ -445,7 +412,7 @@ class MATRunner:
                 step = int(time / self.time_step)
 
                 #  行動と確率分布の取得
-                values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect_batch(step)
+                values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect(step)
 
                 reward_batch = np.zeros((self.batch_size), dtype=np.float32)
 
@@ -472,9 +439,9 @@ class MATRunner:
                     obs_batch[idx] = obs
                     mask_batch[idx] = mask
                 
-                self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+                self.insert(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
 
-            self.compute_batch()
+            self.compute()
 
             self.train()
             
@@ -490,6 +457,8 @@ class MATRunner:
                     f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {reward_average * -1}\n")
 
             if epi_iter % self.test_iter == 0:
+                test_start = time_module.perf_counter()
+
                 for idx in range(len(self.test_env_list)):
                     test_env = self.test_env_list[idx]
 
@@ -502,7 +471,7 @@ class MATRunner:
                     step = int(time / test_env.time_step)
 
                     #  行動と確率分布の取得
-                    values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect_batch(idx, step, train=False)
+                    values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect(idx, step, train=False)
 
                     reward_batch = np.zeros((len(self.test_env_list)), dtype=np.float32)
 
@@ -529,15 +498,26 @@ class MATRunner:
                         obs_batch[idx] = obs
                         mask_batch[idx] = mask
 
-                    self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch, train=False)
+                    self.insert(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch, train=False)
 
                 for idx in range(len(self.test_env_list)):
                     with open(output + "_test" + str(idx) + ".log", 'a') as f:
                         f.write(f"{(epi_iter/self.max_epi_itr)*100}%, {-sum(reward_history)}\n")
 
+                test_end = time_module.perf_counter()
+
             #  重みパラメータのバックアップ
             if epi_iter % self.backup_itr == 0:
                 self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter)
+
+            end_time = time_module.perf_counter()
+
+            if epi_iter == 0:
+                print(f"1 step time = {end_time - start_time}")
+
+                process_time = datetime.timedelta(seconds=(end_time - start_time - (test_end -test_start))*self.max_epi_itr + (test_end - test_start)*(self.max_epi_itr / self.test_iter))
+                finish_time = start_process + process_time
+                print(f"終了予定時刻は {finish_time}")
 
         #  重みパラメータの保存
         self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter+1)
