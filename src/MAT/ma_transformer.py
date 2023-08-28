@@ -109,19 +109,23 @@ class DecodeBlock(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, obs_distri_dim, obs_info_dim, n_block, n_embd, n_head, n_agent, n_topic):
+    #def __init__(self, obs_distri_dim, obs_info_dim, n_block, n_embd, n_head, n_agent, n_topic):
+    def __init__(self, obs_dim, n_block, n_embd, n_head, n_agent, n_topic):
         super(Encoder, self).__init__()
 
-        self.obs_distri_dim = obs_distri_dim
-        self.obs_info_dim = obs_info_dim
+        # self.obs_distri_dim = obs_distri_dim
+        # self.obs_info_dim = obs_info_dim
+        self.obs_dim = obs_dim
         self.n_embd = n_embd
         self.n_agent = n_agent
         self.n_topic = n_topic
 
-        self.obs_encoder_posi = nn.Sequential(init_(nn.Linear(obs_distri_dim, n_embd), activate=True), nn.GELU())
-        self.obs_encoder_client = nn.Sequential(init_(nn.Linear(obs_distri_dim*3, n_embd), activate=True), nn.GELU())
-        self.obs_encoder_edge = nn.Sequential(init_(nn.Linear(obs_distri_dim*5, n_embd), activate=True), nn.GELU())
-        self.obs_encoder = nn.Sequential(init_(nn.Linear(n_embd*3+self.obs_info_dim, n_embd), activate=True), nn.GELU())
+        # self.obs_encoder_posi = nn.Sequential(init_(nn.Linear(obs_distri_dim, n_embd), activate=True), nn.GELU())
+        # self.obs_encoder_client = nn.Sequential(init_(nn.Linear(obs_distri_dim*3, n_embd), activate=True), nn.GELU())
+        # self.obs_encoder_edge = nn.Sequential(init_(nn.Linear(obs_distri_dim*5, n_embd), activate=True), nn.GELU())
+        # self.obs_encoder = nn.Sequential(init_(nn.Linear(n_embd*3+self.obs_info_dim, n_embd), activate=True), nn.GELU())
+
+        self.obs_encoder = nn.Sequential(init_(nn.Linear(obs_dim, n_embd), activate=True), nn.GELU())
 
         self.blocks = nn.Sequential(*[EncodeBlock(n_embd, n_head, n_agent, n_topic) for _ in range(n_block)])
         self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(), init_(nn.Linear(n_embd, 1)))
@@ -129,17 +133,19 @@ class Encoder(nn.Module):
 
     def forward(self, obs):
         
-        obs_posi = obs[:, :, 0:self.obs_distri_dim]
-        obs_client = obs[:, :, self.obs_distri_dim:self.obs_distri_dim*4]
-        obs_edge = obs[:, :, self.obs_distri_dim*4:self.obs_distri_dim*9]
-        obs_infomation = obs[:, :, self.obs_distri_dim*9:]
+        # obs_posi = obs[:, :, 0:self.obs_distri_dim]
+        # obs_client = obs[:, :, self.obs_distri_dim:self.obs_distri_dim*4]
+        # obs_edge = obs[:, :, self.obs_distri_dim*4:self.obs_distri_dim*9]
+        # obs_infomation = obs[:, :, self.obs_distri_dim*9:]
 
-        obs_emb_posi = self.obs_encoder_posi(obs_posi)
-        obs_emb_client = self.obs_encoder_client(obs_client)
-        obs_emb_edge = self.obs_encoder_edge(obs_edge)
+        # obs_emb_posi = self.obs_encoder_posi(obs_posi)
+        # obs_emb_client = self.obs_encoder_client(obs_client)
+        # obs_emb_edge = self.obs_encoder_edge(obs_edge)
 
-        obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation], dim=-1))
-        x = obs_embeddings
+        # obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation], dim=-1))
+        # x = obs_embeddings
+
+        x = self.obs_encoder(obs)
 
         rep = self.blocks(x)
         v_loc = self.head(rep)
@@ -189,11 +195,14 @@ class Decoder(nn.Module):
 
 class MultiAgentTransformer(nn.Module):
 
-    def __init__(self, obs_distri_dim, obs_info_dim, action_dim, batch_size, n_agent, n_topic, max_agent, max_topic, device=torch.device("cpu")):
+    #def __init__(self, obs_distri_dim, obs_info_dim, action_dim, batch_size, n_agent, n_topic, max_agent, max_topic, device=torch.device("cpu")):
+    def __init__(self, obs_dim, action_dim, batch_size, n_agent, n_topic, max_agent, max_topic, device=torch.device("cpu")):
+
         super(MultiAgentTransformer, self).__init__()
 
         self.n_agent = n_agent
         self.n_topic = n_topic
+        self.obs_dim = obs_dim
         self.action_dim = action_dim
         self.batch_size = batch_size
         #  dictionary の作成
@@ -205,7 +214,8 @@ class MultiAgentTransformer(nn.Module):
         self.n_embd = 9
         self.n_head = 1
 
-        self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
+        #self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
+        self.encoder = Encoder(obs_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
         self.decoder = Decoder(action_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
 
         self.to(device)

@@ -23,15 +23,15 @@ learning_data_index_path = "../dataset/debug/debug/index/index_hard.csv"
 # backup_iter = 100
 
 #  MAT
-max_epi_itr = 10
+max_epi_itr = 3000
 batch_size = 16
 backup_itr = 1000
 
 
 
 device = "cuda:0"
-result_dir = "../result/temporary/debug/"
-file_name = "debug"
+result_dir = "../result/temporary/debug/hard/"
+file_name = "hard_mat_nosplit"
 output_base = result_dir + file_name
 # actor_weight_base = "actor_weight"
 # critic_weight_base = "critic_weight"
@@ -54,7 +54,7 @@ for i in range(1):
     transformer_weight = transformer_weight_base + "_" + file_name + str(i)
 
     #  標準エラー出力先の変更
-    #sys.stderr = open(output + "_err.log", 'w')
+    sys.stderr = open(output + "_err.log", 'w')
 
     #happo_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight,V_net_weight, learning_data_index_path, output)
     #coma_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output)

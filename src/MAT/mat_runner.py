@@ -204,6 +204,7 @@ class MATRunner:
     def train_single_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
         timezone_jst = datetime.timezone(datetime.timedelta(hours=9))
         start_process = datetime.datetime.now(timezone_jst)
+        print(f"開始時刻は {start_process}")
 
         if load_parameter_path is not None:
             self.policy.restore(load_parameter_path)
@@ -371,6 +372,7 @@ class MATRunner:
     def train_multi_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
         timezone_jst = datetime.timezone(datetime.timedelta(hours=9))
         start_process = datetime.datetime.now(timezone_jst)
+        print(f"開始時刻は {start_process}")
 
         if load_parameter_path is not None:
             self.policy.restore(load_parameter_path)
