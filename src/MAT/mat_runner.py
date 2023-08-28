@@ -204,7 +204,7 @@ class MATRunner:
     def train_single_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
         timezone_jst = datetime.timezone(datetime.timedelta(hours=9))
         start_process = datetime.datetime.now(timezone_jst)
-        print(f"開始時刻は {start_process}")
+        print(f"開始時刻: {start_process}")
 
         if load_parameter_path is not None:
             self.policy.restore(load_parameter_path)
@@ -291,7 +291,7 @@ class MATRunner:
 
                 process_time = datetime.timedelta(seconds=(end_time - start_time)*self.max_epi_itr)
                 finish_time = start_process + process_time
-                print(f"終了予定時刻は {finish_time}")
+                print(f"終了予定時刻: {finish_time}")
 
         #  最適解の取り出し
         df_index = pd.read_csv(self.learning_data_index_path, index_col=0)
@@ -372,7 +372,7 @@ class MATRunner:
     def train_multi_env(self, output, transformer_weight, start_epi_itr, load_parameter_path=None):
         timezone_jst = datetime.timezone(datetime.timedelta(hours=9))
         start_process = datetime.datetime.now(timezone_jst)
-        print(f"開始時刻は {start_process}")
+        print(f"開始時刻: {start_process}")
 
         if load_parameter_path is not None:
             self.policy.restore(load_parameter_path)
@@ -519,7 +519,7 @@ class MATRunner:
 
                 process_time = datetime.timedelta(seconds=(end_time - start_time - (test_end -test_start))*self.max_epi_itr + (test_end - test_start)*(self.max_epi_itr / self.test_iter))
                 finish_time = start_process + process_time
-                print(f"終了予定時刻は {finish_time}")
+                print(f"終了予定時刻: {finish_time}")
 
         #  重みパラメータの保存
         self.policy.save(self.result_dir + 'model_parameter', transformer_weight, epi_iter+1)

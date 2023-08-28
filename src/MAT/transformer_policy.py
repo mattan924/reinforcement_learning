@@ -41,8 +41,7 @@ class TransformerPolicy:
         self.tpdv = dict(dtype=torch.float32, device=device)
         
         #  MAT インスタンスの生成
-        #self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
-        self.transformer = MAT(self.obs_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
+        self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
 
 
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
