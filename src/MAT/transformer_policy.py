@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from MAT.ma_transformer import MultiAgentTransformer as MAT
+from MAT.ma_transformer_multi import MultiAgentTransformer as MAT_multi
 from MAT.utils.util import check
 from MAT.ma_transformer import MultiAgentTransformer
 
@@ -16,7 +17,7 @@ class TransformerPolicy:
     param device: (torch.device) 実行するデバイスを指定します（cpu/gpu）。
     """
 
-    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, num_agents, num_topic, max_agent, max_topic, device=torch.device("cpu")):
+    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, num_agents, num_topic, max_agent, max_topic, device=torch.device("cpu"), multi=True):
         self.device = device
         self.lr = 0.0005
         self.opti_eps = 1e-05
@@ -41,8 +42,10 @@ class TransformerPolicy:
         self.tpdv = dict(dtype=torch.float32, device=device)
         
         #  MAT インスタンスの生成
-        self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
-
+        if multi:
+            self.transformer = MAT_multi(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
+        else:
+            self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
 
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
 
@@ -63,13 +66,14 @@ class TransformerPolicy:
 
         obs = obs[mask].reshape(batch, -1, self.obs_dim)
 
-        actions, action_log_probs, action_distribution, values = self.transformer.get_actions(obs, mask, deterministic)
+        actions, action_log_probs, values = self.transformer.get_actions(obs, mask, deterministic)
         
         actions = actions.view(batch, -1, self.act_num)
         action_log_probs = action_log_probs.view(batch, -1, self.act_num)
         values = values.view(batch, -1, 1)
 
-        return values, actions, action_log_probs, action_distribution
+        return values, actions, action_log_probs
+    
 
     def get_values(self, obs, mask):
         """

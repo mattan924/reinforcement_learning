@@ -64,7 +64,7 @@ class MATExecuter:
         self.obs_distri_dim = self.obs_size*self.obs_size
         self.obs_info_dim = self.obs_dim - self.obs_distri_dim*9
 
-        self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, self.max_agent, self.max_topic, self.device)
+        self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, self.max_agent, self.max_topic, device=self.device, multi=False)
 
         self.trainer = MATTrainer(self.policy, self.num_agent, self.device)
 
@@ -102,17 +102,16 @@ class MATExecuter:
         if train:
             # mask.shape = (16, 90)
             # action_distribution.shape = torch.Size([16, 90, 9])
-            value, action, action_log_prob, action_distribution = self.trainer.policy.get_actions(self.buffer.obs[step], self.buffer.mask[step])
+            value, action, action_log_prob = self.trainer.policy.get_actions(self.buffer.obs[step], self.buffer.mask[step])
         else:
-            value, action, action_log_prob, action_distribution = self.trainer.policy.get_actions(self.test_buffer.obs[step], self.test_buffer.mask[step], deterministic=True)
+            value, action, action_log_prob = self.trainer.policy.get_actions(self.test_buffer.obs[step], self.test_buffer.mask[step], deterministic=True)
 
         #  _t2n: tensor → numpy
         values = np.array(_t2n(value))
         actions = np.array(_t2n(action))
         action_log_probs = np.array(_t2n(action_log_prob))
-        action_distribution = np.array(_t2n(action_distribution))
 
-        return values, actions, action_log_probs, action_distribution
+        return values, actions, action_log_probs
     
 
     def insert_batch(self, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm, train=True):
@@ -154,7 +153,7 @@ class MATExecuter:
 
             step = int(time / self.env.time_step)
 
-            values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect_batch(step)
+            values_batch, actions_batch, action_log_probs_batch = self.collect_batch(step)
 
             # 報酬の受け取り
             reward_batch = np.zeros((self.batch_size), dtype=np.float32)
@@ -188,12 +187,11 @@ class MATExecuter:
         print(f"reward = {sum(reward_history)}")
 
 
-device = "cuda:0"
-data_index_path = "../dataset/debug/debug/index/index_hard.csv"
-output_file = "../dataset/debug/debug/solution/hard_test.csv"
-output_animation_file = "../dataset/debug/debug/animation/hard_execution_animation.gif"
-#load_parameter_path = '../result/temporary/debug/hard/model_parameter/transformer_hard_mat_batch3_extend0_5000.pth'
-load_parameter_path = '../result/temporary/debug/hard/model_parameter/transformer_hard_mat_batch3_0.pth'
+device = "cuda:1"
+data_index_path = "../dataset/debug/debug/index/index_easy.csv"
+output_file = "../dataset/debug/debug/solution/easy_test.csv"
+output_animation_file = "../dataset/debug/debug/animation/easy_execution_animation.gif"
+load_parameter_path = '../result/temporary/debug/easy/model_parameter/transformer_easy_mat_batch_long0_5000.pth'
 
 max_agent = 30
 max_topic = 3
@@ -203,3 +201,4 @@ executer = MATExecuter(device, max_agent, max_topic, data_index_path, output_fil
 executer.execution(load_parameter_path)
 
 animation.create_assign_animation(data_index_path, output_animation_file, FPS=5)
+#animation.create_single_assign_animation(data_index_path, output_animation_file, FPS=5)

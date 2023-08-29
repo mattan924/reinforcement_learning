@@ -70,6 +70,9 @@ class MATRunner:
                 self.episode_length = int(self.simulation_time / self.time_step)
             else:
                 sys.exit("simulation_time が time_step の整数倍になっていません")
+
+            self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, max_agent, max_topic, device=self.device, multi=False)
+
         elif learning_data_index_dir is not None:
             if test_data_index_dir is None:
                 sys.exit("評価用の test_data_index_dir を指定して下さい")
@@ -103,11 +106,10 @@ class MATRunner:
 
             self.test_buffer = SharedReplayBuffer(self.episode_length, len(self.test_env_list), self.num_agent, self.num_topic, self.obs_dim, self.N_action)
 
+            self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, max_agent, max_topic, device=self.device, multi=True)
         else:
             sys.exit("学習に使用するデータを指定して下さい")         
         
-        self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, max_agent, max_topic, self.device)
-
         self.trainer = MATTrainer(self.policy, self.num_agent, self.device)
 
         self.buffer = SharedReplayBuffer(self.episode_length, self.batch_size, self.num_agent, self.num_topic, self.obs_dim, self.N_action)
@@ -142,25 +144,32 @@ class MATRunner:
         self.trainer.prep_rollout()
 
         if train:
-            value, action, action_log_prob, action_distribution = self.trainer.policy.get_actions(self.buffer.obs[step], self.buffer.mask[step])
+            value, action, action_log_prob = self.trainer.policy.get_actions(self.buffer.obs[step], self.buffer.mask[step])
         else:
-            value, action, action_log_prob, action_distribution = self.trainer.policy.get_actions(self.test_buffer.obs[step], self.test_buffer.mask[step], deterministic=True)
+            value, action, action_log_prob = self.trainer.policy.get_actions(self.test_buffer.obs[step], self.test_buffer.mask[step], deterministic=True)
 
         #  _t2n: tensor → numpy
         values = np.array(_t2n(value))
         actions = np.array(_t2n(action))
         action_log_probs = np.array(_t2n(action_log_prob))
-        action_distribution = np.array(_t2n(action_distribution))
 
-        return values, actions, action_log_probs, action_distribution
+        return values, actions, action_log_probs
     
 
-    def insert(self, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm, train=True):
+    def insert_batch(self, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm, train=True):
 
         if train:
             self.buffer.insert_batch(obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
         else:
             self.test_buffer.insert_batch(obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
+
+
+    def insert(self, batch, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm, train=True):
+
+        if train:
+            self.buffer.insert(batch, obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
+        else:
+            self.test_buffer.insert(batch, obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
 
     
     @torch.no_grad()
@@ -236,7 +245,7 @@ class MATRunner:
                 step = int(time / self.time_step)
 
                 #  行動と確率分布の取得
-                values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect(step)
+                values_batch, actions_batch, action_log_probs_batch = self.collect(step)
 
                 reward_batch = np.zeros((self.batch_size), dtype=np.float32)
 
@@ -263,7 +272,7 @@ class MATRunner:
                     obs_batch[idx] = obs
                     mask_batch[idx] = mask
                 
-                self.insert(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+                self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
 
             self.compute()
 
@@ -311,7 +320,7 @@ class MATRunner:
             step = int(time / self.time_step)
 
             #  行動と確率分布の取得
-            values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect(step)
+            values_batch, actions_batch, action_log_probs_batch = self.collect(step)
 
             actions_batch = np.zeros((self.batch_size, self.num_agent*self.num_topic, 1))
 
@@ -346,7 +355,7 @@ class MATRunner:
                 obs_batch[idx] = obs
                 mask_batch[idx] = mask
                 
-            self.insert(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+            self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
 
         reward_average = 0
         for idx in range(self.batch_size):
@@ -414,34 +423,24 @@ class MATRunner:
                 step = int(time / self.time_step)
 
                 #  行動と確率分布の取得
-                values_batch, actions_batch, action_log_probs_batch, action_distribution_batch = self.collect(step)
-
-                reward_batch = np.zeros((self.batch_size), dtype=np.float32)
-
-                agent_perm_batch = np.zeros((self.batch_size, self.num_agent), dtype=np.int64)
-                topic_perm_batch = np.zeros((self.batch_size, self.num_topic), dtype=np.int64)
-
-                obs_batch = np.zeros((self.batch_size, self.num_agent, self.num_topic, self.obs_dim), dtype=np.float32)
-                mask_batch = np.zeros((self.batch_size, self.num_agent, self.num_topic), dtype=np.bool)
+                values_batch, actions_batch, action_log_probs_batch = self.collect(step)
 
                 # 報酬の受け取り
                 for idx in range(self.batch_size):
                     env = self.env_list_shuffle[idx]
                     reward = env.step(actions_batch[idx], self.buffer.agent_perm[step][idx], self.buffer.topic_perm[step][idx], time)
                     reward_history[idx].append(reward)
-                    reward_batch[idx] = -reward
+                    reward = -reward
 
                     #  状態の観測
                     #  ランダムな順にいつか改修
                     agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-                    agent_perm_batch[idx] = agent_perm
-                    topic_perm_batch[idx] = topic_perm
 
                     obs, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
-                    obs_batch[idx] = obs
-                    mask_batch[idx] = mask
+
+                    print(f"values_batch[idx] = {values_batch[idx].shape}")
                 
-                self.insert(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+                    self.insert(idx, obs, mask, reward, values_batch[idx], actions_batch[idx], action_log_probs_batch[idx], agent_perm, topic_perm)
 
             self.compute()
 

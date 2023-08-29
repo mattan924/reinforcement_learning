@@ -59,6 +59,7 @@ class SharedReplayBuffer(object):
         self.topic_perm = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic), dtype=np.int64)
 
         self.step = 0
+        
 
     def insert(self, batch, obs, mask, actions, action_log_probs, value_preds, rewards, agent_perm, topic_perm):
         """

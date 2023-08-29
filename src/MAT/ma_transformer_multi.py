@@ -127,7 +127,7 @@ class Encoder(nn.Module):
         self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(), init_(nn.Linear(n_embd, 1)))
         
 
-    def forward(self, obs):
+    def forward(self, obs, mask):
         
         obs_posi = obs[:, :, 0:self.obs_distri_dim]
         obs_client = obs[:, :, self.obs_distri_dim:self.obs_distri_dim*4]
@@ -139,9 +139,17 @@ class Encoder(nn.Module):
         obs_emb_edge = self.obs_encoder_edge(obs_edge)
 
         obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation], dim=-1))
+        
+        batch = obs_embeddings.shape[0]
+        
+        rep = [self.blocks(obs_embeddings[idx][mask[idx]].unsqueeze(0)).squeeze(0) for idx in range(batch)]
 
-        rep = self.blocks(obs_embeddings)
-        v_loc = self.head(rep)
+        rep_test = torch.zeros((batch, self.n_agent*self.n_topic, self.n_embd))
+        for idx in range(batch):
+            rep_test[idx][mask[idx]] = self.blocks(obs_embeddings[idx][mask[idx]].unsqueeze(0)).squeeze(0)
+
+        v_loc = [self.head(rep[idx]) for idx in range(batch)]
+        ################ここから
 
         return v_loc, rep
 
@@ -236,11 +244,11 @@ class MultiAgentTransformer(nn.Module):
 
         #  obs を Encoder を用いてエンコード
         #  obs.shape = torch.Size([1, num_agents*num_topic, obs_dim=2255])
-        v_loc, obs_rep = self.encoder(obs)
+        v_loc, obs_rep = self.encoder(obs, mask)
         #  v_loc.shape = torch.Size([1, num_agents*num_topic, 1])
         #  obs_rep = torch.Size([1, num_agents*num_topic, n_embd])
         
-        output_action, output_action_log = self.discrete_autoregreesive_act(obs_rep, deterministic=deterministic)
+        output_action, output_action_log = self.discrete_autoregreesive_act(obs_rep, mask, deterministic=deterministic)
 
         return output_action, output_action_log, v_loc
 
@@ -254,43 +262,46 @@ class MultiAgentTransformer(nn.Module):
         return v_tot
     
 
-    def discrete_autoregreesive_act(self, obs_rep, deterministic=False):
-        batch_dim = obs_rep.shape[0]
-        action_len = obs_rep.shape[1]
+    def discrete_autoregreesive_act(self, obs_rep, mask, deterministic=False):
+        batch_dim = len(obs_rep)
+        output_action_list = []
+        output_action_log_list = []
+        for idx in range(batch_dim):
+            action_len = obs_rep[idx].shape[0]
+            shifted_action = torch.zeros((action_len, self.action_dim + 1)).to(**self.tpdv)
+            shifted_action[0, 0] = 1
 
-        shifted_action = torch.zeros((batch_dim, action_len, self.action_dim + 1)).to(**self.tpdv)
-        shifted_action[:, 0, 0] = 1
+            output_action = torch.zeros((action_len, 1), dtype=torch.long)
+            output_action_log = torch.zeros_like(output_action, dtype=torch.float32)
 
-        output_action = torch.zeros((batch_dim, action_len, 1), dtype=torch.long)
-        output_action_log = torch.zeros_like(output_action, dtype=torch.float32)
+            for i in range(action_len):
+                #  decoder の出力から agent i のものを取り出す
+                #  shifted_action 自分より前の agent の行動の onehot_vector が入っている
 
-        for i in range(action_len):
-            #  decoder の出力から agent i のものを取り出す
-            #  shifted_action 自分より前の agent の行動の onehot_vector が入っている
+                #  shifted_action.shape = torch.Size([1, num_agent*num_topic, N_action+1])
+                #  obs_rep.shape = torch.Size([1, num_agent*num_topic, n_embd])
+                logit = self.decoder(shifted_action.unsqueeze(0), obs_rep[idx].unsqueeze(0)).squeeze(0)[i, :]
 
-            #  shifted_action.shape = torch.Size([1, num_agent*num_topic, N_action+1])
-            #  obs_rep.shape = torch.Size([1, num_agent*num_topic, n_embd])
-            logit = self.decoder(shifted_action, obs_rep)[:, i, :]
+                distri = Categorical(logits=logit + 1e-8)
 
-            distri = Categorical(logits=logit + 1e-8)
+                if deterministic:
+                    action = distri.probs.argmax(dim=-1)
+                else:
+                    action = distri.sample()
 
-            if deterministic:
-                action = distri.probs.argmax(dim=-1)
-            else:
-                action = distri.sample()
+                action_log = distri.log_prob(action)
+                #  action_log.shape = torch.Size([n_rollout_threads])
 
-            action_log = distri.log_prob(action)
-            #  action_log.shape = torch.Size([n_rollout_threads])
+                output_action[i, :] = action.unsqueeze(-1)
+                output_action_log[i, :] = action_log.unsqueeze(-1)
 
-            output_action[:, i, :] = action.unsqueeze(-1)
-            output_action_log[:, i, :] = action_log.unsqueeze(-1)
+                if i + 1 < action_len:
+                    shifted_action[i + 1, 1:] = F.one_hot(action, num_classes=self.action_dim)
+            
+            output_action_list.append(output_action)
+            output_action_log_list.append(output_action_log)
 
-            #  action と action_log を格納
-
-            if i + 1 < action_len:
-                shifted_action[:, i + 1, 1:] = F.one_hot(action, num_classes=self.action_dim)
-
-        return output_action, output_action_log
+        return output_action_list, output_action_log_list
 
 
     #  まとめて行動を選択
