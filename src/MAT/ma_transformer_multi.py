@@ -109,7 +109,7 @@ class DecodeBlock(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, obs_distri_dim, obs_info_dim, n_block, n_embd, n_head, n_agent, n_topic):
+    def __init__(self, obs_distri_dim, obs_info_dim, n_block, n_embd, n_head, n_agent, n_topic, device):
         super(Encoder, self).__init__()
 
         self.obs_distri_dim = obs_distri_dim
@@ -117,6 +117,8 @@ class Encoder(nn.Module):
         self.n_embd = n_embd
         self.n_agent = n_agent
         self.n_topic = n_topic
+
+        self.device = device
 
         self.obs_encoder_posi = nn.Sequential(init_(nn.Linear(obs_distri_dim, n_embd), activate=True), nn.GELU())
         self.obs_encoder_client = nn.Sequential(init_(nn.Linear(obs_distri_dim*3, n_embd), activate=True), nn.GELU())
@@ -128,29 +130,25 @@ class Encoder(nn.Module):
         
 
     def forward(self, obs, mask):
+        batch_dim, max_action_len, _ = obs.shape
+        rep = torch.zeros((batch_dim, self.n_agent*self.n_topic, self.n_embd), device=self.device)
         
         obs_posi = obs[:, :, 0:self.obs_distri_dim]
         obs_client = obs[:, :, self.obs_distri_dim:self.obs_distri_dim*4]
         obs_edge = obs[:, :, self.obs_distri_dim*4:self.obs_distri_dim*9]
         obs_infomation = obs[:, :, self.obs_distri_dim*9:]
 
-        obs_emb_posi = self.obs_encoder_posi(obs_posi)
-        obs_emb_client = self.obs_encoder_client(obs_client)
-        obs_emb_edge = self.obs_encoder_edge(obs_edge)
+        for idx in range(batch_dim):
+            obs_emb_posi = self.obs_encoder_posi(obs_posi[idx][mask[idx]])
+            obs_emb_client = self.obs_encoder_client(obs_client[idx][mask[idx]])
+            obs_emb_edge = self.obs_encoder_edge(obs_edge[idx][mask[idx]])
 
-        obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation], dim=-1))
+            obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation[idx][mask[idx]]], dim=-1))
         
-        batch = obs_embeddings.shape[0]
+            rep[idx][mask[idx]] = self.blocks(obs_embeddings.unsqueeze(0)).squeeze(0)
+
+        v_loc = self.head(rep[mask])
         
-        rep = [self.blocks(obs_embeddings[idx][mask[idx]].unsqueeze(0)).squeeze(0) for idx in range(batch)]
-
-        rep_test = torch.zeros((batch, self.n_agent*self.n_topic, self.n_embd))
-        for idx in range(batch):
-            rep_test[idx][mask[idx]] = self.blocks(obs_embeddings[idx][mask[idx]].unsqueeze(0)).squeeze(0)
-
-        v_loc = [self.head(rep[idx]) for idx in range(batch)]
-        ################ここから
-
         return v_loc, rep
 
 
@@ -196,14 +194,15 @@ class Decoder(nn.Module):
 
 class MultiAgentTransformer(nn.Module):
 
-    def __init__(self, obs_distri_dim, obs_info_dim, action_dim, batch_size, n_agent, n_topic, max_agent, max_topic, device=torch.device("cpu")):
+    def __init__(self, obs_distri_dim, obs_info_dim, action_dim, batch_size, max_agent, max_topic, device=torch.device("cpu")):
 
         super(MultiAgentTransformer, self).__init__()
 
-        self.n_agent = n_agent
-        self.n_topic = n_topic
         self.action_dim = action_dim
         self.batch_size = batch_size
+        self.max_agent = max_agent
+        self.max_topic = max_topic
+
         #  dictionary の作成
         #  self.tpdv = {'dtype': torch.float32, 'device': device(type='cpu')}
         self.tpdv = dict(dtype=torch.float32, device=device)
@@ -213,7 +212,7 @@ class MultiAgentTransformer(nn.Module):
         self.n_embd = 9
         self.n_head = 1
 
-        self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
+        self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic, self.device)
         self.decoder = Decoder(action_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
 
         self.to(device)
@@ -224,15 +223,16 @@ class MultiAgentTransformer(nn.Module):
         # action: (batch, n_agent, 1)
         # available_actions: (batch, n_agent, act_dim)
 
-        batch = obs.shape[0]
-        obs_dim = obs.shape[-1]
+        
 
-        obs = check(obs).to(**self.tpdv)[mask].reshape(batch, -1, obs_dim)
+        mask = check(mask).to(self.device)
+        obs = check(obs).to(**self.tpdv)
         action = check(action).to(**self.tpdv)
 
-        v_loc, obs_rep = self.encoder(obs)
+        v_loc, obs_rep = self.encoder(obs, mask)
 
         action = action.long()
+
         action_log, entropy = self.discrete_parallel_act(obs_rep, action, mask)
 
         return action_log, v_loc, entropy
@@ -241,6 +241,7 @@ class MultiAgentTransformer(nn.Module):
     def get_actions(self, obs, mask, deterministic=False):
         #  torch.float32, cpu へ変換
         obs = check(obs).to(**self.tpdv)
+        mask = check(mask).to(self.device)
 
         #  obs を Encoder を用いてエンコード
         #  obs.shape = torch.Size([1, num_agents*num_topic, obs_dim=2255])
@@ -253,26 +254,28 @@ class MultiAgentTransformer(nn.Module):
         return output_action, output_action_log, v_loc
 
 
-    def get_values(self, obs):
+    def get_values(self, obs, mask):
 
         obs = check(obs).to(**self.tpdv)
+        mask = check(mask).to(self.device)
 
-        v_tot, obs_rep = self.encoder(obs)
+        v_tot, obs_rep = self.encoder(obs, mask)
         
         return v_tot
     
 
     def discrete_autoregreesive_act(self, obs_rep, mask, deterministic=False):
-        batch_dim = len(obs_rep)
-        output_action_list = []
-        output_action_log_list = []
+        batch_dim, max_action_len, _ = obs_rep.shape
+        output_action = torch.zeros((batch_dim, max_action_len, 1), dtype=torch.long)
+        output_action_log = torch.zeros_like(output_action, dtype=torch.float32)
+
         for idx in range(batch_dim):
-            action_len = obs_rep[idx].shape[0]
+            action_len = obs_rep[idx][mask[idx]].shape[0]
             shifted_action = torch.zeros((action_len, self.action_dim + 1)).to(**self.tpdv)
             shifted_action[0, 0] = 1
 
-            output_action = torch.zeros((action_len, 1), dtype=torch.long)
-            output_action_log = torch.zeros_like(output_action, dtype=torch.float32)
+            tmp_action = torch.zeros((action_len, 1), dtype=torch.long)
+            tmp_action_log = torch.zeros((action_len, 1), dtype=torch.float32)
 
             for i in range(action_len):
                 #  decoder の出力から agent i のものを取り出す
@@ -280,7 +283,7 @@ class MultiAgentTransformer(nn.Module):
 
                 #  shifted_action.shape = torch.Size([1, num_agent*num_topic, N_action+1])
                 #  obs_rep.shape = torch.Size([1, num_agent*num_topic, n_embd])
-                logit = self.decoder(shifted_action.unsqueeze(0), obs_rep[idx].unsqueeze(0)).squeeze(0)[i, :]
+                logit = self.decoder(shifted_action.unsqueeze(0), obs_rep[idx][mask[idx]].unsqueeze(0)).squeeze(0)[i, :]
 
                 distri = Categorical(logits=logit + 1e-8)
 
@@ -292,38 +295,54 @@ class MultiAgentTransformer(nn.Module):
                 action_log = distri.log_prob(action)
                 #  action_log.shape = torch.Size([n_rollout_threads])
 
-                output_action[i, :] = action.unsqueeze(-1)
-                output_action_log[i, :] = action_log.unsqueeze(-1)
+                tmp_action[i, :] = action.unsqueeze(-1)
+                tmp_action_log[i, :] = action_log.unsqueeze(-1)
 
                 if i + 1 < action_len:
                     shifted_action[i + 1, 1:] = F.one_hot(action, num_classes=self.action_dim)
-            
-            output_action_list.append(output_action)
-            output_action_log_list.append(output_action_log)
 
-        return output_action_list, output_action_log_list
+            output_action[idx][mask[idx]] = tmp_action
+            output_action_log[idx][mask[idx]] = tmp_action_log
+                    
+        return output_action, output_action_log
 
 
     #  まとめて行動を選択
     def discrete_parallel_act(self, obs_rep, action, mask):
         #  mask.shape = (960, 15)
         #  action.shape = torch.Size([960, 15, 1])
-        batch = obs_rep.shape[0]
+
+        obs_rep = obs_rep.reshape(-1, self.batch_size, self.max_agent*self.max_topic, self.n_embd).permute(1, 0, 2, 3)
+        action = action.reshape(-1, self.batch_size, self.max_agent*self.max_topic, 1).permute(1, 0, 2, 3)
+        mask = mask.reshape(-1, self.batch_size, self.max_agent*self.max_topic).permute(1, 0, 2)
+
+        episode_len = obs_rep.shape[1]
+
+        action_log = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic)).to(**self.tpdv)
+        entropy = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic)).to(**self.tpdv)
+
+        for idx in range(self.batch_size):
+            one_hot_action = F.one_hot(action[idx][mask[idx]].reshape(episode_len, -1), num_classes=self.action_dim).to(**self.tpdv)
+
+            action_len = one_hot_action.shape[1]
+
+            shifted_action = torch.zeros((episode_len, action_len, self.action_dim + 1)).to(**self.tpdv)
+            shifted_action[:, 0, 0] = 1
+
+            shifted_action[:, 1:, 1:] = one_hot_action[:, :-1]
+
+            logit = self.decoder(shifted_action, obs_rep[idx][mask[idx]].reshape(episode_len, -1, self.n_embd))
+
+            distri = Categorical(logits=logit)
+            action_log[idx][mask[idx]] = distri.log_prob(action[idx][mask[idx]].reshape(episode_len, -1)).reshape(-1)
+            entropy[idx][mask[idx]] = distri.entropy().reshape(-1)
+
+        action_log = action_log.permute(1, 0, 2)
+        entropy = entropy.permute(1, 0, 2)
+        mask = mask.permute(1, 0, 2)
+
+        action_log = action_log[mask]
+        entropy = entropy[mask]
         
-        one_hot_action = F.one_hot(action[mask].reshape(batch, -1, 1).squeeze(-1), num_classes=self.action_dim).to(**self.tpdv)
-
-        action_len = one_hot_action.shape[1]
-
-        shifted_action = torch.zeros((batch, action_len, self.action_dim + 1)).to(**self.tpdv)
-        shifted_action[:, 0, 0] = 1
-
-        shifted_action[:, 1:, 1:] = one_hot_action[:, :-1]
-
-        logit = self.decoder(shifted_action, obs_rep)
-
-        distri = Categorical(logits=logit)
-        action_log = distri.log_prob(action[mask].reshape(batch, -1)).unsqueeze(-1)
-        entropy = distri.entropy().unsqueeze(-1)
-
         return action_log, entropy
     

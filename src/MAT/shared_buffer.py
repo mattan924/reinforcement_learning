@@ -95,8 +95,8 @@ class SharedReplayBuffer(object):
 
         self.obs[self.step + 1] = obs.reshape(self.batch_size, self.num_agents*self.num_topic, self.obs_dim).copy()
         self.mask[self.step + 1] = np.bool_(mask.reshape(self.batch_size, self.num_agents*self.num_topic).copy())
-        self.actions[self.step][self.mask[self.step]] = actions.reshape(-1, 1).copy()
-        self.action_log_probs[self.step][self.mask[self.step]] = action_log_probs.reshape(-1, 1).copy()
+        self.actions[self.step][self.mask[self.step]] = actions[self.mask[self.step]].copy()
+        self.action_log_probs[self.step][self.mask[self.step]] = action_log_probs[self.mask[self.step]].copy()
         self.value_preds[self.step][self.mask[self.step]] = value_preds.reshape(-1, 1).copy()
         for batch in range(self.batch_size):
             self.rewards[self.step][batch][self.mask[self.step][batch]] = rewards[batch].copy()

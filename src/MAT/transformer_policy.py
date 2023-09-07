@@ -17,7 +17,7 @@ class TransformerPolicy:
     param device: (torch.device) 実行するデバイスを指定します（cpu/gpu）。
     """
 
-    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, num_agents, num_topic, max_agent, max_topic, device=torch.device("cpu"), multi=True):
+    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, max_agent, max_topic, device=torch.device("cpu"), multi=True):
         self.device = device
         self.lr = 0.0005
         self.opti_eps = 1e-05
@@ -32,20 +32,20 @@ class TransformerPolicy:
         self.act_num = 1
 
         self.batch_size = batch_size
+
+        self.max_agent = max_agent
+        self.max_topic = max_topic
         
         #  obs_dim:  172
         #  share_obs_dim:  213
         #  act_dim:  14
-
-        self.num_agents = num_agents
-        self.num_topic = num_topic
         self.tpdv = dict(dtype=torch.float32, device=device)
         
         #  MAT インスタンスの生成
         if multi:
-            self.transformer = MAT_multi(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
+            self.transformer = MAT_multi(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, max_agent, max_topic, device=device)
         else:
-            self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, self.num_agents, self.num_topic, max_agent, max_topic, device=device)
+            self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, max_agent, max_topic, device=device)
 
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
 
@@ -61,16 +61,13 @@ class TransformerPolicy:
         :return action_log_probs: (torch.Tensor) 選択されたアクションのログ確率。
         """
 
-        obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
+        obs = obs.reshape(-1, self.max_agent*self.max_topic, self.obs_dim)
         batch = obs.shape[0]
-
-        obs = obs[mask].reshape(batch, -1, self.obs_dim)
 
         actions, action_log_probs, values = self.transformer.get_actions(obs, mask, deterministic)
         
         actions = actions.view(batch, -1, self.act_num)
         action_log_probs = action_log_probs.view(batch, -1, self.act_num)
-        values = values.view(batch, -1, 1)
 
         return values, actions, action_log_probs
     
@@ -80,14 +77,9 @@ class TransformerPolicy:
         値関数の予測値を取得します。
         """
 
-        obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
-        batch = obs.shape[0]
-        obs = obs[mask].reshape(batch, -1, self.obs_dim)
+        obs = obs.reshape(-1, self.max_agent*self.max_topic, self.obs_dim)
 
-        values = self.transformer.get_values(obs)
-
-        values = values.view(-1, 1)
-        #  values.shape = torch.Size([num_agent*num_topic, 1])
+        values = self.transformer.get_values(obs, mask)
 
         return values
     
@@ -103,12 +95,8 @@ class TransformerPolicy:
         :return dist_entropy: (torch.Tensor) 与えられた入力に対するアクションの分布エントロピー。
         """
 
-        obs = obs.reshape(-1, self.num_agents*self.num_topic, self.obs_dim)
-        actions = actions.reshape(-1, self.num_agents*self.num_topic, self.act_num)
-
-        # obs.shape is (960, 90, 6564)
-        # actions.shape is (960, 90, 1)
-        # mask.shape is (960, 90)
+        obs = obs.reshape(-1, self.max_agent*self.max_topic, self.obs_dim)
+        actions = actions.reshape(-1, self.max_agent*self.max_topic, self.act_num)
 
         action_log_probs, values, entropy = self.transformer(obs, actions, mask)
 
