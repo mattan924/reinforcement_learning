@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-import math
-import numpy as np
 from torch.distributions import Categorical
 from MAT.utils.util import check, init
+import math
+import numpy as np
+import time
 
 
 def init_(m, gain=0.01, activate=False):
@@ -109,7 +110,7 @@ class DecodeBlock(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, obs_distri_dim, obs_info_dim, n_block, n_embd, n_head, n_agent, n_topic, device):
+    def __init__(self, obs_distri_dim, obs_info_dim, n_block, n_embd, n_head, n_agent, n_topic, batch_size, device):
         super(Encoder, self).__init__()
 
         self.obs_distri_dim = obs_distri_dim
@@ -117,6 +118,7 @@ class Encoder(nn.Module):
         self.n_embd = n_embd
         self.n_agent = n_agent
         self.n_topic = n_topic
+        self.batch_size = batch_size
 
         self.device = device
 
@@ -129,25 +131,61 @@ class Encoder(nn.Module):
         self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(), init_(nn.Linear(n_embd, 1)))
         
 
-    def forward(self, obs, mask):
-        batch_dim, max_action_len, _ = obs.shape
-        rep = torch.zeros((batch_dim, self.n_agent*self.n_topic, self.n_embd), device=self.device)
-        
-        obs_posi = obs[:, :, 0:self.obs_distri_dim]
-        obs_client = obs[:, :, self.obs_distri_dim:self.obs_distri_dim*4]
-        obs_edge = obs[:, :, self.obs_distri_dim*4:self.obs_distri_dim*9]
-        obs_infomation = obs[:, :, self.obs_distri_dim*9:]
+    def forward(self, obs, mask, update=False):
 
-        for idx in range(batch_dim):
-            obs_emb_posi = self.obs_encoder_posi(obs_posi[idx][mask[idx]])
-            obs_emb_client = self.obs_encoder_client(obs_client[idx][mask[idx]])
-            obs_emb_edge = self.obs_encoder_edge(obs_edge[idx][mask[idx]])
+        if update == False:
+            batch_dim, max_action_len, obs_dim = obs.shape
+            rep = torch.zeros((batch_dim, self.n_agent*self.n_topic, self.n_embd), device=self.device)
 
-            obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation[idx][mask[idx]]], dim=-1))
-        
-            rep[idx][mask[idx]] = self.blocks(obs_embeddings.unsqueeze(0)).squeeze(0)
+            obs_posi = obs[:, :, 0:self.obs_distri_dim]
+            obs_client = obs[:, :, self.obs_distri_dim:self.obs_distri_dim*4]
+            obs_edge = obs[:, :, self.obs_distri_dim*4:self.obs_distri_dim*9]
+            obs_infomation = obs[:, :, self.obs_distri_dim*9:]
 
-        v_loc = self.head(rep[mask])
+            action_len_list = []
+            for idx in range(batch_dim):
+                action_len = obs[idx][mask[idx]].shape[0]
+                action_len_list.append(action_len)
+
+            obs_emb_posi = self.obs_encoder_posi(obs_posi[mask])
+            obs_emb_client = self.obs_encoder_client(obs_client[mask])
+            obs_emb_edge = self.obs_encoder_edge(obs_edge[mask])
+
+            obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation[mask]], dim=-1))
+            
+            start_idx = 0
+            for idx in range(batch_dim):
+                end_idx = start_idx + action_len_list[idx]
+                rep[idx][mask[idx]] = self.blocks(obs_embeddings[start_idx:end_idx].unsqueeze(0)).squeeze(0)
+                start_idx = end_idx
+
+            v_loc = self.head(rep[mask])
+        else:
+            batch_dim, max_action_len, obs_dim = obs.shape
+            episode_len = int(batch_dim / self.batch_size)
+            rep = torch.zeros((episode_len, self.batch_size, self.n_agent*self.n_topic, self.n_embd), device=self.device)
+
+            obs_posi = obs[:, :, 0:self.obs_distri_dim]
+            obs_client = obs[:, :, self.obs_distri_dim:self.obs_distri_dim*4]
+            obs_edge = obs[:, :, self.obs_distri_dim*4:self.obs_distri_dim*9]
+            obs_infomation = obs[:, :, self.obs_distri_dim*9:]
+
+            obs_posi = obs_posi.reshape(episode_len, self.batch_size, max_action_len, -1)
+            obs_client = obs_client.reshape(episode_len, self.batch_size, max_action_len, -1)
+            obs_edge = obs_edge.reshape(episode_len, self.batch_size, max_action_len, -1)
+            obs_infomation = obs_infomation.reshape(episode_len, self.batch_size, max_action_len, -1)
+            mask = mask.reshape(episode_len, self.batch_size, max_action_len)
+
+            for idx in range(self.batch_size):
+                obs_emb_posi = self.obs_encoder_posi(obs_posi[:, idx][mask[:, idx]])
+                obs_emb_client = self.obs_encoder_client(obs_client[:, idx][mask[:, idx]])
+                obs_emb_edge = self.obs_encoder_edge(obs_edge[:, idx][mask[:, idx]])
+
+                obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation[:, idx][mask[:, idx]]], dim=-1))
+            
+                rep[:, idx][mask[:, idx]] = self.blocks(obs_embeddings.reshape(episode_len, -1, self.n_embd)).reshape(-1, self.n_embd)
+
+            v_loc = self.head(rep[mask])
         
         return v_loc, rep
 
@@ -212,7 +250,7 @@ class MultiAgentTransformer(nn.Module):
         self.n_embd = 9
         self.n_head = 1
 
-        self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic, self.device)
+        self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic, batch_size, self.device)
         self.decoder = Decoder(action_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
 
         self.to(device)
@@ -222,14 +260,13 @@ class MultiAgentTransformer(nn.Module):
         # obs: (batch, n_agent, obs_dim)
         # action: (batch, n_agent, 1)
         # available_actions: (batch, n_agent, act_dim)
-
-        
+        # print(f"\n\n\n======================== transformer forward start ======================= \n\n\n")
 
         mask = check(mask).to(self.device)
         obs = check(obs).to(**self.tpdv)
         action = check(action).to(**self.tpdv)
 
-        v_loc, obs_rep = self.encoder(obs, mask)
+        v_loc, obs_rep = self.encoder(obs, mask, update=True)
 
         action = action.long()
 
