@@ -30,7 +30,6 @@ backup_itr = 1000
 
 
 device = "cuda:1"
-
 result_dir = "../result/temporary/debug/"
 file_name = "debug_multi_collect"
 output_base = result_dir + file_name
