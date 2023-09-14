@@ -4,6 +4,7 @@ from MAT.ma_transformer import MultiAgentTransformer as MAT
 from MAT.ma_transformer_multi import MultiAgentTransformer as MAT_multi
 from MAT.utils.util import check
 from MAT.ma_transformer import MultiAgentTransformer
+import time
 
 
 class TransformerPolicy:
