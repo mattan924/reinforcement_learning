@@ -13,12 +13,11 @@ class MATTrainer:
     param policy: (R_MAPPO_Policy) 更新するポリシーを指定します。
     param device: (torch.device) 実行するデバイスを指定します (cpu/gpu)。
     """
-    def __init__(self, policy, num_agents, device=torch.device("cpu")):
+    def __init__(self, policy, device=torch.device("cpu")):
 
         self.device = device
         self.tpdv = dict(dtype=torch.float32, device=device)
         self.policy = policy  #  transformer_policy の TransformerPolicy
-        self.num_agents = num_agents
 
         self.clip_param = 0.05
         self.ppo_epoch = 16
@@ -85,11 +84,10 @@ class MATTrainer:
         value_preds_batch = check(value_preds_batch).to(**self.tpdv)
         return_batch = check(return_batch).to(**self.tpdv)
 
-        # Reshape to do in a single forward pass for all steps
         values, action_log_probs, dist_entropy = self.policy.evaluate_actions(obs_batch, actions_batch, mask_batch)
 
         mask_batch = mask_batch.reshape(-1)
-        
+
         # actor update
         imp_weights = torch.exp(action_log_probs - old_action_log_probs_batch[mask_batch])
 
@@ -102,7 +100,7 @@ class MATTrainer:
         value_loss = self.cal_value_loss(values, value_preds_batch[mask_batch], return_batch[mask_batch])
 
         loss = policy_loss - dist_entropy * self.entropy_coef + value_loss * self.value_loss_coef
-
+        
         self.policy.optimizer.zero_grad()
         loss.backward()
 
@@ -128,12 +126,11 @@ class MATTrainer:
         mean_advantages = np.nanmean(advantages_copy[mask])
         std_advantages = np.nanstd(advantages_copy[mask])
         advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
-                
+        
         for _ in range(self.ppo_epoch):
             obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
 
             self.ppo_update(obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch)
-
 
     def prep_training(self):
         self.policy.train()

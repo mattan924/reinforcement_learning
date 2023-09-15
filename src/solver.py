@@ -274,6 +274,12 @@ class Solver:
         for n in range(self.num_topic):
             topic = self.all_topic[n]
             num_data[n] = topic.volume/topic.data_size
+
+        num_message = 0
+        for m in range(self.num_client):
+            for topic in p[m]:
+                for subscriber in s[topic]:
+                    num_message += 1
         
         #  最適化問題の定式化
         model = grb.Model("model_" + str(time))
@@ -364,11 +370,11 @@ class Solver:
         #  目的関数の定義
         obj = grb.LinExpr()
 
-        obj += grb.quicksum(grb.quicksum(d[m][l]*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(compute_time[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(2*self.cloud_time*(1-z[l, n])*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(z[l, n]*d_s[l][l2]*w[m, n, m2, l ,l2] for l in range(self.num_edge) for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(d[m2][l2]*y[m2, n, l2] for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum((d[m][l]*x[m, n, l])/num_message for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum(compute_time[m, n, l]/num_message for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum((2*self.cloud_time*(1-z[l, n])*x[m, n, l])/num_message for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum((z[l, n]*d_s[l][l2]*w[m, n, m2, l ,l2])/num_message for l in range(self.num_edge) for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum((d[m2][l2]*y[m2, n, l2])/num_message for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
 
         model.setObjective(obj, sense=grb.GRB.MINIMIZE)
 
