@@ -72,7 +72,7 @@ class MATRunner:
             else:
                 sys.exit("simulation_time が time_step の整数倍になっていません")
 
-            self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, max_agent, max_topic, device=self.device, multi=True)
+            self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, max_agent, max_topic, device=self.device, multi=False)
         elif learning_data_index_dir is not None:
             if test_data_index_dir is None:
                 sys.exit("評価用の test_data_index_dir を指定して下さい")

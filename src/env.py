@@ -547,11 +547,15 @@ class Env:
     # 報酬(総遅延)の計算
     def cal_reward(self):
         reward = 0
+        num_message = 0
         for t in range(self.num_topic):
             for publisher in self.publishers[t]:
                 for subscriber in self.subscribers[t]:
                     delay = self.cal_delay(publisher, subscriber, t)
                     reward = reward + delay
+                    num_message += 1
+
+        reward = reward / num_message
         
         return reward
 
