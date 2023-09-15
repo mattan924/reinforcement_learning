@@ -164,6 +164,12 @@ class Solver:
         for n in range(self.num_topic):
             topic = self.all_topic[n]
             num_data[n] = topic.volume/topic.data_size
+
+        num_message = 0
+        for m in range(self.num_client):
+            for topic in p[m]:
+                for subscriber in s[topic]:
+                    num_message += 1
         
         #  最適化問題の定式化
         model = grb.Model("model_" + str(time))
@@ -247,11 +253,11 @@ class Solver:
         #  目的関数の定義
         obj = grb.LinExpr()
 
-        obj += grb.quicksum(grb.quicksum(d[m][l]*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(compute_time[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(2*self.cloud_time*(1-z[l, n])*x[m, n, l] for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(z[l, n]*d_s[l][l2]*w[m, n, m2, l ,l2] for l in range(self.num_edge) for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
-        obj += grb.quicksum(grb.quicksum(d[m2][l2]*y[m2, l2] for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum((d[m][l]*x[m, n, l])/num_message for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum(compute_time[m, n, l]/num_message for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum((2*self.cloud_time*(1-z[l, n])*x[m, n, l])/num_message for l in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum((z[l, n]*d_s[l][l2]*w[m, n, m2, l ,l2])/num_message for l in range(self.num_edge) for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
+        obj += grb.quicksum(grb.quicksum((d[m2][l2]*y[m2, l2])/num_message for l2 in range(self.num_edge)) for m in range(self.num_client) for n in p[m] for m2 in s[n])
 
         model.setObjective(obj, sense=grb.GRB.MINIMIZE)
 
@@ -264,7 +270,7 @@ class Solver:
         model.Params.NonConvex = 2
         model.optimize()
 
-        delay = self.output_solution(time, model, d, d_s, p, s, output_file)
+        delay = self.output_solution(time, model, d, d_s, p, s, num_message, output_file)
 
         return delay
 
@@ -387,13 +393,13 @@ class Solver:
         model.Params.NonConvex = 2
         model.optimize()
 
-        delay = self.output_solution_y_fix(time, model, d, d_s, p, s, y, output_file)
+        delay = self.output_solution_y_fix(time, model, d, d_s, p, s, y, num_message, output_file)
 
         return delay
 
 
     #  出力形式を決定し、追記する必要あり
-    def output_solution(self, time, model, d, d_s, p, s, output_file):
+    def output_solution(self, time, model, d, d_s, p, s, num_message, output_file):
         opt = []
         x_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
         y_opt = np.zeros((self.num_client, self.num_edge))
@@ -495,6 +501,8 @@ class Solver:
                     for m2 in s[n]:
                         delay[n][m][m2] = calmyModeltime(m, m2, n, x_opt, y_opt, z_opt, d, d_s, num_user, self.all_topic, self.all_edge, self.cloud_time, self.cloud_cycle)
                         total_delay += delay[n][m][m2]
+
+            total_delay = total_delay / num_message
             
             print("total delay = ")
             print(total_delay)
@@ -506,7 +514,7 @@ class Solver:
 
 
 #  出力形式を決定し、追記する必要あり
-    def output_solution_y_fix(self, time, model, d, d_s, p, s, y_opt, output_file):
+    def output_solution_y_fix(self, time, model, d, d_s, p, s, y_opt, num_message, output_file):
         opt = []
         x_opt = np.zeros((self.num_client, self.num_topic, self.num_edge))
         z_opt = np.zeros((self.num_edge, self.num_topic))
@@ -602,6 +610,8 @@ class Solver:
                     for m2 in s[n]:
                         delay[n][m][m2] = calmyModeltime_y_fix(m, m2, n, x_opt, y_opt, z_opt, d, d_s, num_user, self.all_topic, self.all_edge, self.cloud_time, self.cloud_cycle)
                         total_delay += delay[n][m][m2]
+
+            total_delay = total_delay / num_message
             
             print("total delay = ")
             print(total_delay)
