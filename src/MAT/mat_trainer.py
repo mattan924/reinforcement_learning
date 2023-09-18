@@ -78,7 +78,6 @@ class MATTrainer:
         :return actor_grad_norm: (torch.Tensor) アクタの更新からの勾配ノルム。
         :return imp_weights: (torch.Tensor) 重要度サンプリングの重み。
         """
-
         old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
         adv_targ = check(adv_targ).to(**self.tpdv)
         value_preds_batch = check(value_preds_batch).to(**self.tpdv)
@@ -131,6 +130,7 @@ class MATTrainer:
             obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
 
             self.ppo_update(obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch)
+
 
     def prep_training(self):
         self.policy.train()
