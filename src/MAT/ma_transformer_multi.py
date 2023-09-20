@@ -273,20 +273,16 @@ class MultiAgentTransformer(nn.Module):
         # obs: (batch, n_agent, obs_dim)
         # action: (batch, n_agent, 1)
         # available_actions: (batch, n_agent, act_dim)
-        # print(f"\n\n\n======================== transformer forward start ======================= \n\n\n")
 
-        mask = check(mask).to(self.device)
-        obs = check(obs).to(**self.tpdv)
-        action = check(action).to(**self.tpdv)
+        # mask = check(mask)
+        # obs = check(obs).to(**self.tpdv)
+        # action = check(action).to(**self.tpdv)
 
-        encoder_start = time.perf_counter()
         v_loc, obs_rep = self.encoder(obs, mask, update=True)
-        encoder_end = time.perf_counter()
 
         action = action.long()
 
         action_log, entropy = self.discrete_parallel_act(obs_rep, action, mask)
-        parallel_end = time.perf_counter()
 
         return action_log, v_loc, entropy
 
@@ -374,51 +370,7 @@ class MultiAgentTransformer(nn.Module):
 
     #  まとめて行動を選択
     def discrete_parallel_act(self, obs_rep, action, mask):
-        #  mask.shape = (960, 15)
-        #  action.shape = torch.Size([960, 15, 1])
-
-        """
-        opt_obs_rep = obs_rep.reshape(-1, self.batch_size, self.max_agent*self.max_topic, self.n_embd).permute(1, 0, 2, 3)
-        opt_action = action.reshape(-1, self.batch_size, self.max_agent*self.max_topic, 1).permute(1, 0, 2, 3)
-        opt_mask = mask.reshape(-1, self.batch_size, self.max_agent*self.max_topic).permute(1, 0, 2)
-
-        episode_len = opt_obs_rep.shape[1]
-
-        opt_action_log = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic)).to(**self.tpdv)
-        opt_entropy = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic)).to(**self.tpdv)
-
-        shifted_action = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic, self.action_dim + 1)).to(**self.tpdv)
-        shifted_action[:, :, 0, 0] = 1
-
-        tmp_obs_rep = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic, self.n_embd)).to(**self.tpdv)
-
-        action_len_list = []
-        for idx in range(self.batch_size):
-            action_len = opt_obs_rep[idx][opt_mask[idx]].reshape(episode_len, -1, self.n_embd).shape[1]
-            action_len_list.append(action_len)
-
-            tmp_obs_rep[idx][:, :action_len] = opt_obs_rep[idx][opt_mask[idx]].reshape(episode_len, action_len, self.n_embd)
-            shifted_action[idx][:, 1:action_len+1, 1:] = F.one_hot(opt_action[idx][opt_mask[idx]].reshape(episode_len, -1), num_classes=self.action_dim).to(**self.tpdv)
-
-        logit = self.decoder(shifted_action.reshape(-1, self.max_agent*self.max_topic, self.action_dim+1), opt_obs_rep.reshape(-1, self.max_agent*self.max_topic, self.n_embd))
-
-
-        distri = Categorical(logits=logit.reshape(self.batch_size, episode_len, self.max_agent*self.max_topic, self.action_dim))
-
-        for idx in range(self.batch_size):
-            print(f"distri.shape = {distri.shape}")
-            opt_action_log[idx][opt_mask[idx]] = distri.log_prob(opt_action[idx][opt_mask[idx]].reshape(episode_len, -1)).reshape(-1)
-            opt_entropy[opt_mask] = distri.entropy().reshape(-1)
-
-        opt_action_log = opt_action_log.permute(1, 0, 2)
-        opt_entropy = opt_entropy.permute(1, 0, 2)
-        opt_mask = opt_mask.permute(1, 0, 2)
-
-        opt_action_log = opt_action_log[opt_mask]
-        opt_entropy = opt_entropy[opt_mask]
-        """
-
-        ### old
+        
         obs_rep = obs_rep.reshape(-1, self.batch_size, self.max_agent*self.max_topic, self.n_embd).permute(1, 0, 2, 3)
         action = action.reshape(-1, self.batch_size, self.max_agent*self.max_topic, 1).permute(1, 0, 2, 3)
         mask = mask.reshape(-1, self.batch_size, self.max_agent*self.max_topic).permute(1, 0, 2)
@@ -428,19 +380,28 @@ class MultiAgentTransformer(nn.Module):
         action_log = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic)).to(**self.tpdv)
         entropy = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic)).to(**self.tpdv)
 
+        shifted_action = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic, self.action_dim + 1)).to(**self.tpdv)
+        shifted_action[:, :, 0, 0] = 1
+
+        tmp_obs_rep = torch.zeros((self.batch_size, episode_len, self.max_agent*self.max_topic, self.n_embd)).to(**self.tpdv)
+
+        action_len_list = []
         for idx in range(self.batch_size):
-            one_hot_action = F.one_hot(action[idx][mask[idx]].reshape(episode_len, -1), num_classes=self.action_dim).to(**self.tpdv)
+            action_len = obs_rep[idx][mask[idx]].reshape(episode_len, -1, self.n_embd).shape[1]
+            action_len_list.append(action_len)
 
-            action_len = one_hot_action.shape[1]
+            tmp_obs_rep[idx][:, :action_len] = obs_rep[idx][mask[idx]].reshape(episode_len, action_len, self.n_embd)
+            shifted_action[idx][:, 1:action_len, 1:] = F.one_hot(action[idx][mask[idx]].reshape(episode_len, -1), num_classes=self.action_dim).to(**self.tpdv)[:, :-1]
 
-            shifted_action = torch.zeros((episode_len, action_len, self.action_dim + 1)).to(**self.tpdv)
-            shifted_action[:, 0, 0] = 1
+        logit = self.decoder(shifted_action.reshape(-1, self.max_agent*self.max_topic, self.action_dim+1), tmp_obs_rep.reshape(-1, self.max_agent*self.max_topic, self.n_embd))
 
-            shifted_action[:, 1:, 1:] = one_hot_action[:, :-1]
+        logit = logit.reshape(self.batch_size, episode_len, self.max_agent*self.max_topic, self.action_dim)
 
-            logit = self.decoder(shifted_action, obs_rep[idx][mask[idx]].reshape(episode_len, -1, self.n_embd))
+        for idx in range(self.batch_size):
+            action_len = action_len_list[idx]
 
-            distri = Categorical(logits=logit)
+            distri = Categorical(logits=logit[idx][:, :action_len])
+
             action_log[idx][mask[idx]] = distri.log_prob(action[idx][mask[idx]].reshape(episode_len, -1)).reshape(-1)
             entropy[idx][mask[idx]] = distri.entropy().reshape(-1)
 
@@ -450,6 +411,6 @@ class MultiAgentTransformer(nn.Module):
 
         action_log = action_log[mask]
         entropy = entropy[mask]
-
+    
         return action_log, entropy
     
