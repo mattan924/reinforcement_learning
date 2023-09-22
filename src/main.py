@@ -4,9 +4,9 @@ from MAT.mat_runner import MATRunner
 import sys
 
 
-learning_data_index_path = "../dataset/debug/debug/index/index_easy.csv"
-#learning_data_index_dir = "../dataset/debug/easy/train/index/"
-#test_data_index_dir = "../dataset/debug/easy/test/index/"
+#learning_data_index_path = "../dataset/debug/debug/index/index_easy.csv"
+learning_data_index_dir = "../dataset/debug/onetopic/train/index/"
+test_data_index_dir = "../dataset/debug/onetopic/test/index/"
 
 # 各種パラメーター
 #  HAPPO
@@ -23,15 +23,15 @@ learning_data_index_path = "../dataset/debug/debug/index/index_easy.csv"
 # backup_iter = 100
 
 #  MAT
-max_epi_itr = 1500
+max_epi_itr = 10000
 batch_size = 16
 backup_itr = 1000
 
 
 
 device = "cuda:0"
-result_dir = "../result/temporary/debug/"
-file_name = "debug_generator_single"
+result_dir = "../result/temporary/debug/onetopic/"
+file_name = "onetopic_multi_permutation"
 output_base = result_dir + file_name
 # actor_weight_base = "actor_weight"
 # critic_weight_base = "critic_weight"
@@ -57,11 +57,11 @@ for i in range(1):
 
     #happo_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight,V_net_weight, learning_data_index_path, output)
     #coma_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output)
-    runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_path=learning_data_index_path)
-    runner.train_single_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
-    #runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_dir=learning_data_index_dir, test_data_index_dir=test_data_index_dir)
+    #runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_path=learning_data_index_path)
+    #runner.train_single_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
+    runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_dir=learning_data_index_dir, test_data_index_dir=test_data_index_dir)
     #runner.train_multi_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
-    #runner.train_multi_env_debug(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
+    runner.train_multi_env_debug(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
 
 #  標準エラー出力先を戻す
 sys.stderr = sys.__stderr__

@@ -288,16 +288,10 @@ class MultiAgentTransformer(nn.Module):
 
 
     def get_actions(self, obs, mask, deterministic=False):
-
-        #  torch.float32, cpu へ変換
         obs = check(obs).to(**self.tpdv)
         mask = check(mask).to(self.device)
 
-        #  obs を Encoder を用いてエンコード
-        #  obs.shape = torch.Size([1, num_agents*num_topic, obs_dim=2255])
         v_loc, obs_rep = self.encoder(obs, mask)
-        #  v_loc.shape = torch.Size([1, num_agents*num_topic, 1])
-        #  obs_rep = torch.Size([1, num_agents*num_topic, n_embd])
         
         output_action, output_action_log = self.discrete_autoregreesive_act(obs_rep, mask, deterministic=deterministic)
 

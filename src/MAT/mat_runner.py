@@ -147,7 +147,6 @@ class MATRunner:
 
         if train:
             value, action, action_log_prob = self.trainer.policy.get_actions(self.buffer.obs[step], self.buffer.mask[step], deterministic=False)
-
         else:
             value, action, action_log_prob = self.trainer.policy.get_actions(self.test_buffer.obs[step], self.test_buffer.mask[step], deterministic=True)
 
@@ -573,15 +572,12 @@ class MATRunner:
 
         start_time = time_module.perf_counter()
 
-
         num_used_env = 2
         self.env_list = []
         self.test_env_list = []
         for i in range(num_used_env):
             index_path = self.train_index_path[i]
             self.test_env_list.append(Env(index_path))
-            for _ in range(int(self.batch_size/num_used_env)):
-                self.env_list.append(Env(index_path))
 
         self.test_buffer = SharedReplayBuffer(self.episode_length, len(self.test_env_list), self.max_agent, self.max_topic, self.obs_dim, self.N_action)
 
@@ -608,8 +604,12 @@ class MATRunner:
         for epi_iter in range(start_epi_itr, self.max_epi_itr):
 
             #  環境のリセット
-            self.env_list_shuffle = random.sample(self.env_list, self.batch_size)
+            #self.env_list_shuffle = random.sample(self.env_list, self.batch_size)
 
+            idx = epi_iter % num_used_env
+            index_path = self.train_index_path[idx]
+            self.env_list_shuffle = [Env(index_path) for _ in range(self.batch_size)]
+            
             #  1エピソード中の reward の保持
             reward_history = [[] for _ in range(self.batch_size)]
 
