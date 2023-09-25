@@ -442,7 +442,7 @@ class MATRunner:
                     step_start = time_module.perf_counter()
 
                     env = self.env_list_shuffle[idx]
-                    reward = env.step(actions_batch[idx], self.buffer.agent_perm[step][idx], self.buffer.topic_perm[step][idx], time)
+                    reward = env.step(actions_batch[idx][self.buffer.mask[step][idx]], self.buffer.agent_perm[step][idx], self.buffer.topic_perm[step][idx], time)
                     reward_history[idx].append(reward)
                     reward_batch[idx] = -reward
 
@@ -517,7 +517,7 @@ class MATRunner:
                     # 報酬の受け取り
                     for idx in range(len(self.test_env_list)):
                         test_env = self.test_env_list[idx]
-                        reward = test_env.step(actions_batch[idx], self.test_buffer.agent_perm[step][idx], self.test_buffer.topic_perm[step][idx], time)
+                        reward = test_env.step(actions_batch[idx][self.test_buffer.mask[step][idx]], self.test_buffer.agent_perm[step][idx], self.test_buffer.topic_perm[step][idx], time)
                         reward_history_test[idx].append(reward)
                         reward_batch[idx] = -reward
 
@@ -578,6 +578,8 @@ class MATRunner:
         for i in range(num_used_env):
             index_path = self.train_index_path[i]
             self.test_env_list.append(Env(index_path))
+            for _ in range(int(self.batch_size/num_used_env)):
+                self.env_list.append(Env(index_path))
 
         self.test_buffer = SharedReplayBuffer(self.episode_length, len(self.test_env_list), self.max_agent, self.max_topic, self.obs_dim, self.N_action)
 
@@ -604,11 +606,7 @@ class MATRunner:
         for epi_iter in range(start_epi_itr, self.max_epi_itr):
 
             #  環境のリセット
-            #self.env_list_shuffle = random.sample(self.env_list, self.batch_size)
-
-            idx = epi_iter % num_used_env
-            index_path = self.train_index_path[idx]
-            self.env_list_shuffle = [Env(index_path) for _ in range(self.batch_size)]
+            self.env_list_shuffle = random.sample(self.env_list, self.batch_size)
             
             #  1エピソード中の reward の保持
             reward_history = [[] for _ in range(self.batch_size)]
@@ -638,7 +636,7 @@ class MATRunner:
                 # 報酬の受け取り
                 for idx in range(self.batch_size):
                     env = self.env_list_shuffle[idx]
-                    reward = env.step(actions_batch[idx], self.buffer.agent_perm[step][idx], self.buffer.topic_perm[step][idx], time)
+                    reward = env.step(actions_batch[idx][self.buffer.mask[step][idx]], self.buffer.agent_perm[step][idx], self.buffer.topic_perm[step][idx], time)
                     reward_history[idx].append(reward)
                     reward_batch[idx] = -reward
 
@@ -695,7 +693,7 @@ class MATRunner:
                     # 報酬の受け取り
                     for idx in range(len(self.test_env_list)):
                         test_env = self.test_env_list[idx]
-                        reward = test_env.step(actions_batch[idx], self.test_buffer.agent_perm[step][idx], self.test_buffer.topic_perm[step][idx], time)
+                        reward = test_env.step(actions_batch[idx][self.test_buffer.mask[step][idx]], self.test_buffer.agent_perm[step][idx], self.test_buffer.topic_perm[step][idx], time)
                         reward_history_test[idx].append(reward)
                         reward_batch[idx] = -reward
 
@@ -726,6 +724,7 @@ class MATRunner:
             if epi_iter == 0:
                 process_time = datetime.timedelta(seconds=(end_time - start_time - (test_end - test_start))*self.max_epi_itr + (test_end - test_start)*(self.max_epi_itr / self.test_iter))
                 finish_time = start_process + process_time
+                print(f"1 step time = {test_start - start_time}")
                 print(f"終了予定時刻: {finish_time}")
 
         #  重みパラメータの保存

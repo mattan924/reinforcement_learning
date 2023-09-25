@@ -218,7 +218,7 @@ class Env:
             if block_index_y == obs_size:
                 block_index_y = obs_size-1
 
-            position_info[client.id][block_index_y][block_index_x] = 100
+            position_info[client.id][block_index_y][block_index_x] = 1
 
             for t in range(self.num_topic):
                 if client.pub_topic[t] == 1:
@@ -460,7 +460,6 @@ class Env:
                             edge = self.all_edge[int(client.pub_edge[topic_id])]
                             edge.used_publishers[topic_id] += 1
 
-                            #print(f"client.id, pub_edge = {client.id}, {client.pub_edge[topic_id]}")
 
                         if  client.sub_topic[topic_id] == 1:
                             block_index_x = int(client.x / block_len_x)

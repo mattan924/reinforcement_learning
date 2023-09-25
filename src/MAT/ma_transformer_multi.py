@@ -259,7 +259,7 @@ class MultiAgentTransformer(nn.Module):
         self.tpdv = dict(dtype=torch.float32, device=device)
         self.device = device
 
-        self.n_block = 1
+        self.n_block = 3
         self.n_embd = 9
         self.n_head = 1
 

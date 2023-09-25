@@ -29,9 +29,9 @@ backup_itr = 1000
 
 
 
-device = "cuda:0"
+device = "cuda:1"
 result_dir = "../result/temporary/debug/onetopic/"
-file_name = "onetopic_multi_permutation"
+file_name = "onetopic_multi"
 output_base = result_dir + file_name
 # actor_weight_base = "actor_weight"
 # critic_weight_base = "critic_weight"
@@ -60,8 +60,8 @@ for i in range(1):
     #runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_path=learning_data_index_path)
     #runner.train_single_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
     runner = MATRunner(max_epi_itr, batch_size, device, result_dir, backup_itr, max_agent, max_topic, learning_data_index_dir=learning_data_index_dir, test_data_index_dir=test_data_index_dir)
-    #runner.train_multi_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
-    runner.train_multi_env_debug(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
+    runner.train_multi_env(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
+    #runner.train_multi_env_debug(output, transformer_weight, start_epi_itr, load_parameter_path=load_parameter_path)
 
 #  標準エラー出力先を戻す
 sys.stderr = sys.__stderr__
