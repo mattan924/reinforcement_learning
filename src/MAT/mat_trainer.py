@@ -108,6 +108,7 @@ class MATTrainer:
         self.policy.optimizer.step()
 
         return value_loss, grad_norm, policy_loss, dist_entropy, grad_norm, imp_weights
+    
 
     def train(self, buffer):
         """
@@ -125,10 +126,14 @@ class MATTrainer:
         mean_advantages = np.nanmean(advantages_copy[mask])
         std_advantages = np.nanstd(advantages_copy[mask])
         advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
+
+        obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
+        
+        obs_batch = check(obs_batch).to(**self.tpdv)
+        actions_batch = check(actions_batch).to(**self.tpdv)
+        mask_batch = check(mask_batch)
         
         for _ in range(self.ppo_epoch):
-            obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
-
             self.ppo_update(obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch)
 
 

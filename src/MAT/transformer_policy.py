@@ -61,7 +61,6 @@ class TransformerPolicy:
         :return actions: (torch.Tensor) 取るべきアクション。
         :return action_log_probs: (torch.Tensor) 選択されたアクションのログ確率。
         """
-
         obs = obs.reshape(-1, self.max_agent*self.max_topic, self.obs_dim)
         batch = obs.shape[0]
 
