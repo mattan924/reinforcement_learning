@@ -3,8 +3,8 @@ import pandas as pd
 import time as time_modu
 
 if __name__ == '__main__':
-    index_file = "../dataset/debug/onetopic/train/index/index_onetopic_15.csv"
-    output_file = "../dataset/debug/onetopic/train/solution/solution_onetopic_15_opt.csv"
+    index_file = "../dataset/debug/onetopic/test/index/index_onetopic_9.csv"
+    output_file = "../dataset/debug/onetopic/test/solution/solution_onetopic_9_opt.csv"
 
     start_time = 0
 
