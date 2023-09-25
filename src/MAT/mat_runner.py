@@ -10,6 +10,7 @@ import sys
 import os
 import glob
 import random
+from natsort import natsorted
 import time as time_module
 import datetime
 import torch
@@ -80,10 +81,10 @@ class MATRunner:
             self.learning_data_index_dir = learning_data_index_dir
 
             train_dir_path = os.path.join(learning_data_index_dir, "*")
-            self.train_index_path = glob.glob(train_dir_path)
+            self.train_index_path = natsorted(glob.glob(train_dir_path))
 
             test_dir_path = os.path.join(test_data_index_dir, "*")
-            self.test_index_path = glob.glob(test_dir_path)
+            self.test_index_path = natsorted(glob.glob(test_dir_path))
 
             self.env_list = []
             for idx in range(len(self.train_index_path)):

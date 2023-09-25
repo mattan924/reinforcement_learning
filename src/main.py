@@ -30,8 +30,8 @@ backup_itr = 1000
 
 
 device = "cuda:1"
-result_dir = "../result/temporary/debug/onetopic/"
-file_name = "onetopic_multi"
+result_dir = "../result/temporary/debug/"
+file_name = "debug"
 output_base = result_dir + file_name
 # actor_weight_base = "actor_weight"
 # critic_weight_base = "critic_weight"
