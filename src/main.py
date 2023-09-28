@@ -5,8 +5,8 @@ import sys
 
 
 #learning_data_index_path = "../dataset/debug/debug/index/index_easy.csv"
-learning_data_index_dir = "../dataset/debug/onetopic/train/index/"
-test_data_index_dir = "../dataset/debug/onetopic/test/index/"
+learning_data_index_dir = "../dataset/debug/easy/train/index/"
+test_data_index_dir = "../dataset/debug/easy/test/index/"
 
 # 各種パラメーター
 #  HAPPO
@@ -23,15 +23,15 @@ test_data_index_dir = "../dataset/debug/onetopic/test/index/"
 # backup_iter = 100
 
 #  MAT
-max_epi_itr = 10000
+max_epi_itr = 1000
 batch_size = 16
 backup_itr = 1000
 
 
 
-device = "cuda:1"
-result_dir = "../result/temporary/debug/"
-file_name = "debug"
+device = "cuda:0"
+result_dir = "../result/temporary/debug/hard/"
+file_name = "debug_multi"
 output_base = result_dir + file_name
 # actor_weight_base = "actor_weight"
 # critic_weight_base = "critic_weight"
