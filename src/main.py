@@ -24,7 +24,7 @@ test_data_index_dir = "../dataset/debug/easy/test/index/"
 
 #  MAT
 max_epi_itr = 1000
-batch_size = 16
+batch_size = 10
 backup_itr = 1000
 
 
@@ -53,7 +53,7 @@ for i in range(1):
     transformer_weight = transformer_weight_base + "_" + file_name + str(i)
 
     #  標準エラー出力先の変更
-    sys.stderr = open(output + "_err.log", 'w')
+    #sys.stderr = open(output + "_err.log", 'w')
 
     #happo_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight,V_net_weight, learning_data_index_path, output)
     #coma_trainer.train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output)

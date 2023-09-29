@@ -92,33 +92,18 @@ class SharedReplayBuffer(object):
         param value_preds: (np.ndarray) 各ステップにおける値関数の予測値．
         param rewards: (np.ndarray) 各ステップで収集した報酬。
         """
-        insert_start = time.perf_counter()
+
         self.obs[self.step + 1] = obs.reshape(self.batch_size, self.num_agents*self.num_topic, self.obs_dim)
-        obs_end = time.perf_counter()
-        self.mask[self.step + 1] = np.bool_(mask.reshape(self.batch_size, self.num_agents*self.num_topic).copy())
-        mask_end = time.perf_counter()
-        self.actions[self.step][self.mask[self.step]] = actions[self.mask[self.step]].copy()
-        action_end = time.perf_counter()
-        self.action_log_probs[self.step][self.mask[self.step]] = action_log_probs[self.mask[self.step]].copy()
-        action_log_end = time.perf_counter()
-        self.value_preds[self.step][self.mask[self.step]] = value_preds.reshape(-1, 1).copy()
-        value_end = time.perf_counter()
+        self.mask[self.step + 1] = np.bool_(mask.reshape(self.batch_size, self.num_agents*self.num_topic))
+        self.actions[self.step][self.mask[self.step]] = actions[self.mask[self.step]]
+        self.action_log_probs[self.step][self.mask[self.step]] = action_log_probs[self.mask[self.step]]
+        self.value_preds[self.step][self.mask[self.step]] = value_preds.reshape(-1, 1)
         for batch in range(self.batch_size):
-            self.rewards[self.step][batch][self.mask[self.step][batch]] = rewards[batch].copy()
-        reward_end = time.perf_counter()
-        self.agent_perm[self.step + 1] = agent_perm.copy()
-        self.topic_perm[self.step + 1] = topic_perm.copy()
-        perm_end = time.perf_counter()
+            self.rewards[self.step][batch][self.mask[self.step][batch]] = rewards[batch]
+        self.agent_perm[self.step + 1] = agent_perm
+        self.topic_perm[self.step + 1] = topic_perm
 
         self.step = (self.step + 1) % self.episode_length
-
-        print(f"obs insert = {(obs_end - insert_start)*60}")
-        print(f"mask_insert = {(mask_end - obs_end) *60}")
-        print(f"actions insert = {(action_end - mask_end)*60}")
-        print(f"actions_log insert = {(action_log_end - action_end)*60}")
-        print(f"value insert = {(value_end - action_log_end)*60}")
-        print(f"reward insert = {(reward_end - value_end)*60}")
-        print(f"perm insert = {(perm_end - reward_end)*60}")
 
 
     def compute_returns(self, batch, next_value, value_normalizer=None):
