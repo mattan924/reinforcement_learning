@@ -3,8 +3,8 @@ import pandas as pd
 import time as time_modu
 
 if __name__ == '__main__':
-    index_file = "../dataset/debug/easy/test/index/index_easy_9.csv"
-    output_file = "../dataset/debug/easy/test/solution/solution_easy_9_opt.csv"
+    index_file = "../dataset/debug/hard/test/index/index_hard_6.csv"
+    output_file = "../dataset/debug/hard/test/solution/solution_hard_6_opt.csv"
 
     start_time = 0
 
@@ -13,7 +13,7 @@ if __name__ == '__main__':
     if start_time == 0:
         with open(output_file, "w") as f:
             pass
-
+ 
     total_delay = 0.0
 
     for time in range(0, start_time, solver.time_step):
