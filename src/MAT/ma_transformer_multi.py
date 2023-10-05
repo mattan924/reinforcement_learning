@@ -131,28 +131,25 @@ class Encoder(nn.Module):
         self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(), init_(nn.Linear(n_embd, 1)))
         
 
-    def forward(self, obs, mask, update=False):
+    def forward(self, obs_posi, obs_client, obs_edge, obs_topic_info, mask, update=False):
 
         if update == False:
-            batch_dim, max_action_len, obs_dim = obs.shape
+            batch_dim = obs_posi.shape[0]
             rep = torch.zeros((batch_dim, self.n_agent*self.n_topic, self.n_embd), device=self.device)
 
-            obs_posi = obs[:, :, 0:self.obs_distri_dim]
-            obs_client = obs[:, :, self.obs_distri_dim:self.obs_distri_dim*4]
-            obs_edge = obs[:, :, self.obs_distri_dim*4:self.obs_distri_dim*9]
-            obs_infomation = obs[:, :, self.obs_distri_dim*9:]
+            action_len_list = torch.sum(mask, axis=1)
 
-            action_len_list = []
-            for idx in range(batch_dim):
-                action_len = obs[idx][mask[idx]].shape[0]
-                action_len_list.append(action_len)
+            obs_emb_posi = self.obs_encoder_posi(obs_posi)
+            obs_emb_client = self.obs_encoder_client(obs_client)
+            obs_emb_edge = self.obs_encoder_edge(obs_edge)
 
-            obs_emb_posi = self.obs_encoder_posi(obs_posi[mask])
-            obs_emb_client = self.obs_encoder_client(obs_client[mask])
-            obs_emb_edge = self.obs_encoder_edge(obs_edge[mask])
+            obs_emb_posi = obs_emb_posi.unsqueeze(2).repeat(1, 1, self.n_topic, 1).reshape(batch_dim, self.n_agent*self.n_topic, self.n_embd)
+            obs_emb_client = obs_emb_client.unsqueeze(1).repeat(1, self.n_agent, 1, 1).reshape(batch_dim, self.n_agent*self.n_topic, self.n_embd)
+            obs_emb_edge = obs_emb_edge.unsqueeze(1).repeat(1, self.n_agent, 1, 1).reshape(batch_dim, self.n_agent*self.n_topic, self.n_embd)
+            obs_topic_info = obs_topic_info.unsqueeze(1).repeat(1, self.n_agent, 1, 1).reshape(batch_dim, self.n_agent*self.n_topic, 3)
 
-            obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation[mask]], dim=-1))
-            
+            obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi[mask], obs_emb_client[mask], obs_emb_edge[mask], obs_topic_info[mask]], dim=-1))
+                        
             start_idx = 0
             for idx in range(batch_dim):
                 end_idx = start_idx + action_len_list[idx]
@@ -161,32 +158,28 @@ class Encoder(nn.Module):
 
             v_loc = self.head(rep[mask])
         else:
-
-            batch_dim, max_action_len, obs_dim = obs.shape
+            batch_dim = obs_posi.shape[0]
             episode_len = int(batch_dim / self.batch_size)
             rep = torch.zeros((self.batch_size, episode_len, self.n_agent*self.n_topic, self.n_embd), device=self.device)
 
-            obs_posi = obs[:, :, 0:self.obs_distri_dim]
-            obs_client = obs[:, :, self.obs_distri_dim:self.obs_distri_dim*4]
-            obs_edge = obs[:, :, self.obs_distri_dim*4:self.obs_distri_dim*9]
-            obs_infomation = obs[:, :, self.obs_distri_dim*9:]
+            obs_posi = obs_posi.reshape(episode_len, self.batch_size, self.n_agent, -1).permute(1, 0, 2, 3)
+            obs_client = obs_client.reshape(episode_len, self.batch_size, self.n_topic, -1).permute(1, 0, 2, 3)
+            obs_edge = obs_edge.reshape(episode_len, self.batch_size, self.n_topic, -1).permute(1, 0, 2, 3)
+            obs_topic_info = obs_topic_info.reshape(episode_len, self.batch_size, self.n_topic, -1).permute(1, 0, 2, 3)
+            mask = mask.reshape(episode_len, self.batch_size, -1).permute(1, 0, 2)
 
-            obs_posi = obs_posi.reshape(episode_len, self.batch_size, max_action_len, -1).permute(1, 0, 2, 3)
-            obs_client = obs_client.reshape(episode_len, self.batch_size, max_action_len, -1).permute(1, 0, 2, 3)
-            obs_edge = obs_edge.reshape(episode_len, self.batch_size, max_action_len, -1).permute(1, 0, 2, 3)
-            obs_infomation = obs_infomation.reshape(episode_len, self.batch_size, max_action_len, -1).permute(1, 0, 2, 3)
-            mask = mask.reshape(episode_len, self.batch_size, max_action_len).permute(1, 0, 2)
+            action_len_list = torch.sum(torch.sum(mask, axis=2), axis=1)
 
-            action_len_list = []
-            for idx in range(self.batch_size):
-                action_len = obs_infomation[idx][mask[idx]].shape[0]
-                action_len_list.append(action_len)
+            obs_emb_posi = self.obs_encoder_posi(obs_posi)
+            obs_emb_client = self.obs_encoder_client(obs_client)
+            obs_emb_edge = self.obs_encoder_edge(obs_edge)
 
-            obs_emb_posi = self.obs_encoder_posi(obs_posi[mask])
-            obs_emb_client = self.obs_encoder_client(obs_client[mask])
-            obs_emb_edge = self.obs_encoder_edge(obs_edge[mask])
+            obs_emb_posi = obs_emb_posi.unsqueeze(3).repeat(1, 1, 1, self.n_topic, 1).reshape(self.batch_size, episode_len, self.n_agent*self.n_topic, self.n_embd)
+            obs_emb_client = obs_emb_client.unsqueeze(2).repeat(1, 1, self.n_agent, 1, 1).reshape(self.batch_size, episode_len, self.n_agent*self.n_topic, self.n_embd)
+            obs_emb_edge = obs_emb_edge.unsqueeze(2).repeat(1, 1, self.n_agent, 1, 1).reshape(self.batch_size, episode_len, self.n_agent*self.n_topic, self.n_embd)
+            obs_topic_info = obs_topic_info.unsqueeze(2).repeat(1, 1, self.n_agent, 1, 1).reshape(self.batch_size, episode_len, self.n_agent*self.n_topic, 3)
 
-            obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi, obs_emb_client, obs_emb_edge, obs_infomation[mask]], dim=-1))
+            obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi[mask], obs_emb_client[mask], obs_emb_edge[mask], obs_topic_info[mask]], dim=-1))
 
             start_idx = 0
             for idx in range(self.batch_size):
@@ -214,12 +207,8 @@ class Decoder(nn.Module):
         self.action_encoder = nn.Sequential(init_(nn.Linear(action_dim + 1, n_embd, bias=False), activate=True), nn.GELU())
         
         self.ln = nn.LayerNorm(n_embd)
-        self.blocks = nn.Sequential(*[DecodeBlock(n_embd, n_head, n_agent, n_topic) for _ in range(n_block)])
-        #self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(), nn.LayerNorm(n_embd),
-        #                              init_(nn.Linear(n_embd, action_dim)))
-        
-        self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(),
-                                      init_(nn.Linear(n_embd, action_dim)))
+        self.blocks = nn.Sequential(*[DecodeBlock(n_embd, n_head, n_agent, n_topic) for _ in range(n_block)])        
+        self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(), init_(nn.Linear(n_embd, action_dim)))
 
 
     #  state, action, and return
@@ -269,16 +258,12 @@ class MultiAgentTransformer(nn.Module):
         self.to(device)
 
 
-    def forward(self, obs, action, mask):
+    def forward(self, obs_posi, obs_client, obs_edge, obs_topic_info, action, mask):
         # obs: (batch, n_agent, obs_dim)
         # action: (batch, n_agent, 1)
         # available_actions: (batch, n_agent, act_dim)
 
-        # mask = check(mask)
-        # obs = check(obs).to(**self.tpdv)
-        # action = check(action).to(**self.tpdv)
-
-        v_loc, obs_rep = self.encoder(obs, mask, update=True)
+        v_loc, obs_rep = self.encoder(obs_posi, obs_client, obs_edge, obs_topic_info, mask, update=True)
 
         action = action.long()
 
@@ -287,23 +272,30 @@ class MultiAgentTransformer(nn.Module):
         return action_log, v_loc, entropy
 
 
-    def get_actions(self, obs, mask, deterministic=False):
-        obs = check(obs).to(**self.tpdv)
+    def get_actions(self, obs_posi, obs_client, obs_edge, obs_topic_info, mask, deterministic=False):
+
+        obs_posi = check(obs_posi).to(self.device)
+        obs_client = check(obs_client).to(self.device)
+        obs_edge = check(obs_edge).to(self.device)
+        obs_topic_info = check(obs_topic_info).to(self.device)
         mask = check(mask).to(self.device)
 
-        v_loc, obs_rep = self.encoder(obs, mask)
+        v_loc, obs_rep = self.encoder(obs_posi, obs_client, obs_edge, obs_topic_info, mask)
         
         output_action, output_action_log = self.discrete_autoregreesive_act(obs_rep, mask, deterministic=deterministic)
 
         return output_action, output_action_log, v_loc
 
 
-    def get_values(self, obs, mask):
+    def get_values(self, obs_posi, obs_client, obs_edge, obs_topic_info, mask):
 
-        obs = check(obs).to(**self.tpdv)
+        obs_posi = check(obs_posi).to(**self.tpdv)
+        obs_client = check(obs_client).to(**self.tpdv)
+        obs_edge = check(obs_edge).to(**self.tpdv)
+        obs_topic_info = check(obs_topic_info).to(**self.tpdv)
         mask = check(mask).to(self.device)
 
-        v_tot, obs_rep = self.encoder(obs, mask)
+        v_tot, obs_rep = self.encoder(obs_posi, obs_client, obs_edge, obs_topic_info, mask)
         
         return v_tot
     
@@ -315,11 +307,10 @@ class MultiAgentTransformer(nn.Module):
         output_action_log = torch.zeros_like(output_action, dtype=torch.float32)
         tmp_obs_rep = torch.zeros((batch_dim, self.max_agent*self.max_topic, obs_rep_dim)).to(**self.tpdv)
 
-        # obs_rep.shape = torch.Size([16, 90, 9])
-        action_len_list = []
+        # obs_rep.shape = torch.Size([16, 90, 9])        
+        action_len_list = torch.sum(mask, axis=1)
         for idx in range(batch_dim):
-            action_len = obs_rep[idx][mask[idx]].shape[0]
-            action_len_list.append(action_len)
+            action_len = action_len_list[idx]
             tmp_obs_rep[idx][:action_len] = obs_rep[idx][mask[idx]].reshape(1, action_len, obs_rep_dim)
 
         max_action_len = max(action_len_list)
