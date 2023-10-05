@@ -45,7 +45,8 @@ def cal_nearest_server_reward(index_path):
     agent_perm, topic_perm = get_perm(num_agent, num_topic)
 
     for time in range(0, simulation_time, time_step):
-        obs, mask = env.get_observation_mat(agent_perm, topic_perm)
+        #obs, mask = env.get_observation_mat(agent_perm, topic_perm)
+        obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, obs_size=27)
         mask = np.bool_(mask.reshape(-1))
         actions = env.get_near_action(agent_perm, topic_perm)
 
@@ -55,24 +56,33 @@ def cal_nearest_server_reward(index_path):
 
 
 
-data_index_path = "../dataset/debug/onetopic/test/index/index_onetopic_8.csv"
+for i in range(10):
+    data_index_path = "../dataset/debug/hard/test/index/index_hard_" + str(i) + ".csv"
 
-log_path = "../result/temporary/debug/onetopic/onetopic_multi0_test1.log"
+    log_path_epoch4 = "../result/temporary/debug/hard/hard_multi_epoch4_0_test" + str(i) + ".log"
+    log_path_epoch6 = "../result/temporary/debug/hard/hard_multi_epoch6_0_test" + str(i) + ".log"
+    log_path_epoch8 = "../result/temporary/debug/hard/hard_multi_epoch8_0_test" + str(i) + ".log"
 
-train_curve = read_train_curve(log_path)
 
-df_index = pd.read_csv(data_index_path, index_col=0)
-opt = df_index.at['data', 'opt']
+    train_curve4 = read_train_curve(log_path_epoch4)
+    train_curve6 = read_train_curve(log_path_epoch6)
+    train_curve8 = read_train_curve(log_path_epoch8)
 
-nearest_reward = cal_nearest_server_reward(data_index_path)
 
-fig = plt.figure()
-wind = fig.add_subplot(1, 1, 1)
-#wind.set_ylim(ymin=21000, ymax=34000)
-wind.grid()
-wind.set_title("test 8")
-wind.plot(train_curve, linewidth=1, label='mat')
-wind.axhline(y=opt, c='r', label="optimal")
-wind.axhline(y=nearest_reward, c='g', label="nearest_server")
-wind.legend()
-fig.savefig("../result/temporary/debug/onetopic/onetopic_multi0_test8.png")
+    df_index = pd.read_csv(data_index_path, index_col=0)
+    opt = df_index.at['data', 'opt']
+
+    nearest_reward = cal_nearest_server_reward(data_index_path)
+
+    fig = plt.figure()
+    wind = fig.add_subplot(1, 1, 1)
+    #wind.set_ylim(ymin=21000, ymax=34000)
+    wind.grid()
+    wind.set_title("test " + str(i))
+    wind.plot(train_curve4, linewidth=1, label='epoch4')
+    #wind.plot(train_curve6, linewidth=1, label='epoch6')
+    #wind.plot(train_curve8, linewidth=1, label='epoch8')
+    wind.axhline(y=opt, c='r', label="optimal")
+    wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+    wind.legend()
+    fig.savefig("../result/temporary/debug/hard/hard_multi_test" + str(i) + ".png")

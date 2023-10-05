@@ -37,9 +37,6 @@ class TransformerPolicy:
         self.max_agent = max_agent
         self.max_topic = max_topic
         
-        #  obs_dim:  172
-        #  share_obs_dim:  213
-        #  act_dim:  14
         self.tpdv = dict(dtype=torch.float32, device=device)
         
         #  MAT インスタンスの生成
@@ -51,20 +48,13 @@ class TransformerPolicy:
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
 
 
-    def get_actions(self, obs, mask, deterministic=False):
+    def get_actions(self, obs_posi, obs_client, obs_edge, obs_topic_info, mask, deterministic=False):
         """
         与えられた入力に対するアクションと値関数の予測を計算します。
-        param obs (np.ndarray): actor へのローカルエージェント入力．
-        param deterministic (bool): アクションを分布のモードにするか、サンプリングするか。
-
-        :return values: (torch.Tensor) 値関数の予測値。
-        :return actions: (torch.Tensor) 取るべきアクション。
-        :return action_log_probs: (torch.Tensor) 選択されたアクションのログ確率。
         """
-        obs = obs.reshape(-1, self.max_agent*self.max_topic, self.obs_dim)
-        batch = obs.shape[0]
+        batch, _, distri_dim = obs_posi.shape
 
-        actions, action_log_probs, values = self.transformer.get_actions(obs, mask, deterministic)
+        actions, action_log_probs, values = self.transformer.get_actions(obs_posi, obs_client, obs_edge, obs_topic_info, mask, deterministic)
         
         actions = actions.view(batch, -1, self.act_num)
         action_log_probs = action_log_probs.view(batch, -1, self.act_num)
@@ -72,33 +62,28 @@ class TransformerPolicy:
         return values, actions, action_log_probs
     
 
-    def get_values(self, obs, mask):
+    def get_values(self, obs_posi, obs_client, obs_edge, obs_topic_info, mask):
         """
         値関数の予測値を取得します。
         """
 
-        obs = obs.reshape(-1, self.max_agent*self.max_topic, self.obs_dim)
-
-        values = self.transformer.get_values(obs, mask)
+        values = self.transformer.get_values(obs_posi, obs_client, obs_edge, obs_topic_info, mask)
 
         return values
     
 
-    def evaluate_actions(self, obs, actions, mask):
+    def evaluate_actions(self, obs_posi, obs_client, obs_edge, obs_topic_info, actions, mask):
         """
         アクタ更新のためのアクションログ確率 / エントロピー / value関数予測を取得します。
-        :param obs (np.ndarray): アクタへのローカルエージェント入力．
-        :param actions: (np.ndarray) 対数確率とエントロピーを計算するアクション。
-
-        :return values: (torch.Tensor) 値関数の予測値。
-        :return action_log_probs: (torch.Tensor) 入力アクションのログ確率。
-        :return dist_entropy: (torch.Tensor) 与えられた入力に対するアクションの分布エントロピー。
         """
 
-        obs = obs.reshape(-1, self.max_agent*self.max_topic, self.obs_dim)
+        obs_posi = obs_posi.reshape(-1, self.max_agent, self.obs_distri_dim)
+        obs_client = obs_client.reshape(-1, self.max_topic, self.obs_distri_dim*3)
+        obs_edge = obs_edge.reshape(-1, self.max_topic, self.obs_distri_dim*5)
+        obs_topic_info = obs_topic_info.reshape(-1, self.max_topic, 3)
         actions = actions.reshape(-1, self.max_agent*self.max_topic, self.act_num)
 
-        action_log_probs, values, entropy = self.transformer(obs, actions, mask)
+        action_log_probs, values, entropy = self.transformer(obs_posi, obs_client, obs_edge, obs_topic_info, actions, mask)
 
         action_log_probs = action_log_probs.view(-1, self.act_num)
         values = values.view(-1, 1)

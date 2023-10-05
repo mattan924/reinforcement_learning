@@ -20,14 +20,6 @@ def _shuffle_agent_grid(x, y):
 
 
 class SharedReplayBuffer(object):
-    """
-    学習データを格納するバッファ。
-    param args: (argparse.Namespace) 関連するモデル，ポリシー，環境情報を含む引数．
-    param num_agents: (int) 環境内のエージェント数。
-    param obs_space: (gym.Space) エージェントの観測空間．
-    param cent_obs_space: (gym.Space) エージェントの集中観測空間．
-    param act_space: (gym.Space) エージェントの行動空間．
-    """
 
     def __init__(self, episode_length, batch_size, num_agents, num_topic, obs_dim, act_dim):
         self.episode_length = episode_length
@@ -42,9 +34,19 @@ class SharedReplayBuffer(object):
         self.num_topic = num_topic
 
         self.obs_dim = obs_dim
+        self.obs_size2 = int((self.obs_dim-3)/9)
         self.act_dim = act_dim
 
-        self.obs = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents*self.num_topic, self.obs_dim), dtype=np.float32)
+        self.obs_posi = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents, self.obs_size2), dtype=np.float32)
+        self.obs_publisher = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.obs_size2), dtype=np.float32)
+        self.obs_subscriber = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.obs_size2), dtype=np.float32)
+        self.obs_distribution = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
+        self.obs_topic_used_storage = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.obs_size2), dtype=np.float32)
+        self.obs_storage = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
+        self.obs_cpu_cycle = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
+        self.obs_topic_num_used = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.obs_size2), dtype=np.float32)
+        self.obs_num_used = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
+        self.obs_topic_info = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, 3), dtype=np.float32)
         self.mask = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents*self.num_topic), dtype=np.bool)
 
         self.value_preds = np.zeros((self.episode_length + 1, self.batch_size, num_agents*num_topic, 1), dtype=np.float32)
@@ -61,68 +63,29 @@ class SharedReplayBuffer(object):
         self.step = 0
         
 
-    def insert(self, batch, obs, mask, actions, action_log_probs, value_preds, rewards, agent_perm, topic_perm):
-        """
-        バッファにデータを挿入します。
-        param obs: (np.ndarray) ローカルエージェントのオブザベーション。
-        :param actions:(np.ndarray) エージェントが取った行動。
-        param action_log_probs:(np.ndarray) エージェントが取った行動のログ確率。
-        param value_preds: (np.ndarray) 各ステップにおける値関数の予測値．
-        param rewards: (np.ndarray) 各ステップで収集した報酬。
-        """
+    #  データを挿入する
+    def insert_batch(self, obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask, actions, action_log_probs, value_preds, rewards, agent_perm, topic_perm):
 
-        self.obs[self.step + 1][batch] = obs.reshape(self.num_agents*self.num_topic, self.obs_dim).copy()
-        self.mask[self.step + 1][batch] = np.bool_(mask.reshape(self.num_agents*self.num_topic).copy())
-        self.actions[self.step][batch][self.mask[self.step][batch]] = actions.copy()
-        self.action_log_probs[self.step][batch][self.mask[self.step][batch]] = action_log_probs.copy()
-        self.value_preds[self.step][batch][self.mask[self.step][batch]] = value_preds.copy()
-        self.rewards[self.step][batch][self.mask[self.step][batch]] = rewards.copy()
-        self.agent_perm[self.step + 1][batch] = agent_perm.copy()
-        self.topic_perm[self.step + 1][batch] = topic_perm.copy()
-
-        self.step = (self.step + 1) % self.episode_length
-
-    
-    def insert_batch(self, obs, mask, actions, action_log_probs, value_preds, rewards, agent_perm, topic_perm):
-        """
-        バッファにデータを挿入します。
-        param obs: (np.ndarray) ローカルエージェントのオブザベーション。
-        :param actions:(np.ndarray) エージェントが取った行動。
-        param action_log_probs:(np.ndarray) エージェントが取った行動のログ確率。
-        param value_preds: (np.ndarray) 各ステップにおける値関数の予測値．
-        param rewards: (np.ndarray) 各ステップで収集した報酬。
-        """
-
-        self.obs[self.step + 1] = obs.reshape(self.batch_size, self.num_agents*self.num_topic, self.obs_dim).copy()
-        self.mask[self.step + 1] = np.bool_(mask.reshape(self.batch_size, self.num_agents*self.num_topic).copy())
-        self.actions[self.step][self.mask[self.step]] = actions[self.mask[self.step]].copy()
-        self.action_log_probs[self.step][self.mask[self.step]] = action_log_probs[self.mask[self.step]].copy()
-        self.value_preds[self.step][self.mask[self.step]] = value_preds.reshape(-1, 1).copy()
+        self.obs_posi[self.step + 1] = obs_posi
+        self.obs_publisher[self.step + 1] = obs_publisher
+        self.obs_subscriber[self.step + 1] = obs_subscriber
+        self.obs_distribution[self.step + 1] = obs_distribution
+        self.obs_topic_used_storage[self.step + 1] = obs_topic_used_storage
+        self.obs_storage[self.step + 1] = obs_storage
+        self.obs_cpu_cycle[self.step + 1] = obs_cpu_cycle
+        self.obs_topic_num_used[self.step + 1] = obs_topic_num_used
+        self.obs_num_used[self.step + 1] = obs_num_used
+        self.obs_topic_info[self.step + 1] = obs_topic_info
+        self.mask[self.step + 1] = np.bool_(mask.reshape(self.batch_size, self.num_agents*self.num_topic))
+        self.actions[self.step][self.mask[self.step]] = actions[self.mask[self.step]]
+        self.action_log_probs[self.step][self.mask[self.step]] = action_log_probs[self.mask[self.step]]
+        self.value_preds[self.step][self.mask[self.step]] = value_preds.reshape(-1, 1)
         for batch in range(self.batch_size):
-            self.rewards[self.step][batch][self.mask[self.step][batch]] = rewards[batch].copy()
-        self.agent_perm[self.step + 1] = agent_perm.copy()
-        self.topic_perm[self.step + 1] = topic_perm.copy()
+            self.rewards[self.step][batch][self.mask[self.step][batch]] = rewards[batch]
+        self.agent_perm[self.step + 1] = agent_perm
+        self.topic_perm[self.step + 1] = topic_perm
 
         self.step = (self.step + 1) % self.episode_length
-
-
-    def compute_returns(self, batch, next_value, value_normalizer=None):
-        """
-        報酬の割引和として、または GAE を使用してリターンを計算します。
-        :param next_value: (np.ndarray) 最後のエピソードステップの次のステップの値予測。
-        :param value_normalizer: (PopArt) Noneでない場合、PopArt値のノーマライザインスタンス。
-        """
-
-        self.value_preds[-1][batch][self.mask[-1][batch]] = next_value
-        gae = 0
-
-        for step in reversed(range(self.episode_length)):
-            delta = self.rewards[step][batch][self.mask[step][batch]] + self.gamma * value_normalizer.denormalize(self.value_preds[step + 1][batch][self.mask[step + 1][batch]]) - value_normalizer.denormalize(self.value_preds[step][batch][self.mask[step][batch]])
-                
-            gae = delta + self.gamma * self.gae_lambda * gae
-
-            self.advantages[step][batch][self.mask[step][batch]] = gae
-            self.returns[step][batch][self.mask[step][batch]] = gae + value_normalizer.denormalize(self.value_preds[step][batch][self.mask[step][batch]])
 
     
     def compute_returns_batch(self, next_value, value_normalizer=None):
@@ -163,80 +126,52 @@ class SharedReplayBuffer(object):
         rand = torch.randperm(self.batch_size*self.episode_length).numpy()
         indices = rand[:mini_batch_size]
         
-        # keep (num_agent, dim)
-        obs = self.obs[:-1].reshape(-1, *self.obs.shape[2:])
+        obs_posi = self.obs_posi[:-1]
+
+        obs_client = np.zeros((self.episode_length, self.batch_size, self.num_topic, self.obs_size2*3), dtype=np.float32)
+        obs_client[:, :, :, :self.obs_size2] = self.obs_publisher[:-1]
+        obs_client[:, :, :, self.obs_size2:self.obs_size2*2] = self.obs_subscriber[:-1]
+        obs_client[:, :, :, self.obs_size2*2:self.obs_size2*3] = self.obs_distribution[:-1][:, :, np.newaxis]
+
+        obs_edge = np.zeros((self.episode_length, self.batch_size, self.num_topic, self.obs_size2*5), dtype=np.float32)
+        obs_edge[:, :, :, :self.obs_size2] = self.obs_topic_used_storage[:-1]
+        obs_edge[:, :, :, self.obs_size2:self.obs_size2*2] = self.obs_storage[:-1][:, :, np.newaxis]
+        obs_edge[:, :, :, self.obs_size2*2:self.obs_size2*3] = self.obs_cpu_cycle[:-1][:, :, np.newaxis]
+        obs_edge[:, :, :, self.obs_size2*3:self.obs_size2*4] = self.obs_topic_num_used[:-1]
+        obs_edge[:, :, :, self.obs_size2*4:self.obs_size2*5] = self.obs_num_used[:-1][:, :, np.newaxis]
+
+        obs_topic_info = self.obs_topic_info[:-1]
+
+        obs_posi = obs_posi.reshape(-1, *obs_posi.shape[2:])
+        obs_client = obs_client.reshape(-1, *obs_client.shape[2:])
+        obs_edge = obs_edge.reshape(-1, *obs_edge.shape[2:])
+        obs_topic_info = obs_topic_info.reshape(-1, *obs_topic_info.shape[2:])
         mask = self.mask[:-1].reshape(-1, *self.mask.shape[2:])
 
-        # obs.shape = (960, 90, 6564)
-        # mask.shape = (960, 90)
-
         actions = self.actions.reshape(-1, *self.actions.shape[2:])
-        # actions.shape = (960, 90, 1)
 
         value_preds = self.value_preds[:-1].reshape(-1, *self.value_preds.shape[2:])
-        # value_preds.shape = (960, 90, 1)
 
         returns = self.returns[:-1].reshape(-1, *self.returns.shape[2:])
-        # returns.shape = (960, 90, 1)
 
         action_log_probs = self.action_log_probs.reshape(-1, *self.action_log_probs.shape[2:])
-        # action_log_probs.shape = (960, 90, 1)
 
         advantages = advantages.reshape(-1, *advantages.shape[2:])
-        # advantages.shape = (960, 90, 1)
 
-        #  一旦 データのシャッフルを停止
-        #  複数 env での学習の際に効果があるのかを再検証
-        """
-        # [L,T,N,Dim]-->[L*T,N,Dim]-->[index,N,Dim]-->[index*N, Dim]
-        #  L: episode_length, T: n_rollout_threads, N: num_agent?
-        obs_batch = obs[indices].reshape(-1, *obs.shape[2:])
-        mask_batch = mask[indices].reshape(-1, *mask.shape[1:])
-        actions_batch = actions[indices].reshape(-1, *actions.shape[2:])
-
-        # obs_batch.shape = (86400, 6564)
-        # mask_batch.shape = (960, 90)
-        # actions_batch.shape = (86400, 1)
-
-        value_preds_batch = value_preds[indices].reshape(-1, *value_preds.shape[2:])
-        return_batch = returns[indices].reshape(-1, *returns.shape[2:])
-        old_action_log_probs_batch = action_log_probs[indices].reshape(-1, *action_log_probs.shape[2:])
-
-        #value_preds_batch.shape = (86400, 1)
-        # returns_batch.shape = (86400, 1)
-        # old_action_log_probs_batch = (86400, 1)
-
-        if advantages is None:
-            adv_targ = None
-        else:
-            adv_targ = advantages[indices].reshape(-1, *advantages.shape[2:])
-            # adv_targ.shape = (86400, 1)
-
-        return obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch
-        """
-
-        # [L,T,N,Dim]-->[L*T,N,Dim]-->[index,N,Dim]-->[index*N, Dim]
-        #  L: episode_length, T: n_rollout_threads, N: num_agent?
-        obs_batch = obs.reshape(-1, *obs.shape[2:])
+        obs_posi_batch = obs_posi.reshape(-1, *obs_posi.shape[2:])
+        obs_client_batch = obs_client.reshape(-1, *obs_client.shape[2:])
+        obs_edge_batch = obs_edge.reshape(-1, *obs_edge.shape[2:])
+        obs_topic_info_batch = obs_topic_info.reshape(-1, *obs_topic_info.shape[2:])
         mask_batch = mask.reshape(-1, *mask.shape[1:])
         actions_batch = actions.reshape(-1, *actions.shape[2:])
-
-        # obs_batch.shape = (86400, 6564)
-        # mask_batch.shape = (960, 90)
-        # actions_batch.shape = (86400, 1)
 
         value_preds_batch = value_preds.reshape(-1, *value_preds.shape[2:])
         return_batch = returns.reshape(-1, *returns.shape[2:])
         old_action_log_probs_batch = action_log_probs.reshape(-1, *action_log_probs.shape[2:])
 
-        #value_preds_batch.shape = (86400, 1)
-        # returns_batch.shape = (86400, 1)
-        # old_action_log_probs_batch = (86400, 1)
-
         if advantages is None:
             adv_targ = None
         else:
             adv_targ = advantages.reshape(-1, *advantages.shape[2:])
-            # adv_targ.shape = (86400, 1)
 
-        return obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch
+        return obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch
