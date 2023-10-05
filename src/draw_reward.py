@@ -45,7 +45,8 @@ def cal_nearest_server_reward(index_path):
     agent_perm, topic_perm = get_perm(num_agent, num_topic)
 
     for time in range(0, simulation_time, time_step):
-        obs, mask = env.get_observation_mat(agent_perm, topic_perm)
+        #obs, mask = env.get_observation_mat(agent_perm, topic_perm)
+        obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, obs_size=27)
         mask = np.bool_(mask.reshape(-1))
         actions = env.get_near_action(agent_perm, topic_perm)
 
@@ -79,8 +80,8 @@ for i in range(10):
     wind.grid()
     wind.set_title("test " + str(i))
     wind.plot(train_curve4, linewidth=1, label='epoch4')
-    wind.plot(train_curve6, linewidth=1, label='epoch6')
-    wind.plot(train_curve8, linewidth=1, label='epoch8')
+    #wind.plot(train_curve6, linewidth=1, label='epoch6')
+    #wind.plot(train_curve8, linewidth=1, label='epoch8')
     wind.axhline(y=opt, c='r', label="optimal")
     wind.axhline(y=nearest_reward, c='g', label="nearest_server")
     wind.legend()
