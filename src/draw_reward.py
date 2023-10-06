@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from env import Env
 
+
 def read_train_curve(log_path):
     reward_history = []
     tmp = 0
@@ -55,7 +56,28 @@ def cal_nearest_server_reward(index_path):
     return nearest_reward
 
 
+low_reward_idx = []
+num_low_dataset = 0
+hight_reward_idx = []
+num_hight_dataset = 0
 
+for i in range(10000):
+    data_index_path = "../dataset/data_set_hard/train/index/index_hard_" + str(i) + ".csv"
+
+    nearrest_reward = cal_nearest_server_reward(data_index_path)
+
+    if nearrest_reward > 300:
+        hight_reward_idx.append(i)
+        num_hight_dataset += 1
+    else:
+        low_reward_idx.append(i)
+        num_low_dataset += 1
+
+print(f"num hight reward dataset = {num_hight_dataset}")
+print(f"num low reward dataset = {num_low_dataset}")
+
+
+"""
 for i in range(10):
     data_index_path = "../dataset/debug/hard/test/index/index_hard_" + str(i) + ".csv"
 
@@ -86,3 +108,4 @@ for i in range(10):
     wind.axhline(y=nearest_reward, c='g', label="nearest_server")
     wind.legend()
     fig.savefig("../result/temporary/debug/hard/hard_multi_test" + str(i) + ".png")
+"""
