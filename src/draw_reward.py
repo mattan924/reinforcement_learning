@@ -46,7 +46,6 @@ def cal_nearest_server_reward(index_path):
     agent_perm, topic_perm = get_perm(num_agent, num_topic)
 
     for time in range(0, simulation_time, time_step):
-        #obs, mask = env.get_observation_mat(agent_perm, topic_perm)
         obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, obs_size=27)
         mask = np.bool_(mask.reshape(-1))
         actions = env.get_near_action(agent_perm, topic_perm)
@@ -61,9 +60,9 @@ num_low_dataset = 0
 hight_reward_idx = []
 num_hight_dataset = 0
 
-for i in range(10000):
+for i in range(10):
     print(f"data {i} start")
-    data_index_path = "../dataset/data_set_hard/train/index/index_hard_" + str(i) + ".csv"
+    data_index_path = "../dataset/dataset_hard/train/index/index_hard_" + str(i) + ".csv"
 
     nearrest_reward = cal_nearest_server_reward(data_index_path)
 
