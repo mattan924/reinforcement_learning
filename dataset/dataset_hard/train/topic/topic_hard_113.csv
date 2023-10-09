@@ -1,0 +1,4 @@
+id,role,save_period,publish_rate,data_size,require_cycle,base_x,base_y
+0,0,30,2.57,0.000161,2.7493e-05,,
+1,0,30,2.22,5e-06,6.5043e-05,,
+2,0,30,5.96,8.4e-05,6.1717e-05,,
