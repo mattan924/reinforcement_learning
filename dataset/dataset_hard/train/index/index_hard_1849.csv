@@ -1,0 +1,2 @@
+,config_file,edge_file,topic_file,traking_file,traking_seed,assign_file,assign_seed,solve_file,opt
+data,../dataset/dataset_hard/train/config/config_hard.csv,../dataset/dataset_hard/train/edge/edge_hard_1849.csv,../dataset/dataset_hard/train/topic/topic_hard_1849.csv,../dataset/dataset_hard/train/traking/traking_hard_1849.csv,99456249,../dataset/dataset_hard/train/assign/assign_hard_1849.csv,14489622,,
