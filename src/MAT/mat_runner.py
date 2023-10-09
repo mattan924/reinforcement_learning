@@ -86,6 +86,8 @@ class MATRunner:
             test_dir_path = os.path.join(test_data_index_dir, "*")
             self.test_index_path = natsorted(glob.glob(test_dir_path))
 
+            print(f"append start")
+
             self.env_list = []
             for idx in range(len(self.train_index_path)):
                 self.env_list.append(Env(self.train_index_path[idx]))

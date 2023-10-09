@@ -62,6 +62,7 @@ hight_reward_idx = []
 num_hight_dataset = 0
 
 for i in range(10000):
+    print(f"data {i} start")
     data_index_path = "../dataset/data_set_hard/train/index/index_hard_" + str(i) + ".csv"
 
     nearrest_reward = cal_nearest_server_reward(data_index_path)
