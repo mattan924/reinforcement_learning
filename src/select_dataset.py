@@ -61,12 +61,14 @@ low_data_idx = 0
 hight_data_idx = threshold
 
 while(1):
-    index_file_base = dataset_dir + "index/index_hard_0.csv"
+    index_file_base = dataset_dir + "index/index_hard_7.csv"
     config_file = dataset_dir + "config/config_hard.csv"
-    traking_file_base = dataset_dir + "traking/traking_hard_0.csv"
-    assign_file_base = dataset_dir + "assign/assign_hard_0.csv"
-    edge_file_base = dataset_dir + "edge/edge_hard_0.csv"
-    topic_file_base = dataset_dir + "topic/topic_hard_0.csv"
+    traking_file_base = dataset_dir + "traking/traking_hard_7.csv"
+    assign_file_base = dataset_dir + "assign/assign_hard_7.csv"
+    edge_file_base = dataset_dir + "edge/edge_hard_7.csv"
+    topic_file_base = dataset_dir + "topic/topic_hard_7.csv"
+
+    print(f"generate")
 
     generate_traking(index_file_base, config_file, traking_file_base)
 
@@ -78,7 +80,7 @@ while(1):
 
     nearest_reward = cal_nearest_server_reward(index_file_base)
 
-    if nearest_reward < 300:
+    if nearest_reward > 300:
         break
 
 """
