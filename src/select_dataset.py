@@ -61,12 +61,12 @@ low_data_idx = 0
 hight_data_idx = threshold
 
 while(1):
-    index_file_base = dataset_dir + "index/index_hard_7.csv"
+    index_file_base = dataset_dir + "index/index_hard_9.csv"
     config_file = dataset_dir + "config/config_hard.csv"
-    traking_file_base = dataset_dir + "traking/traking_hard_7.csv"
-    assign_file_base = dataset_dir + "assign/assign_hard_7.csv"
-    edge_file_base = dataset_dir + "edge/edge_hard_7.csv"
-    topic_file_base = dataset_dir + "topic/topic_hard_7.csv"
+    traking_file_base = dataset_dir + "traking/traking_hard_9.csv"
+    assign_file_base = dataset_dir + "assign/assign_hard_9.csv"
+    edge_file_base = dataset_dir + "edge/edge_hard_9.csv"
+    topic_file_base = dataset_dir + "topic/topic_hard_9.csv"
 
     print(f"generate")
 

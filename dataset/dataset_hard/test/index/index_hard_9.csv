@@ -1,2 +1,2 @@
 ,config_file,edge_file,topic_file,traking_file,traking_seed,assign_file,assign_seed,solve_file,opt
-data,../dataset/dataset_hard/test/config/config_hard.csv,../dataset/dataset_hard/test/edge/edge_hard_9.csv,../dataset/dataset_hard/test/topic/topic_hard_9.csv,../dataset/dataset_hard/test/traking/traking_hard_9.csv,56304995,../dataset/dataset_hard/test/assign/assign_hard_9.csv,42135624,,
+data,../dataset/dataset_hard/test/config/config_hard.csv,../dataset/dataset_hard/test/edge/edge_hard_9.csv,../dataset/dataset_hard/test/topic/topic_hard_9.csv,../dataset/dataset_hard/test/traking/traking_hard_9.csv,18901293,../dataset/dataset_hard/test/assign/assign_hard_9.csv,44914704,,
