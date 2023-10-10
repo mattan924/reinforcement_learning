@@ -61,6 +61,28 @@ low_data_idx = 0
 hight_data_idx = threshold
 
 while(1):
+    index_file_base = dataset_dir + "index/index_hard_0.csv"
+    config_file = dataset_dir + "config/config_hard.csv"
+    traking_file_base = dataset_dir + "traking/traking_hard_0.csv"
+    assign_file_base = dataset_dir + "assign/assign_hard_0.csv"
+    edge_file_base = dataset_dir + "edge/edge_hard_0.csv"
+    topic_file_base = dataset_dir + "topic/topic_hard_0.csv"
+
+    generate_traking(index_file_base, config_file, traking_file_base)
+
+    generate_edge(index_file_base, config_file, edge_file_base)
+
+    generate_topic(index_file_base, config_file, topic_file_base)
+
+    assign_topic(index_file_base, assign_file_base)
+
+    nearest_reward = cal_nearest_server_reward(index_file_base)
+
+    if nearest_reward < 300:
+        break
+
+"""
+while(1):
     if low_reward_data == threshold and hight_reward_data == threshold:
         break
     else:
@@ -125,3 +147,4 @@ while(1):
                 low_data_idx += 1
 
         print(f"low_data = {low_reward_data}, hight_data = {hight_reward_data}")
+"""

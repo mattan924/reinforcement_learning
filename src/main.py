@@ -5,20 +5,20 @@ import sys
 
 
 #learning_data_index_path = "../dataset/debug/debug/index/index_easy.csv"
-learning_data_index_dir = "../dataset/data_set_hard/train/index/"
-test_data_index_dir = "../dataset/data_set_hard/test/index/"
+learning_data_index_dir = "../dataset/dataset_hard/train/index/"
+test_data_index_dir = "../dataset/dataset_hard/test/index/"
 
 # 各種パラメーター
 #  MAT
 max_epi_itr = 10000
-batch_size = 128
+batch_size = 16
 backup_itr = 100
 
 
 
-device = "cuda:1"
+device = "cuda:0"
 result_dir = "../result/temporary/train_hard_dataset/"
-file_name = "dataset10000_batch128_epoch4_"
+file_name = "dataset10000_batch16_epoch4_"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
 #load_parameter_path = '../result/temporary/debug/hard/model_parameter/transformer_hard_mat_batch3_extend0_5000.pth'
