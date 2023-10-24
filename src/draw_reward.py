@@ -55,41 +55,47 @@ def cal_nearest_server_reward(index_path):
     return nearest_reward
 
 
-low_reward_idx = []
-num_low_dataset = 0
-hight_reward_idx = []
-num_hight_dataset = 0
 
-for i in range(10):
-    print(f"data {i} start")
-    data_index_path = "../dataset/dataset_hard/train/index/index_hard_" + str(i) + ".csv"
+data_index_path = "../dataset/debug/debug/index/index_easy_hight_load.csv"
 
-    nearrest_reward = cal_nearest_server_reward(data_index_path)
+log_path = "../result/temporary/debug/debug_multi_env_easy_noreward0.log"
 
-    if nearrest_reward > 300:
-        hight_reward_idx.append(i)
-        num_hight_dataset += 1
-    else:
-        low_reward_idx.append(i)
-        num_low_dataset += 1
+result_fig = "../result/temporary/debug/debug_multi_env_noreward0.png"
 
-print(f"num hight reward dataset = {num_hight_dataset}")
-print(f"num low reward dataset = {num_low_dataset}")
+train_curve = read_train_curve(log_path)
+
+df_index = pd.read_csv(data_index_path, index_col=0)
+opt = df_index.at['data', 'opt']
+
+nearest_reward = cal_nearest_server_reward(data_index_path)
+
+fig = plt.figure()
+wind = fig.add_subplot(1, 1, 1)
+#wind.set_ylim(ymin=21000, ymax=34000)
+wind.grid()
+#wind.set_title("train iteration - total reward")
+wind.set_xlabel("train iteration")
+wind.set_ylabel("total reward (ms)")
+wind.plot(train_curve, linewidth=1, label='mat')
+wind.axhline(y=opt, c='r', label="optimal")
+wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+wind.legend()
+fig.savefig(result_fig)
 
 
 """
+data_index_path_base = "../dataset/debug/easy/regular_meeting/test/index/index_easy_hight_load_"
+
+log_path_base = "../result/temporary/regular_meeting/easy_hight_load_multi_batch16_epoch6_block1_reward0_test"
+
+result_fig_base = "../result/temporary/regular_meeting/easy_hight_load_multi_batch16_epoch6_block1_reward0_test"
+
 for i in range(10):
-    data_index_path = "../dataset/debug/hard/test/index/index_hard_" + str(i) + ".csv"
+    data_index_path = data_index_path_base + str(i) + ".csv"
 
-    log_path_epoch4 = "../result/temporary/debug/hard/hard_multi_epoch4_0_test" + str(i) + ".log"
-    log_path_epoch6 = "../result/temporary/debug/hard/hard_multi_epoch6_0_test" + str(i) + ".log"
-    log_path_epoch8 = "../result/temporary/debug/hard/hard_multi_epoch8_0_test" + str(i) + ".log"
+    log_path = log_path_base + str(i) + ".log"
 
-
-    train_curve4 = read_train_curve(log_path_epoch4)
-    train_curve6 = read_train_curve(log_path_epoch6)
-    train_curve8 = read_train_curve(log_path_epoch8)
-
+    train_curve = read_train_curve(log_path)
 
     df_index = pd.read_csv(data_index_path, index_col=0)
     opt = df_index.at['data', 'opt']
@@ -100,12 +106,12 @@ for i in range(10):
     wind = fig.add_subplot(1, 1, 1)
     #wind.set_ylim(ymin=21000, ymax=34000)
     wind.grid()
-    wind.set_title("test " + str(i))
-    wind.plot(train_curve4, linewidth=1, label='epoch4')
-    #wind.plot(train_curve6, linewidth=1, label='epoch6')
-    #wind.plot(train_curve8, linewidth=1, label='epoch8')
+    #wind.set_title("test " + str(i))
+    wind.set_xlabel("train iteration")
+    wind.set_ylabel("total reward (ms)")
+    wind.plot(train_curve, linewidth=1, label='mat')
     wind.axhline(y=opt, c='r', label="optimal")
     wind.axhline(y=nearest_reward, c='g', label="nearest_server")
     wind.legend()
-    fig.savefig("../result/temporary/debug/hard/hard_multi_test" + str(i) + ".png")
+    fig.savefig(result_fig_base + str(i) + ".png")
 """

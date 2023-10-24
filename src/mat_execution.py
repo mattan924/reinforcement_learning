@@ -49,9 +49,6 @@ class MATExecuter:
         self.env = Env(data_index_path)
         self.num_agent = self.env.num_client
         self.num_topic = self.env.num_topic
-        agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-        obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
-        self.obs_dim = obs[0][0].shape[0]
 
         if self.env.simulation_time % self.env.time_step == 0:
             self.episode_length = int(self.env.simulation_time / self.env.time_step)
@@ -61,50 +58,63 @@ class MATExecuter:
         # 各種パラメーター
         self.N_action = 9
 
+        self.obs_dim = self.obs_size*self.obs_size*9 + 3
         self.obs_distri_dim = self.obs_size*self.obs_size
         self.obs_info_dim = self.obs_dim - self.obs_distri_dim*9
 
-        self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.num_agent, self.num_topic, self.max_agent, self.max_topic, device=self.device, multi=False)
+        self.policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, device=self.device, multi=True)
 
-        self.trainer = MATTrainer(self.policy, self.num_agent, self.device)
+        self.trainer = MATTrainer(self.policy, self.device)
 
-        self.buffer = SharedReplayBuffer(self.episode_length, self.batch_size, self.num_agent, self.num_topic, self.obs_dim, self.N_action)
+        self.buffer = SharedReplayBuffer(self.episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
 
         self.batch = 0
 
         
-    def warmup(self, env, batch, train=True):
+        #  初期準備
+    def warmup(self, env, batch):
         env.reset()
 
         agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-        obs, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+        obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
 
-        if train:
-            self.buffer.obs[0][batch] = obs.reshape(self.num_agent*self.num_topic, self.obs_dim).copy()
-            self.buffer.mask[0][batch] = np.bool_(mask.reshape(self.num_agent*self.num_topic).copy())
+        self.buffer.obs_posi[0][batch] = obs_posi
+        self.buffer.obs_publisher[0][batch] = obs_publisher
+        self.buffer.obs_subscriber[0][batch] = obs_subscriber
+        self.buffer.obs_distribution[0][batch] = obs_distribution
+        self.buffer.obs_topic_used_storage[0][batch] = obs_topic_used_storage
+        self.buffer.obs_storage[0][batch] = obs_storage
+        self.buffer.obs_cpu_cycle[0][batch] = obs_cpu_cycle
+        self.buffer.obs_topic_num_used[0][batch] = obs_topic_num_used
+        self.buffer.obs_num_used[0][batch] = obs_num_used
+        self.buffer.obs_topic_info[0][batch] = obs_topic_info
+        self.buffer.mask[0][batch] = np.bool_(mask.reshape(self.max_agent*self.max_topic))
 
-            self.buffer.agent_perm[0][batch] = agent_perm
-            self.buffer.topic_perm[0][batch] = topic_perm
+        self.buffer.agent_perm[0][batch] = agent_perm
+        self.buffer.topic_perm[0][batch] = topic_perm
 
-        else:
-            self.test_buffer.obs[0][batch] = obs.reshape(self.num_agent*self.num_topic, self.obs_dim).copy()
-            self.test_buffer.mask[0][batch] = np.bool_(mask.reshape(self.num_agent*self.num_topic).copy())
 
-            self.test_buffer.agent_perm[0][batch] = agent_perm
-            self.test_buffer.topic_perm[0][batch] = topic_perm
-
-    
     @torch.no_grad()
-    def collect_batch(self, step, train=True):
+    def collect(self, step):
         #  TransformerPolicy を学習用に設定
         self.trainer.prep_rollout()
 
-        if train:
-            # mask.shape = (16, 90)
-            # action_distribution.shape = torch.Size([16, 90, 9])
-            value, action, action_log_prob = self.trainer.policy.get_actions(self.buffer.obs[step], self.buffer.mask[step])
-        else:
-            value, action, action_log_prob = self.trainer.policy.get_actions(self.test_buffer.obs[step], self.test_buffer.mask[step], deterministic=True)
+        obs_posi = self.buffer.obs_posi[step]
+        obs_client = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim*3), dtype=np.float32)
+        obs_client[:, :, :self.obs_distri_dim] = self.buffer.obs_publisher[step]
+        obs_client[:, :, self.obs_distri_dim:self.obs_distri_dim*2] = self.buffer.obs_subscriber[step]
+        obs_client[:, :, self.obs_distri_dim*2:self.obs_distri_dim*3] = self.buffer.obs_distribution[step][:, np.newaxis]
+            
+        obs_edge = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim*5), dtype=np.float32)
+        obs_edge[:, :, :self.obs_distri_dim] = self.buffer.obs_topic_used_storage[step]
+        obs_edge[:, :, self.obs_distri_dim:self.obs_distri_dim*2] = self.buffer.obs_storage[step][:, np.newaxis]
+        obs_edge[:, :, self.obs_distri_dim*2:self.obs_distri_dim*3] = self.buffer.obs_cpu_cycle[step][:, np.newaxis]
+        obs_edge[:, :, self.obs_distri_dim*3:self.obs_distri_dim*4] = self.buffer.obs_topic_num_used[step]
+        obs_edge[:, :, self.obs_distri_dim*4:self.obs_distri_dim*5] = self.buffer.obs_num_used[step][:, np.newaxis]
+            
+        obs_topic_info = self.buffer.obs_topic_info[step]
+
+        value, action, action_log_prob = self.trainer.policy.get_actions(obs_posi, obs_client, obs_edge, obs_topic_info, self.buffer.mask[step], deterministic=False)
 
         #  _t2n: tensor → numpy
         values = np.array(_t2n(value))
@@ -114,28 +124,25 @@ class MATExecuter:
         return values, actions, action_log_probs
     
 
-    def insert_batch(self, obs, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm, train=True):
+    def insert_batch(self, obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm):
 
-        if train:
-            self.buffer.insert_batch(obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
-        else:
-            self.test_buffer.insert_batch(obs, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
+        self.buffer.insert_batch(obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
 
-        
+
     def get_perm(self, random_flag=True):
         
-        agent_list = range(self.num_agent)
-        topic_list = range(self.num_topic)
+        agent_list = range(self.max_agent)
+        topic_list = range(self.max_topic)
 
         if random_flag:
-            agent_perm = random.sample(agent_list, self.num_agent)
-            topic_perm = random.sample(topic_list, self.num_topic)
+            agent_perm = random.sample(agent_list, self.max_agent)
+            topic_perm = random.sample(topic_list, self.max_topic)
         else:
             agent_perm = list(agent_list)
             topic_perm = list(topic_list)
 
         return agent_perm, topic_perm
-    
+
 
     def execution(self, load_parameter_path):
 
@@ -153,18 +160,28 @@ class MATExecuter:
 
             step = int(time / self.env.time_step)
 
-            values_batch, actions_batch, action_log_probs_batch = self.collect_batch(step)
+            values_batch, actions_batch, action_log_probs_batch = self.collect(step)
 
             # 報酬の受け取り
             reward_batch = np.zeros((self.batch_size), dtype=np.float32)
 
-            agent_perm_batch = np.zeros((self.batch_size, self.num_agent), dtype=np.int64)
-            topic_perm_batch = np.zeros((self.batch_size, self.num_topic), dtype=np.int64)
+            agent_perm_batch = np.zeros((self.batch_size, self.max_agent), dtype=np.int64)
+            topic_perm_batch = np.zeros((self.batch_size, self.max_topic), dtype=np.int64)
 
-            obs_batch = np.zeros((self.batch_size, self.num_agent, self.num_topic, self.obs_dim), dtype=np.float32)
-            mask_batch = np.zeros((self.batch_size, self.num_agent, self.num_topic), dtype=bool)
+            obs_posi_batch = np.zeros((self.batch_size, self.max_agent, self.obs_distri_dim), dtype=np.float32)
+            obs_publisher_batch = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
+            obs_subscriber_batch = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
+            obs_distribution_batch = np.zeros((self.batch_size, self.obs_distri_dim), dtype=np.float32)
+            obs_topic_used_storage_batch = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
+            obs_storage_batch = np.zeros((self.batch_size, self.obs_distri_dim), dtype=np.float32)
+            obs_cpu_cycle_batch = np.zeros((self.batch_size, self.obs_distri_dim), dtype=np.float32)
+            obs_topic_num_used_batch = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
+            obs_num_used_batch = np.zeros((self.batch_size, self.obs_distri_dim), dtype=np.float32)
+            obs_topic_info_batch = np.zeros((self.batch_size, self.max_topic, 3), dtype=np.float32)
 
-            reward = self.env.step(actions_batch[0], self.buffer.agent_perm[step][0], self.buffer.topic_perm[step][0], time)
+            mask_batch = np.zeros((self.batch_size, self.max_agent, self.max_topic), dtype=np.bool)
+
+            reward = self.env.step(actions_batch[0][self.buffer.mask[step][0]], self.buffer.agent_perm[step][0], self.buffer.topic_perm[step][0], time)
             reward_history.append(reward)
             reward_batch[0] = -reward
 
@@ -178,27 +195,47 @@ class MATExecuter:
             agent_perm_batch[0] = agent_perm
             topic_perm_batch[0] = topic_perm
 
-            obs, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
-            obs_batch[0] = obs
+            obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = self.env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+            obs_posi_batch[0] = obs_posi
+            obs_publisher_batch[0] = obs_publisher
+            obs_subscriber_batch[0] = obs_subscriber
+            obs_distribution_batch[0] = obs_distribution
+            obs_topic_used_storage_batch[0] = obs_topic_used_storage
+            obs_storage_batch[0] = obs_storage
+            obs_cpu_cycle_batch[0] = obs_cpu_cycle
+            obs_topic_num_used_batch[0] = obs_topic_num_used
+            obs_num_used_batch[0] = obs_num_used
+            obs_topic_info_batch[0] = obs_topic_info
             mask_batch[0] = mask
 
-            self.insert_batch(obs_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+            self.insert_batch(obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_topic_used_storage_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_topic_num_used_batch, obs_num_used_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
 
-        print(f"reward = {sum(reward_history)}")
-
+        return sum(reward_history)
+ 
 
 device = "cuda:1"
-data_index_path = "../dataset/debug/debug/index/index_easy.csv"
-output_file = "../dataset/debug/debug/solution/easy_test.csv"
-output_animation_file = "../dataset/debug/debug/animation/easy_execution_animation.gif"
-load_parameter_path = '../result/temporary/debug/easy/model_parameter/transformer_easy_mat_batch_long0_5000.pth'
+data_index_path = "../dataset/debug/easy/regular_meeting/train/index/index_easy_hight_load_0.csv"
+output_file = "../dataset/debug/easy/regular_meeting/train/solution/solution_easy_hight_load_0.csv"
+#output_animation_file = "../dataset/debug/debug/animation/easy_execution_animation.gif"
+load_parameter_path_base = '../result/temporary/regular_meeting/model_parameter/transformer_easy_hight_load_multi_batch16_epoch8_block1_1_'
+log_file = "../result/temporary/regular_meeting/easy_hight_load_multi_train3.log"
+
+with open(log_file, "w") as f:
+    pass
 
 max_agent = 30
 max_topic = 3
 
+max_iter = 3000
+
 executer = MATExecuter(device, max_agent, max_topic, data_index_path, output_file)
 
-executer.execution(load_parameter_path)
+for epi in range(0, max_iter+1, 1000):
+    load_parameter_path = load_parameter_path_base + str(epi) + ".pth"
+    
+    reward = executer.execution(load_parameter_path)
 
-animation.create_assign_animation(data_index_path, output_animation_file, FPS=5)
+    with open(log_file, "a") as f:
+        f.write(f"{epi}, {reward}\n")
+
 #animation.create_single_assign_animation(data_index_path, output_animation_file, FPS=5)

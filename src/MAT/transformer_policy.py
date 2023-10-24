@@ -18,11 +18,11 @@ class TransformerPolicy:
     param device: (torch.device) 実行するデバイスを指定します（cpu/gpu）。
     """
 
-    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, max_agent, max_topic, device=torch.device("cpu"), multi=True):
+    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, max_agent, max_topic, lr, eps, weight_decay, n_block, n_embd, device=torch.device("cpu"), multi=True):
         self.device = device
-        self.lr = 0.0005
-        self.opti_eps = 1e-05
-        self.weight_decay = 0
+        self.lr = lr
+        self.opti_eps = eps
+        self.weight_decay = weight_decay
         self._use_policy_active_masks = True
 
         self.obs_dim = obs_dim
@@ -41,9 +41,9 @@ class TransformerPolicy:
         
         #  MAT インスタンスの生成
         if multi:
-            self.transformer = MAT_multi(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, max_agent, max_topic, device=device)
+            self.transformer = MAT_multi(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, max_agent, max_topic, n_block, n_embd, device=device)
         else:
-            self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, max_agent, max_topic, device=device)
+            self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, max_agent, max_topic, n_block, n_embd, device=device)
 
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
 

@@ -13,16 +13,15 @@ class MATTrainer:
     param policy: (R_MAPPO_Policy) 更新するポリシーを指定します。
     param device: (torch.device) 実行するデバイスを指定します (cpu/gpu)。
     """
-    def __init__(self, policy, device=torch.device("cpu")):
+    def __init__(self, policy, ppo_epoch, device=torch.device("cpu")):
 
         self.device = device
         self.tpdv = dict(dtype=torch.float32, device=device)
         self.policy = policy  #  transformer_policy の TransformerPolicy
 
         self.clip_param = 0.05
-        self.ppo_epoch = 4
+        self.ppo_epoch = ppo_epoch
         self.num_mini_batch = 1
-        self.data_chunk_length = 10
         self.value_loss_coef = 1
         self.entropy_coef = 0.01
         self.max_grad_norm = 10.0    

@@ -234,7 +234,7 @@ class Decoder(nn.Module):
 
 class MultiAgentTransformer(nn.Module):
 
-    def __init__(self, obs_distri_dim, obs_info_dim, action_dim, batch_size, max_agent, max_topic, device=torch.device("cpu")):
+    def __init__(self, obs_distri_dim, obs_info_dim, action_dim, batch_size, max_agent, max_topic, n_block, n_embd, device=torch.device("cpu")):
 
         super(MultiAgentTransformer, self).__init__()
 
@@ -248,8 +248,8 @@ class MultiAgentTransformer(nn.Module):
         self.tpdv = dict(dtype=torch.float32, device=device)
         self.device = device
 
-        self.n_block = 3
-        self.n_embd = 9
+        self.n_block = n_block
+        self.n_embd = n_embd
         self.n_head = 1
 
         self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic, batch_size, self.device)
