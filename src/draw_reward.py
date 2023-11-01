@@ -55,14 +55,15 @@ def cal_nearest_server_reward(index_path):
     return nearest_reward
 
 
+"""
+data_index_path = "../dataset/debug/debug/index/index_easy.csv"
 
-data_index_path = "../dataset/debug/debug/index/index_easy_hight_load.csv"
-
-log_path = "../result/temporary/debug/debug_multi_env_easy_noreward0.log"
-
-result_fig = "../result/temporary/debug/debug_multi_env_noreward0.png"
+log_path = "../result/temporary/debug/easy/easy_mat0.log"
+log_path_tuning = "../result/temporary/parameter_tuning/easy_tuning_importance_trail89_learning_log_process4.log"
+result_fig = "../result/temporary/parameter_tuning/easy_tuning_importance.png"
 
 train_curve = read_train_curve(log_path)
+train_curve_tuning = read_train_curve(log_path_tuning)*-1
 
 df_index = pd.read_csv(data_index_path, index_col=0)
 opt = df_index.at['data', 'opt']
@@ -77,18 +78,19 @@ wind.grid()
 wind.set_xlabel("train iteration")
 wind.set_ylabel("total reward (ms)")
 wind.plot(train_curve, linewidth=1, label='mat')
+wind.plot(train_curve_tuning, linewidth=1, label='tuning')
 wind.axhline(y=opt, c='r', label="optimal")
 wind.axhline(y=nearest_reward, c='g', label="nearest_server")
 wind.legend()
 fig.savefig(result_fig)
-
-
 """
-data_index_path_base = "../dataset/debug/easy/regular_meeting/test/index/index_easy_hight_load_"
 
-log_path_base = "../result/temporary/regular_meeting/easy_hight_load_multi_batch16_epoch6_block1_reward0_test"
 
-result_fig_base = "../result/temporary/regular_meeting/easy_hight_load_multi_batch16_epoch6_block1_reward0_test"
+data_index_path_base = "../dataset/similar_dataset/easy/test/index/index_hight_load_"
+
+log_path_base = "../result/temporary/similar_dataset/easy/similar_easy_hight_load0_test"
+
+result_fig_base = "../result/temporary/similar_dataset/easy/similar_easy_hight_load"
 
 for i in range(10):
     data_index_path = data_index_path_base + str(i) + ".csv"
@@ -114,4 +116,3 @@ for i in range(10):
     wind.axhline(y=nearest_reward, c='g', label="nearest_server")
     wind.legend()
     fig.savefig(result_fig_base + str(i) + ".png")
-"""
