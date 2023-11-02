@@ -5,8 +5,8 @@ import sys
 
 
 #learning_data_index_path = "../dataset/debug/debug/index/index_easy.csv"
-learning_data_index_dir = "../dataset/similar_dataset/easy/train/index/"
-test_data_index_dir = "../dataset/similar_dataset/easy/test/index/"
+learning_data_index_dir = "../dataset/similar_dataset/easy/traking_assign_edge_topic/train/index/"
+test_data_index_dir = "../dataset/similar_dataset/easy/traking_assign_edge_topic/test/index/"
 
 # 各種パラメーター
 # MAT
@@ -29,9 +29,9 @@ n_embd = 9
 reward_scaling = False
 
 
-device = "cuda:1"
-result_dir = "../result/temporary/similar_dataset/easy/"
-file_name = "similar_easy_hight_load_noreward"
+device = "cuda:0"
+result_dir = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/"
+file_name = "hight_load_multi_noscaling"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
 #load_parameter_path = '../result/temporary/debug/hard/model_parameter/transformer_hard_mat_batch3_extend0_5000.pth'

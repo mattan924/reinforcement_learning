@@ -1,7 +1,10 @@
+from env import Env
+from natsort import natsorted
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from env import Env
+import glob
+import os
 
 
 def read_train_curve(log_path):
@@ -54,7 +57,6 @@ def cal_nearest_server_reward(index_path):
 
     return nearest_reward
 
-
 """
 data_index_path = "../dataset/debug/debug/index/index_easy.csv"
 
@@ -86,23 +88,29 @@ fig.savefig(result_fig)
 """
 
 
-data_index_path_base = "../dataset/similar_dataset/easy/test/index/index_hight_load_"
+data_index_dir = "../dataset/similar_dataset/easy/traking_assign_edge_topic/test/index/"
 
-log_path_base = "../result/temporary/similar_dataset/easy/similar_easy_hight_load0_test"
+data_index_dir_path = os.path.join(data_index_dir, "*")
+data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-result_fig_base = "../result/temporary/similar_dataset/easy/similar_easy_hight_load"
+log_path_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi_noscaling0_test"
+log_scaling_path_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi_scaling0_test"
 
-for i in range(10):
-    data_index_path = data_index_path_base + str(i) + ".csv"
+result_fig_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi"
 
-    log_path = log_path_base + str(i) + ".log"
+for idx in range(len(data_index_path)):
+    index_path = data_index_path[idx]
+
+    log_path = log_path_base + str(idx) + ".log"
+    log_scaling_path = log_scaling_path_base + str(idx) + ".log"
 
     train_curve = read_train_curve(log_path)
+    train_curve_scaling = read_train_curve(log_scaling_path)
 
-    df_index = pd.read_csv(data_index_path, index_col=0)
+    df_index = pd.read_csv(index_path, index_col=0)
     opt = df_index.at['data', 'opt']
 
-    nearest_reward = cal_nearest_server_reward(data_index_path)
+    nearest_reward = cal_nearest_server_reward(index_path)
 
     fig = plt.figure()
     wind = fig.add_subplot(1, 1, 1)
@@ -112,7 +120,8 @@ for i in range(10):
     wind.set_xlabel("train iteration")
     wind.set_ylabel("total reward (ms)")
     wind.plot(train_curve, linewidth=1, label='mat')
+    wind.plot(train_curve_scaling, linewidth=1, label='mat_scaling')
     wind.axhline(y=opt, c='r', label="optimal")
     wind.axhline(y=nearest_reward, c='g', label="nearest_server")
     wind.legend()
-    fig.savefig(result_fig_base + str(i) + ".png")
+    fig.savefig(result_fig_base + str(idx) + ".png")
