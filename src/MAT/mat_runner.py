@@ -101,7 +101,7 @@ class MATRunner:
 
 
     @torch.no_grad()
-    def collect(self, trainer, buffer, step, train=True):
+    def collect(self, trainer, buffer, step, deterministic=False):
         #  TransformerPolicy を学習用に設定
         trainer.prep_rollout()
 
@@ -121,10 +121,7 @@ class MATRunner:
             
         obs_topic_info = buffer.obs_topic_info[step]
 
-        if train==True:
-            value, action, action_log_prob = trainer.policy.get_actions(obs_posi, obs_client, obs_edge, obs_topic_info, buffer.mask[step], deterministic=False)
-        else:
-            value, action, action_log_prob = trainer.policy.get_actions(obs_posi, obs_client, obs_edge, obs_topic_info, buffer.mask[step], deterministic=True)
+        value, action, action_log_prob = trainer.policy.get_actions(obs_posi, obs_client, obs_edge, obs_topic_info, buffer.mask[step], deterministic=deterministic)
 
         # _t2n: tensor → numpy
         values = np.array(_t2n(value))
@@ -175,16 +172,13 @@ class MATRunner:
         trainer.train(buffer)
 
 
-    def episode_loop(self, simulation_time, time_step, trainer, buffer, batch_size, env_list, reward_history, train=True):
+    def episode_loop(self, simulation_time, time_step, trainer, buffer, batch_size, env_list, reward_history, deternimistic=False):
         #  各エピソードにおける時間の推移
         for time in range(0, simulation_time, time_step):
             step = int(time / time_step)
 
             #  行動と確率分布の取得
-            if train == True:
-                values_batch, actions_batch, action_log_probs_batch = self.collect(trainer, buffer, step, train=True)
-            else:
-                values_batch, actions_batch, action_log_probs_batch = self.collect(trainer, buffer, step, train=False)
+            values_batch, actions_batch, action_log_probs_batch = self.collect(trainer, buffer, step, deterministic=deternimistic)
 
             reward_batch = np.zeros((batch_size), dtype=np.float32)
 
@@ -467,7 +461,7 @@ class MATRunner:
                 #  各エピソードにおける時間の推移
                 reward_history_test = [[] for _ in range(len(test_env_list))]
 
-                self.episode_loop(simulation_time, time_step, trainer, test_buffer, len(test_env_list), test_env_list, reward_history_test, train=False)
+                self.episode_loop(simulation_time, time_step, trainer, test_buffer, len(test_env_list), test_env_list, reward_history_test, deternimistic=True)
 
                 for idx in range(len(test_env_list)):
                     with open(output + "_test" + str(idx) + ".log", 'a') as f:
@@ -636,7 +630,7 @@ class MATRunner:
                 
                 reward_history_test = [[] for _ in range(len(test_env_list))]
 
-                self.episode_loop(simulation_time, time_step, trainer, test_buffer, len(test_env_list), test_env_list, reward_history_test, train=True)
+                self.episode_loop(simulation_time, time_step, trainer, test_buffer, len(test_env_list), test_env_list, reward_history_test, deternimistic=True)
 
                 reward_test_average = 0
                 for idx in range(len(test_env_list)):
@@ -656,3 +650,44 @@ class MATRunner:
             reward_test_average += sum(reward_history_test[idx]) / len(test_env_list)
 
         return reward_test_average
+    
+
+    def execute_single_env(self,  data_index_path, load_parameter_path):
+
+        env_list = []
+        for idx in range(self.batch_size):
+            env_list.append(Env(data_index_path))
+
+        simulation_time = env_list[0].simulation_time
+        time_step = env_list[0].time_step 
+
+        if simulation_time % time_step == 0:
+            episode_length = int(simulation_time / time_step)
+        else:
+            sys.exit("simulation_time が time_step の整数倍になっていません")
+
+        policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd, self.device, multi=False)
+
+        trainer = MATTrainer(policy, self.device)
+
+        buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
+
+        policy.restore(load_parameter_path)
+
+        for idx in range(self.batch_size):
+            env = env_list[idx]
+            self.warmup(buffer, env, idx)
+
+        reward_history = [[] for idx in range(self.batch_size)]
+
+        self.episode_loop(simulation_time, time_step, trainer, buffer, self.batch_size, env_list, reward_history, deternimistic=False)
+
+        reward_average = 0
+        for idx in range(self.batch_size):
+            reward_average += sum(reward_history[idx]) / self.batch_size
+
+        return reward_average
+
+
+
+        
