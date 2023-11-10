@@ -5,13 +5,13 @@ import sys
 
 
 #learning_data_index_path = "../dataset/debug/debug/index/index_easy.csv"
-learning_data_index_dir = "../dataset/similar_dataset/easy/traking_assign_edge_topic/train/index/"
-test_data_index_dir = "../dataset/similar_dataset/easy/traking_assign_edge_topic/test/index/"
+learning_data_index_dir = "../dataset/similar_dataset/easy/traking_assign/train/index/"
+test_data_index_dir = "../dataset/similar_dataset/easy/traking_assign/test/index/"
 
 # 各種パラメーター
 # MAT
-start_epi_itr = 0
-max_epi_itr = 10000
+start_epi_itr = 20000
+max_epi_itr = 40000
 backup_itr = 100
 
 max_agent = 30
@@ -20,22 +20,22 @@ max_topic = 3
 # ハイパーパラメーター
 obs_size = 27
 batch_size = 16
-ppo_epoch = 8
+ppo_epoch = 6
 lr = 0.0005
 eps = 1e-05
 weight_decay = 0
 n_block = 1
 n_embd = 9
-reward_scaling = False
+reward_scaling = True
 
 
 device = "cuda:0"
-result_dir = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/"
-file_name = "hight_load_multi_noscaling"
+result_dir = "../result/temporary/similar_dataset/easy/traking_assign/"
+file_name = "hight_load_multi_scaling"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
-#load_parameter_path = '../result/temporary/debug/hard/model_parameter/transformer_hard_mat_batch3_extend0_5000.pth'
-load_parameter_path = None
+load_parameter_path = '../result/temporary/similar_dataset/easy/traking_assign/model_parameter/transformer_hight_load_multi_scaling0_20000.pth'
+#load_parameter_path = None
 
 
 runner = MATRunner(batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd, reward_scaling, device, max_agent, max_topic)

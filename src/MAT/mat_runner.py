@@ -210,6 +210,7 @@ class MATRunner:
                 reward_history[idx].append(reward)
                 if self.reward_scaling == True:
                     reward_batch[idx] = (-reward / 200) + 1
+                    #print(f"reward_batch[idx] = {reward_batch[idx]}")
                 else:
                     reward_batch[idx] = -reward
 
@@ -354,9 +355,6 @@ class MATRunner:
 
     def train_multi_env(self, start_epi_itr, max_epi_itr, learning_data_index_dir, test_data_index_dir, result_dir, output, transformer_weight, backup_itr, load_parameter_path=None):
         test_iter = 10
-
-        if test_data_index_dir is None:
-            sys.exit("評価用の test_data_index_dir を指定して下さい")
 
         train_dir_path = os.path.join(learning_data_index_dir, "*")
         train_index_path = natsorted(glob.glob(train_dir_path))
@@ -555,3 +553,106 @@ class MATRunner:
             reward_average += sum(reward_history[idx]) / self.batch_size
 
         return reward_average
+    
+
+    def tuning_multi_env(self, trial, start_epi_itr, max_epi_itr, index_dir, test_dir, log_dir, log_name_base, process_name):
+        test_iter = 10
+
+        train_dir_path = os.path.join(index_dir, "*")
+        train_index_path = natsorted(glob.glob(train_dir_path))
+
+        test_dir_path = os.path.join(test_dir, "*")
+        test_index_path = natsorted(glob.glob(test_dir_path))
+
+        env_list = []
+        for idx in range(len(train_index_path)):
+            env_list.append(Env(train_index_path[idx]))
+
+        test_env_list = []
+        for idx in range(len(test_index_path)):
+            test_env_list.append(Env(test_index_path[idx]))
+
+        simulation_time = env_list[0].simulation_time
+        time_step = env_list[0].time_step
+
+        episode_length = int(simulation_time / time_step)
+        for idx in range(len(env_list)):
+            if env_list[idx].simulation_time % env_list[idx].time_step != 0:
+                sys.exit("simulation_time が time_step の整数倍になっていません")
+            elif env_list[idx].simulation_time != simulation_time or env_list[idx].time_step != time_step:
+                sys.exit("データセット内に異なる simulation_time または time_step が含まれています。")
+            
+        for idx in range(len(test_env_list)):
+            if test_env_list[idx].simulation_time % test_env_list[idx].time_step != 0:
+                sys.exit("simulation_time が time_step の整数倍になっていません")
+            elif test_env_list[idx].simulation_time != simulation_time or test_env_list[idx].time_step != time_step:
+                sys.exit("テストデータセット内に異なる simulation_time または time_step が含まれています。")
+
+        with open(log_dir + "trial" + str(trial.number) + "/" + log_name_base + "trail" + str(trial.number) + "_learning_log_" + process_name + ".log", "w") as f:
+            pass
+
+        for idx in range(len(test_env_list)):
+            with open(log_dir + "trial" + str(trial.number) + "/" + log_name_base + "trail" + str(trial.number) + "_test" + str(idx) + "_" + process_name + ".log", "w") as f:
+                pass
+
+        policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd, device=self.device, multi=True)
+        trainer = MATTrainer(policy, self.ppo_epoch, self.device)
+
+        buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
+        test_buffer = SharedReplayBuffer(episode_length, len(test_env_list), self.max_agent, self.max_topic, self.obs_dim, self.N_action)
+
+        # 学習ループ
+        for epi_iter in range(start_epi_itr, max_epi_itr):
+            #  環境のリセット
+            env_list_shuffle = random.sample(env_list, self.batch_size)
+
+            #  1エピソード中の reward の保持
+            reward_history = [[] for _ in range(self.batch_size)]
+
+            #  環境のリセット            
+            for idx in range(self.batch_size):
+                env = env_list_shuffle[idx]
+
+                self.warmup(buffer, env, idx)
+
+            self.episode_loop(simulation_time, time_step, trainer, buffer, self.batch_size, env_list_shuffle, reward_history) 
+
+            self.compute(trainer, buffer)
+
+            self.train(trainer, buffer)
+
+            reward_average = 0
+            for idx in range(self.batch_size):
+                reward_average += sum(reward_history[idx]) / self.batch_size
+            
+            with open(log_dir + "trial" + str(trial.number) + "/" + log_name_base + "trail" + str(trial.number) + "_learning_log_" + process_name + ".log", "a") as f:
+                f.write(f"{epi_iter}/{max_epi_itr}, {reward_average}\n")
+
+            if epi_iter % test_iter == 0 or (epi_iter+1) == max_epi_itr:
+                for idx in range(len(test_env_list)):
+                    test_env = test_env_list[idx]
+
+                    self.warmup(test_buffer, test_env, idx)
+                
+                reward_history_test = [[] for _ in range(len(test_env_list))]
+
+                self.episode_loop(simulation_time, time_step, trainer, test_buffer, len(test_env_list), test_env_list, reward_history_test, train=True)
+
+                reward_test_average = 0
+                for idx in range(len(test_env_list)):
+                    reward_test_average += sum(reward_history_test[idx]) / len(test_env_list)
+
+                for idx in range(len(test_env_list)):
+                    with open(log_dir + "trial" + str(trial.number) + "/" + log_name_base + "trail" + str(trial.number) + "_test" + str(idx) + "_" + process_name + ".log", "a") as f:
+                        f.write(f"{epi_iter}/{max_epi_itr}, {sum(reward_history_test[idx])}\n")
+
+                trial.report(reward_test_average, epi_iter)
+
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+
+        reward_test_average = 0
+        for idx in range(len(test_env_list)):
+            reward_test_average += sum(reward_history_test[idx]) / len(test_env_list)
+
+        return reward_test_average

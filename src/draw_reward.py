@@ -88,24 +88,46 @@ fig.savefig(result_fig)
 """
 
 
-data_index_dir = "../dataset/similar_dataset/easy/traking_assign_edge_topic/test/index/"
+flag = True
 
-data_index_dir_path = os.path.join(data_index_dir, "*")
-data_index_path = natsorted(glob.glob(data_index_dir_path))
+if flag:
+    data_index_dir = "../dataset/similar_dataset/easy/traking_assign/test/index/"
 
-log_path_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi_noscaling0_test"
-log_scaling_path_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi_scaling0_test"
+    data_index_dir_path = os.path.join(data_index_dir, "*")
+    data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-result_fig_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi"
+    log_path_base = "../result/temporary/similar_dataset/easy/traking_assign/hight_load_multi_noscaling0_test"
+    log_scaling_path_base = "../result/temporary/similar_dataset/easy/traking_assign/hight_load_multi_scaling0_test"
+    log_scaling_revision_path_base = "../result/temporary/similar_dataset/easy/traking_assign/hight_load_scaling_revision0_test"
+    log_batch_path_base = "../result/temporary/similar_dataset/easy/traking_assign/hight_load_multi_scaling_batch128_0_test"
+
+    result_fig_base = "../result/temporary/similar_dataset/easy/traking_assign/hight_load_multi"
+else:
+    data_index_dir = "../dataset/similar_dataset/easy/traking_assign_edge_topic/test/index/"
+
+    data_index_dir_path = os.path.join(data_index_dir, "*")
+    data_index_path = natsorted(glob.glob(data_index_dir_path))
+
+    log_path_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi_noscaling0_test"
+    log_scaling_path_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi_scaling0_test"
+    log_scaling_revision_path_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_scaling_revision0_test"
+    log_batch_path_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi_scaling_batch128_0_test"
+
+    result_fig_base = "../result/temporary/similar_dataset/easy/traking_assign_edge_topic/hight_load_multi"
+
 
 for idx in range(len(data_index_path)):
     index_path = data_index_path[idx]
 
     log_path = log_path_base + str(idx) + ".log"
     log_scaling_path = log_scaling_path_base + str(idx) + ".log"
+    log_scaling_revision_path = log_scaling_revision_path_base + str(idx) + ".log"
+    log_batch_path = log_batch_path_base + str(idx) + ".log"
 
     train_curve = read_train_curve(log_path)
     train_curve_scaling = read_train_curve(log_scaling_path)
+    train_curve_scaling_revision = read_train_curve(log_scaling_revision_path)
+    train_curve_batch = read_train_curve(log_batch_path)
 
     df_index = pd.read_csv(index_path, index_col=0)
     opt = df_index.at['data', 'opt']
@@ -115,12 +137,15 @@ for idx in range(len(data_index_path)):
     fig = plt.figure()
     wind = fig.add_subplot(1, 1, 1)
     #wind.set_ylim(ymin=21000, ymax=34000)
+    #wind.set_xlim(xmin=0, xmax=200)
     wind.grid()
     #wind.set_title("test " + str(i))
     wind.set_xlabel("train iteration")
     wind.set_ylabel("total reward (ms)")
-    wind.plot(train_curve, linewidth=1, label='mat')
+    #wind.plot(train_curve, linewidth=1, label='mat')
     wind.plot(train_curve_scaling, linewidth=1, label='mat_scaling')
+    #wind.plot(train_curve_scaling_revision, linewidth=1, label='mat_scaling_revision')
+    #wind.plot(train_curve_batch, linewidth=1, label='mat_batch')
     wind.axhline(y=opt, c='r', label="optimal")
     wind.axhline(y=nearest_reward, c='g', label="nearest_server")
     wind.legend()
