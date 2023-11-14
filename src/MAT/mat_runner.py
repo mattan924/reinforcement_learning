@@ -448,6 +448,9 @@ class MATRunner:
                     for idx in range(self.batch_size):
                         reward_average += sum(reward_history[idx])/self.batch_size
 
+                    tmp_reward = [sum(reward_history[idx]) for idx in range(self.batch_size)]
+                    print(f"reward = {tmp_reward}")
+
                     f.write(f"{(epi_iter/max_epi_itr)*100}%, {reward_average * -1}\n")
 
             if epi_iter % test_iter == 0 or (epi_iter+1) == max_epi_itr:
