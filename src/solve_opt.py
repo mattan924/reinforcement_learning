@@ -3,8 +3,8 @@ import pandas as pd
 import time as time_modu
 
 if __name__ == '__main__':
-    index_file = "../dataset/debug/debug/index/index_easy_hight_load.csv"
-    output_file = "../dataset/debug/debug/solution/solution_easy_hight_load_opt.csv"
+    index_file = "../dataset/debug/debug/index/index_hard_hight_load.csv"
+    output_file = "../dataset/debug/debug/solution/index_hard_hight_load.csv"
 
     start_time = 0
 
@@ -30,7 +30,7 @@ if __name__ == '__main__':
         p, s = solver.set_pub_sub()
         
         print("\n----------start solve----------\n")
-        delay = solver.solve_y_fix(time, d, d_s, p, s, output_file)
+        delay = solver.solve_y_fix(time, d, d_s, p, s, output_file, time_limit=0.07)
         total_delay += delay
         print("\n----------end solve----------\n")
 

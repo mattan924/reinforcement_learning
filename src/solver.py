@@ -159,7 +159,7 @@ class Solver:
         return p, s
 
 
-    def solve(self, time, d, d_s, p, s, output_file):
+    def solve(self, time, d, d_s, p, s, output_file, time_limit=None):
         num_data = np.zeros(self.num_topic)
         for n in range(self.num_topic):
             topic = self.all_topic[n]
@@ -268,6 +268,8 @@ class Solver:
 
         # 求解
         model.Params.NonConvex = 2
+        if time_limit is not None:
+            model.Params.TimeLimit = time_limit
         model.optimize()
 
         delay = self.output_solution(time, model, d, d_s, p, s, num_message, output_file)
@@ -275,7 +277,7 @@ class Solver:
         return delay
 
     
-    def solve_y_fix(self, time, d, d_s, p, s, output_file):
+    def solve_y_fix(self, time, d, d_s, p, s, output_file, time_limit=None):
         num_data = np.zeros(self.num_topic)
         for n in range(self.num_topic):
             topic = self.all_topic[n]
@@ -391,6 +393,8 @@ class Solver:
 
         # 求解
         model.Params.NonConvex = 2
+        if time_limit is not None:
+            model.Params.TimeLimit = time_limit
         model.optimize()
 
         delay = self.output_solution_y_fix(time, model, d, d_s, p, s, y, num_message, output_file)
@@ -617,6 +621,8 @@ class Solver:
             print(total_delay)
         else:
             print("実行不可能")
+            total_delay = model.getObjective().getValue()
+            print(f"value = {total_delay}")
 
         return total_delay
     
