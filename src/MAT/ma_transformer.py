@@ -121,7 +121,8 @@ class Encoder(nn.Module):
 
         self.obs_encoder_posi = nn.Sequential(init_(nn.Linear(obs_distri_dim, n_embd), activate=True), nn.GELU())
         self.obs_encoder_client = nn.Sequential(init_(nn.Linear(obs_distri_dim*3, n_embd), activate=True), nn.GELU())
-        self.obs_encoder_edge = nn.Sequential(init_(nn.Linear(obs_distri_dim*5, n_embd), activate=True), nn.GELU())
+        #self.obs_encoder_edge = nn.Sequential(init_(nn.Linear(obs_distri_dim*5, n_embd), activate=True), nn.GELU())
+        self.obs_encoder_edge = nn.Sequential(init_(nn.Linear(obs_distri_dim*2, n_embd), activate=True), nn.GELU())
         self.obs_encoder = nn.Sequential(init_(nn.Linear(n_embd*3+self.obs_info_dim, n_embd), activate=True), nn.GELU())
 
         self.blocks = nn.Sequential(*[EncodeBlock(n_embd, n_head, n_agent, n_topic) for _ in range(n_block)])

@@ -55,9 +55,11 @@ class MATRunner:
         self.max_agent = max_agent
         self.max_topic = max_topic
         self.N_action = 9
-        self.obs_dim = self.obs_size * self.obs_size * 9 + 3
+        #self.obs_dim = self.obs_size * self.obs_size * 9 + 3
+        self.obs_dim = self.obs_size * self.obs_size * 6 + 3
         self.obs_distri_dim = self.obs_size*self.obs_size
-        self.obs_info_dim = self.obs_dim - self.obs_distri_dim*9
+        #self.obs_info_dim = self.obs_dim - self.obs_distri_dim*9
+        self.obs_info_dim = self.obs_dim - self.obs_distri_dim*6
 
         self.random_flag = True
     
@@ -82,17 +84,18 @@ class MATRunner:
         env.reset()
 
         agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
-        obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+        #obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+        obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
 
         buffer.obs_posi[0][batch] = obs_posi
         buffer.obs_publisher[0][batch] = obs_publisher
         buffer.obs_subscriber[0][batch] = obs_subscriber
         buffer.obs_distribution[0][batch] = obs_distribution
-        buffer.obs_topic_used_storage[0][batch] = obs_topic_used_storage
+        #buffer.obs_topic_used_storage[0][batch] = obs_topic_used_storage
         buffer.obs_storage[0][batch] = obs_storage
         buffer.obs_cpu_cycle[0][batch] = obs_cpu_cycle
-        buffer.obs_topic_num_used[0][batch] = obs_topic_num_used
-        buffer.obs_num_used[0][batch] = obs_num_used
+        #buffer.obs_topic_num_used[0][batch] = obs_topic_num_used
+        #buffer.obs_num_used[0][batch] = obs_num_used
         buffer.obs_topic_info[0][batch] = obs_topic_info
         buffer.mask[0][batch] = np.bool_(mask.reshape(self.max_agent*self.max_topic))
 
@@ -111,13 +114,19 @@ class MATRunner:
         obs_client[:, :, :self.obs_distri_dim] = buffer.obs_publisher[step]
         obs_client[:, :, self.obs_distri_dim:self.obs_distri_dim*2] = buffer.obs_subscriber[step]
         obs_client[:, :, self.obs_distri_dim*2:self.obs_distri_dim*3] = buffer.obs_distribution[step][:, np.newaxis]
-            
+        
+        """
         obs_edge = np.zeros((batch_size, self.max_topic, self.obs_distri_dim*5), dtype=np.float32)
         obs_edge[:, :, :self.obs_distri_dim] = buffer.obs_topic_used_storage[step]
         obs_edge[:, :, self.obs_distri_dim:self.obs_distri_dim*2] = buffer.obs_storage[step][:, np.newaxis]
         obs_edge[:, :, self.obs_distri_dim*2:self.obs_distri_dim*3] = buffer.obs_cpu_cycle[step][:, np.newaxis]
         obs_edge[:, :, self.obs_distri_dim*3:self.obs_distri_dim*4] = buffer.obs_topic_num_used[step]
         obs_edge[:, :, self.obs_distri_dim*4:self.obs_distri_dim*5] = buffer.obs_num_used[step][:, np.newaxis]
+        """
+
+        obs_edge = np.zeros((batch_size, self.max_topic, self.obs_distri_dim*2), dtype=np.float32)
+        obs_edge[:, :, 0:self.obs_distri_dim] = buffer.obs_storage[step][:, np.newaxis]
+        obs_edge[:, :, self.obs_distri_dim:self.obs_distri_dim*2] = buffer.obs_cpu_cycle[step][:, np.newaxis]
             
         obs_topic_info = buffer.obs_topic_info[step]
 
@@ -131,10 +140,10 @@ class MATRunner:
         return values, actions, action_log_probs
     
 
-    def insert_batch(self, buffer, obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm):
-            
-        buffer.insert_batch(obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
-
+    #def insert_batch(self, buffer, obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm):
+    def insert_batch(self, buffer, obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_topic_info, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm):       
+        #buffer.insert_batch(obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
+        buffer.insert_batch(obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_topic_info, mask, actions, action_log_probs, values, rewards, agent_perm, topic_perm)
     
     @torch.no_grad()
     def compute(self, trainer, buffer):
@@ -147,13 +156,19 @@ class MATRunner:
         obs_client[:, :, :self.obs_distri_dim] = buffer.obs_publisher[-1]
         obs_client[:, :, self.obs_distri_dim:self.obs_distri_dim*2] = buffer.obs_subscriber[-1]
         obs_client[:, :, self.obs_distri_dim*2:self.obs_distri_dim*3] = buffer.obs_distribution[-1][:, np.newaxis]
-            
+        
+        """
         obs_edge = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim*5), dtype=np.float32)
         obs_edge[:, :, :self.obs_distri_dim] = buffer.obs_topic_used_storage[-1]
         obs_edge[:, :, self.obs_distri_dim:self.obs_distri_dim*2] = buffer.obs_storage[-1][:, np.newaxis]
         obs_edge[:, :, self.obs_distri_dim*2:self.obs_distri_dim*3] = buffer.obs_cpu_cycle[-1][:, np.newaxis]
         obs_edge[:, :, self.obs_distri_dim*3:self.obs_distri_dim*4] = buffer.obs_topic_num_used[-1]
         obs_edge[:, :, self.obs_distri_dim*4:self.obs_distri_dim*5] = buffer.obs_num_used[-1][:, np.newaxis]
+        """
+
+        obs_edge = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim*2), dtype=np.float32)
+        obs_edge[:, :, 0:self.obs_distri_dim] = buffer.obs_storage[-1][:, np.newaxis]
+        obs_edge[:, :, self.obs_distri_dim:self.obs_distri_dim*2] = buffer.obs_cpu_cycle[-1][:, np.newaxis]
             
         obs_topic_info = buffer.obs_topic_info[-1]
 
@@ -189,11 +204,11 @@ class MATRunner:
             obs_publisher_batch = np.zeros((batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
             obs_subscriber_batch = np.zeros((batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
             obs_distribution_batch = np.zeros((batch_size, self.obs_distri_dim), dtype=np.float32)
-            obs_topic_used_storage_batch = np.zeros((batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
+            #obs_topic_used_storage_batch = np.zeros((batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
             obs_storage_batch = np.zeros((batch_size, self.obs_distri_dim), dtype=np.float32)
             obs_cpu_cycle_batch = np.zeros((batch_size, self.obs_distri_dim), dtype=np.float32)
-            obs_topic_num_used_batch = np.zeros((batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
-            obs_num_used_batch = np.zeros((batch_size, self.obs_distri_dim), dtype=np.float32)
+            #obs_topic_num_used_batch = np.zeros((batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
+            #obs_num_used_batch = np.zeros((batch_size, self.obs_distri_dim), dtype=np.float32)
             obs_topic_info_batch = np.zeros((batch_size, self.max_topic, 3), dtype=np.float32)
             mask_batch = np.zeros((batch_size, self.max_agent, self.max_topic), dtype=np.bool)
 
@@ -214,21 +229,23 @@ class MATRunner:
                 agent_perm_batch[idx] = agent_perm
                 topic_perm_batch[idx] = topic_perm
 
-                obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+                #obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
+                obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, self.obs_size)
                 obs_posi_batch[idx] = obs_posi
                 obs_publisher_batch[idx] = obs_publisher
                 obs_subscriber_batch[idx] = obs_subscriber
                 obs_distribution_batch[idx] = obs_distribution
-                obs_topic_used_storage_batch[idx] = obs_topic_used_storage
+                #obs_topic_used_storage_batch[idx] = obs_topic_used_storage
                 obs_storage_batch[idx] = obs_storage
                 obs_cpu_cycle_batch[idx] = obs_cpu_cycle
-                obs_topic_num_used_batch[idx] = obs_topic_num_used
-                obs_num_used_batch[idx] = obs_num_used
+                #obs_topic_num_used_batch[idx] = obs_topic_num_used
+                #obs_num_used_batch[idx] = obs_num_used
                 obs_topic_info_batch[idx] = obs_topic_info
                 mask_batch[idx] = mask
                 
-            self.insert_batch(buffer, obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_topic_used_storage_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_topic_num_used_batch, obs_num_used_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
-    
+            #self.insert_batch(buffer, obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_topic_used_storage_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_topic_num_used_batch, obs_num_used_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+            self.insert_batch(buffer, obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+  
 
     def cal_nearest_server_reward(self, index_path):
         nearest_reward = 0
@@ -357,8 +374,16 @@ class MATRunner:
         test_index_path = natsorted(glob.glob(test_dir_path))
 
         env_list = []
-        for idx in range(len(train_index_path)):
-            env_list.append(Env(train_index_path[idx]))
+        if self.batch_size < len(train_index_path):
+            for idx in range(len(train_index_path)):
+                env_list.append(Env(train_index_path[idx]))
+        else:
+            if self.batch_size % len(train_index_path) != 0:
+                sys.exit("batch_size が train データの整数倍になっていません")
+            
+            for _ in range(int(self.batch_size / len(train_index_path))):
+                for idx in range(len(train_index_path)):
+                    env_list.append(Env(train_index_path[idx]))
 
         test_env_list = []
         for idx in range(len(test_index_path)):
@@ -380,7 +405,7 @@ class MATRunner:
             elif test_env_list[idx].simulation_time != simulation_time or test_env_list[idx].time_step != time_step:
                 sys.exit("テストデータセット内に異なる simulation_time または time_step が含まれています。")
 
-        policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd, device=self.device, multi=True)
+        policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd, device=self.device, multi=False)
         trainer = MATTrainer(policy, self.ppo_epoch, self.device)
 
         buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
@@ -447,9 +472,6 @@ class MATRunner:
                     reward_average = 0
                     for idx in range(self.batch_size):
                         reward_average += sum(reward_history[idx])/self.batch_size
-
-                    tmp_reward = [sum(reward_history[idx]) for idx in range(self.batch_size)]
-                    print(f"reward = {tmp_reward}")
 
                     f.write(f"{(epi_iter/max_epi_itr)*100}%, {reward_average * -1}\n")
 

@@ -4,14 +4,14 @@ from MAT.mat_runner import MATRunner
 import sys
 
 
-#learning_data_index_path = "../dataset/debug/debug/index/index_easy.csv"
-learning_data_index_dir = "../dataset/similar_dataset/easy/small15_select/train/index/"
-test_data_index_dir = "../dataset/similar_dataset/easy/small15_select/test/index/"
+#learning_data_index_path = "../dataset/similar_dataset/easy/debug/test/index/debug_traking0_assign3_edge0_topic0.csv"
+learning_data_index_dir = "../dataset/similar_dataset/hard/small15_fix50/train/index/"
+test_data_index_dir = "../dataset/similar_dataset/hard/small15_fix50/test/index/"
 
 # 各種パラメーター
 # MAT
 start_epi_itr = 0
-max_epi_itr = 10
+max_epi_itr = 10000
 backup_itr = 100
 
 max_agent = 30
@@ -29,9 +29,9 @@ n_embd = 9
 reward_scaling = False
 
 
-device = "cuda:1"
-result_dir = "../result/temporary/debug/"
-file_name = "debug"
+device = "cuda:0"
+result_dir = "../result/temporary/similar_dataset/hard/small15_fix50/"
+file_name = "batch15_obs_revision"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
 #load_parameter_path = '../result/temporary/similar_dataset/easy/small15/model_parameter/transformer_hight_load_noscaling0_30000.pth'
