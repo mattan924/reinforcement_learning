@@ -88,26 +88,26 @@ wind.legend()
 fig.savefig(result_fig)
 """
 
-flag=False
+flag=True
 
 if flag:
-    data_index_dir = "../dataset/similar_dataset/hard/small100_fix50/test/index/"
+    data_index_dir = "../dataset/similar_dataset/hard/small15_fix50/test/index/"
     data_index_dir_path = os.path.join(data_index_dir, "*")
     data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-    log_path_base = "../result/temporary/similar_dataset/hard/small100_fix50/batch15_obs_revision0_test"
-    #log_batch15_path_base = "../result/temporary/similar_dataset/easy/small15_fix20/batch15_obs_revision0_test"
+    log_path_base = "../result/temporary/similar_dataset/hard/small15_fix50/batch240_obs_revision0_test"
+    log_batch15_path_base = "../result/temporary/similar_dataset/hard/small15_fix50/batch15_obs_revision0_test"
 
-    result_fig_base = "../result/temporary/similar_dataset/hard/small100_fix50/data_fix"
+    result_fig_base = "../result/temporary/similar_dataset/hard/small15_fix50/data_fix"
 
     for idx in range(len(data_index_path)):
         index_path = data_index_path[idx]
 
         log_path = log_path_base + str(idx) + ".log"
-        #log_batch15_path = log_batch15_path_base + str(idx) + ".log"
+        log_batch15_path = log_batch15_path_base + str(idx) + ".log"
 
         train_curve = read_train_curve(log_path)
-        #train_curve_batch15 = read_train_curve(log_batch15_path)
+        train_curve_batch15 = read_train_curve(log_batch15_path)
 
         df_index = pd.read_csv(index_path, index_col=0)
         opt = df_index.at['data', 'opt']
@@ -120,10 +120,10 @@ if flag:
         #wind.set_xlim(xmin=0, xmax=1000)
         wind.grid()
         wind.set_title("test " + str(idx))
-        wind.set_xlabel("train iteration")
+        wind.set_xlabel("training iteration")
         wind.set_ylabel("total reward (ms)")
         wind.plot(train_curve, linewidth=1, label='mat_batch240')
-        #wind.plot(train_curve_batch15, linewidth=1, label='mat_batch15')
+        wind.plot(train_curve_batch15, linewidth=1, label='mat_batch15')
         #wind.axhline(y=opt, c='r', label="optimal")
         wind.axhline(y=nearest_reward, c='g', label="nearest_server")
         wind.legend()
@@ -158,15 +158,15 @@ else:
 
         fig = plt.figure()
         wind = fig.add_subplot(1, 1, 1)
-        #wind.set_ylim(ymin=21000, ymax=34000)
+        wind.set_ylim(ymin=0, ymax=6000)
         #wind.set_xlim(xmin=0, xmax=1000)
         wind.grid()
         wind.set_title("test " + str(idx))
-        wind.set_xlabel("train iteration")
+        wind.set_xlabel("training iteration")
         wind.set_ylabel("total reward (ms)")
-        wind.plot(train_curve, linewidth=1, label='batch240')
-        wind.plot(train_curve_obs, linewidth=1, label='batch240_obs')
-        #wind.plot(train_curve_batch15, linewidth=1, label='batch15_obs')
+        #wind.plot(train_curve, linewidth=1, label='batch240')
+        wind.plot(train_curve_obs, linewidth=1, label='batch240')
+        wind.plot(train_curve_batch15, linewidth=1, label='batch15')
         #wind.axhline(y=opt, c='r', label="optimal")
         wind.axhline(y=nearest_reward, c='g', label="nearest_server")
         wind.legend()

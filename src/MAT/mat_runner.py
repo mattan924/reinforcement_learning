@@ -2,13 +2,13 @@ from env import Env
 from MAT.transformer_policy import TransformerPolicy
 from MAT.mat_trainer import MATTrainer
 from MAT.shared_buffer import SharedReplayBuffer
-from multiprocessing import Pool
 import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 import os
 import glob
 import random
+import copy
 from natsort import natsorted
 import time as time_module
 import datetime
@@ -364,7 +364,7 @@ class MATRunner:
         policy.save(result_dir + 'model_parameter', transformer_weight, epi_iter+1)
 
 
-    def train_multi_env(self, start_epi_itr, max_epi_itr, learning_data_index_dir, test_data_index_dir, result_dir, output, transformer_weight, backup_itr, load_parameter_path=None):
+    def train_multi_env(self, sample_data, start_epi_itr, max_epi_itr, learning_data_index_dir, test_data_index_dir, result_dir, output, transformer_weight, backup_itr, load_parameter_path=None):
         test_iter = 10
 
         train_dir_path = os.path.join(learning_data_index_dir, "*")
@@ -373,6 +373,7 @@ class MATRunner:
         test_dir_path = os.path.join(test_data_index_dir, "*")
         test_index_path = natsorted(glob.glob(test_dir_path))
 
+        """
         env_list = []
         if self.batch_size < len(train_index_path):
             for idx in range(len(train_index_path)):
@@ -384,19 +385,25 @@ class MATRunner:
             for _ in range(int(self.batch_size / len(train_index_path))):
                 for idx in range(len(train_index_path)):
                     env_list.append(Env(train_index_path[idx]))
+        """
+        env_list = [[] for _ in range(len(train_index_path))]
+        
+        for idx in range(len(train_index_path)):
+            for _ in range(int(self.batch_size / sample_data)):
+                env_list[idx].append(Env(train_index_path[idx]))
 
         test_env_list = []
         for idx in range(len(test_index_path)):
             test_env_list.append(Env(test_index_path[idx]))
 
-        simulation_time = env_list[0].simulation_time
-        time_step = env_list[0].time_step
+        simulation_time = env_list[0][0].simulation_time
+        time_step = env_list[0][0].time_step
 
         episode_length = int(simulation_time / time_step)
         for idx in range(len(env_list)):
-            if env_list[idx].simulation_time % env_list[idx].time_step != 0:
+            if env_list[idx][0].simulation_time % env_list[idx][0].time_step != 0:
                 sys.exit("simulation_time が time_step の整数倍になっていません")
-            elif env_list[idx].simulation_time != simulation_time or env_list[idx].time_step != time_step:
+            elif env_list[idx][0].simulation_time != simulation_time or env_list[idx][0].time_step != time_step:
                 sys.exit("データセット内に異なる simulation_time または time_step が含まれています。")
             
         for idx in range(len(test_env_list)):
@@ -437,8 +444,11 @@ class MATRunner:
             start_time = time_module.perf_counter()
 
             #  環境のリセット
-            env_list_shuffle = random.sample(env_list, self.batch_size)
-
+            env_list_shuffle_tmp = random.sample(env_list, sample_data)
+            env_list_shuffle = []
+            for idx in range(sample_data):
+                env_list_shuffle += env_list_shuffle_tmp[idx]
+                    
             #  1エピソード中の reward の保持
             reward_history = [[] for _ in range(self.batch_size)]
 
