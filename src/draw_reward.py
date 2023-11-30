@@ -1,4 +1,5 @@
 from env import Env
+from RELOC import RELOC
 from natsort import natsorted
 import numpy as np
 import matplotlib.pyplot as plt
@@ -58,6 +59,24 @@ def cal_nearest_server_reward(index_path):
 
     return nearest_reward
 
+
+def cal_RELOC_reward(index_path):
+    reloc_reward = 0
+
+    env = Env(index_path)
+
+    for time in range(0, env.simulation_time, env.time_step):
+        agent_perm, topic_perm = get_perm(env.num_client, env.num_topic)
+
+        near_actions = env.get_near_action(agent_perm, topic_perm)
+
+        actions = RELOC(env.clients, env.all_topic, env.all_edge, 3, agent_perm, topic_perm, near_actions)
+
+        reloc_reward += env.step(actions, agent_perm, topic_perm, time)
+
+    return reloc_reward
+
+
 """
 data_index_path = "../dataset/debug/debug/index/index_easy.csv"
 
@@ -88,86 +107,47 @@ wind.legend()
 fig.savefig(result_fig)
 """
 
-flag=True
 
-if flag:
-    data_index_dir = "../dataset/similar_dataset/hard/small15_fix50/test/index/"
-    data_index_dir_path = os.path.join(data_index_dir, "*")
-    data_index_path = natsorted(glob.glob(data_index_dir_path))
+data_index_dir = "../dataset/similar_dataset/hard/small100_fix50/test/index/"
+data_index_dir_path = os.path.join(data_index_dir, "*")
+data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-    log_path_base = "../result/temporary/similar_dataset/hard/small15_fix50/batch240_obs_revision0_test"
-    log_batch15_path_base = "../result/temporary/similar_dataset/hard/small15_fix50/batch15_obs_revision0_test"
+log_path_base = "../result/temporary/similar_dataset/hard/small100_fix50/batch240_obs_revision0_test"
+log_batch15_path_base = "../result/temporary/similar_dataset/hard/small100_fix50/batch15_obs_revision0_test"
+log_block3_path_base = "../result/temporary/similar_dataset/hard/small100_fix50/batch15_block3_0_test"
 
-    result_fig_base = "../result/temporary/similar_dataset/hard/small15_fix50/data_fix"
+result_fig_base = "../result/temporary/similar_dataset/hard/small100_fix50/data_fix"
 
-    for idx in range(len(data_index_path)):
-        index_path = data_index_path[idx]
+for idx in range(len(data_index_path)):
+    index_path = data_index_path[idx]
 
-        log_path = log_path_base + str(idx) + ".log"
-        log_batch15_path = log_batch15_path_base + str(idx) + ".log"
+    log_path = log_path_base + str(idx) + ".log"
+    log_batch15_path = log_batch15_path_base + str(idx) + ".log"
+    log_block3_path = log_block3_path_base + str(idx) + ".log"
 
-        train_curve = read_train_curve(log_path)
-        train_curve_batch15 = read_train_curve(log_batch15_path)
+    train_curve = read_train_curve(log_path)
+    train_curve_batch15 = read_train_curve(log_batch15_path)
+    train_curve_block3 = read_train_curve(log_block3_path)
 
-        df_index = pd.read_csv(index_path, index_col=0)
-        opt = df_index.at['data', 'opt']
+    df_index = pd.read_csv(index_path, index_col=0)
+    opt = df_index.at['data', 'opt']
 
-        nearest_reward = cal_nearest_server_reward(index_path)
+    nearest_reward = cal_nearest_server_reward(index_path)
+    reloc_reward = cal_RELOC_reward(index_path)
 
-        fig = plt.figure()
-        wind = fig.add_subplot(1, 1, 1)
-        #wind.set_ylim(ymin=21000, ymax=34000)
-        #wind.set_xlim(xmin=0, xmax=1000)
-        wind.grid()
-        wind.set_title("test " + str(idx))
-        wind.set_xlabel("training iteration")
-        wind.set_ylabel("total reward (ms)")
-        wind.plot(train_curve, linewidth=1, label='mat_batch240')
-        wind.plot(train_curve_batch15, linewidth=1, label='mat_batch15')
-        #wind.axhline(y=opt, c='r', label="optimal")
-        wind.axhline(y=nearest_reward, c='g', label="nearest_server")
-        wind.legend()
-        fig.savefig(result_fig_base + str(idx) + ".png")
-else:
-    data_index_dir = "../dataset/similar_dataset/easy/debug/test/index/"
-    data_index_dir_path = os.path.join(data_index_dir, "*")
-    data_index_path = natsorted(glob.glob(data_index_dir_path))
-
-    log_path_base = "../result/temporary/similar_dataset/easy/debug/batch240_0_test"
-    log_obs_path_base = "../result/temporary/similar_dataset/easy/debug/batch240_obs_revision0_test"
-    log_batch15_path_base = "../result/temporary/similar_dataset/easy/debug/batch15_obs_revision0_test"
-
-    result_fig_base = "../result/temporary/similar_dataset/easy/debug/batch240_"
-
-
-    for idx in range(len(data_index_path)):
-        index_path = data_index_path[idx]
-
-        log_path = log_path_base + str(idx) + ".log"
-        log_obs_path = log_obs_path_base + str(idx) + ".log"
-        log_batch15_path = log_batch15_path_base + str(idx) + ".log"
-
-        train_curve = read_train_curve(log_path)
-        train_curve_obs = read_train_curve(log_obs_path)
-        train_curve_batch15 = read_train_curve(log_batch15_path)
-
-        df_index = pd.read_csv(index_path, index_col=0)
-        opt = df_index.at['data', 'opt']
-
-        nearest_reward = cal_nearest_server_reward(index_path)
-
-        fig = plt.figure()
-        wind = fig.add_subplot(1, 1, 1)
-        wind.set_ylim(ymin=0, ymax=6000)
-        #wind.set_xlim(xmin=0, xmax=1000)
-        wind.grid()
-        wind.set_title("test " + str(idx))
-        wind.set_xlabel("training iteration")
-        wind.set_ylabel("total reward (ms)")
-        #wind.plot(train_curve, linewidth=1, label='batch240')
-        wind.plot(train_curve_obs, linewidth=1, label='batch240')
-        wind.plot(train_curve_batch15, linewidth=1, label='batch15')
-        #wind.axhline(y=opt, c='r', label="optimal")
-        wind.axhline(y=nearest_reward, c='g', label="nearest_server")
-        wind.legend()
-        fig.savefig(result_fig_base + str(idx) + ".png")
+    fig = plt.figure()
+    wind = fig.add_subplot(1, 1, 1)
+    #wind.set_ylim(ymin=21000, ymax=34000)
+    #wind.set_xlim(xmin=0, xmax=1000)
+    wind.grid()
+    wind.set_title("test " + str(idx))
+    wind.set_xlabel("training iteration")
+    wind.set_ylabel("total reward (ms)")
+    wind.plot(train_curve, linewidth=1, label='mat_batch240')
+    #wind.plot(train_curve_batch15, linewidth=1, label='mat_batch15')
+    #wind.plot(train_curve_block3, linewidth=1, label='mat_block3')
+    #wind.axhline(y=opt, c='r', label="optimal")
+    wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+    wind.axhline(y=reloc_reward, c='r', label="RELOC")
+    wind.legend()
+    fig.savefig(result_fig_base + str(idx) + ".png")

@@ -6,6 +6,8 @@ import pandas as pd
 import numpy as np
 import math
 import copy
+import time as time_module
+from collections import deque
 
 
 class Client:
@@ -429,7 +431,8 @@ class Env:
  
     #  環境を進める
     def step(self, actions, agent_perm, topic_perm, time):
-        actions = actions.reshape(-1).tolist()
+        actions = actions.reshape(-1)
+        action_idx = 0
 
         max_agent = len(agent_perm)
         max_topic = len(topic_perm)
@@ -440,30 +443,23 @@ class Env:
         block_len_x = (self.max_x-self.min_x)/3
         block_len_y = (self.max_y-self.min_y)/3
 
-        for i in range(max_agent):
-            agent_idx = agent_perm[i]
+        for i, agent_idx in enumerate(agent_perm):
             if agent_idx < self.num_client:
                 client = self.clients[agent_idx]
 
-                for t in range(max_topic):
-                    topic_id = topic_perm[t]
+                for t, topic_id in enumerate(topic_perm):
                     if topic_id < self.num_topic:
 
                         if client.pub_topic[topic_id] == 1:
-                            client.pub_edge[topic_id] = actions.pop(0)
+                            client.pub_edge[topic_id] = actions[action_idx]
+                            action_idx += 1
 
                             edge = self.all_edge[int(client.pub_edge[topic_id])]
                             edge.used_publishers[topic_id] += 1
 
-
                         if  client.sub_topic[topic_id] == 1:
-                            block_index_x = int(client.x / block_len_x)
-                            block_index_y = int(client.y / block_len_y)
-
-                            if block_index_x == 3:
-                                block_index_x = 2
-                            if block_index_y == 3:
-                                block_index_y = 2
+                            block_index_x = min(int(client.x / block_len_x), 2)
+                            block_index_y = min(int(client.y / block_len_y), 2)
 
                             client.sub_edge[topic_id] = block_index_y*3+block_index_x
 
@@ -472,8 +468,7 @@ class Env:
             edge.deploy_topic = np.zeros(self.num_topic)
             num_user = edge.used_publishers.sum()
 
-            for t in range(max_topic):
-                topic_id = topic_perm[t]
+            for t, topic_id in enumerate(topic_perm):
                 if topic_id < self.num_topic:
 
                     if edge.used_publishers[topic_id] > 0:
@@ -508,7 +503,7 @@ class Env:
                 for t in range(self.num_topic):
                     if edge.used_publishers[t] > 0 and not(t in cloud_topic):
                         edge.deploy_topic[t] = True
-            
+        
         # 報酬の計算
         reward = self.cal_reward()
 
@@ -540,6 +535,7 @@ class Env:
 
     # 報酬(総遅延)の計算
     def cal_reward(self):
+        
         reward = 0
         num_message = 0
         for t in range(self.num_topic):
@@ -550,7 +546,7 @@ class Env:
                     num_message += 1
 
         reward = reward / num_message
-        
+                
         return reward
 
 

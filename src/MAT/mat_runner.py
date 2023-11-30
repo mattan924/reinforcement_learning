@@ -188,6 +188,7 @@ class MATRunner:
 
 
     def episode_loop(self, simulation_time, time_step, trainer, buffer, batch_size, env_list, reward_history, deternimistic=False):
+
         #  各エピソードにおける時間の推移
         for time in range(0, simulation_time, time_step):
             step = int(time / time_step)
@@ -216,6 +217,7 @@ class MATRunner:
             for idx in range(batch_size):
                 env = env_list[idx]
                 reward = env.step(actions_batch[idx][buffer.mask[step][idx]], buffer.agent_perm[step][idx], buffer.topic_perm[step][idx], time)
+
                 reward_history[idx].append(reward)
                 if self.reward_scaling == True:
                     reward_batch[idx] = (-reward / 200) + 1
@@ -242,10 +244,10 @@ class MATRunner:
                 #obs_num_used_batch[idx] = obs_num_used
                 obs_topic_info_batch[idx] = obs_topic_info
                 mask_batch[idx] = mask
-                
+           
             #self.insert_batch(buffer, obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_topic_used_storage_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_topic_num_used_batch, obs_num_used_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
             self.insert_batch(buffer, obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
-  
+
 
     def cal_nearest_server_reward(self, index_path):
         nearest_reward = 0
@@ -513,8 +515,9 @@ class MATRunner:
             if epi_iter == 0:
                 #print(f"1 step time = {end_time - start_time}")
                 print(f"1 step time = {train_end - start_time}")
-
+                print(f"shuffle env time = {warmup_start - start_time}")
                 print(f"warmup time = {warmup_end - warmup_start}")
+                print(f"episode loop time = {compute_start - warmup_end}")
                 print(f"compute time = {compute_end - compute_start}")
                 print(f"train time = {train_end - train_start}")
 

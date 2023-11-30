@@ -10,8 +10,8 @@ test_data_index_dir = "../dataset/similar_dataset/hard/small100_fix50/test/index
 
 # 各種パラメーター
 # MAT
-start_epi_itr = 10000
-max_epi_itr = 30000
+start_epi_itr = 0
+max_epi_itr = 10000
 backup_itr = 100
 
 max_agent = 30
@@ -20,7 +20,7 @@ max_topic = 3
 # ハイパーパラメーター
 obs_size = 27
 sample_data = 15
-multi_env = 1
+multi_env = 16
 batch_size = sample_data * multi_env
 ppo_epoch = 6
 lr = 0.0005
@@ -32,12 +32,12 @@ reward_scaling = False
 
 
 device = "cuda:0"
-result_dir = "../result/temporary/similar_dataset/hard/small100_fix50/"
-file_name = "batch15_obs_revision"
+result_dir = "../result/temporary/debug/"
+file_name = "debug"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
-load_parameter_path = '../result/temporary/similar_dataset/hard/small100_fix50/model_parameter/transformer_batch15_obs_revision0_10000.pth'
-#load_parameter_path = None
+#load_parameter_path = '../result/temporary/similar_dataset/hard/small100_fix50/model_parameter/transformer_batch15_obs_revision0_30000.pth'
+load_parameter_path = None
 
 
 runner = MATRunner(batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd, reward_scaling, device, max_agent, max_topic)
