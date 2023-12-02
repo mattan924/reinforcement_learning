@@ -188,13 +188,22 @@ class MATRunner:
 
 
     def episode_loop(self, simulation_time, time_step, trainer, buffer, batch_size, env_list, reward_history, deternimistic=False):
+        episode_loop_start = time_module.perf_counter()
+        collect_time = 0
+        step_time = 0
+        observe_time = 0
+        insert_time = 0
 
         #  各エピソードにおける時間の推移
         for time in range(0, simulation_time, time_step):
             step = int(time / time_step)
 
             #  行動と確率分布の取得
+            collect_start = time_module.perf_counter()
             values_batch, actions_batch, action_log_probs_batch = self.collect(trainer, buffer, step, deterministic=deternimistic)
+            collect_end = time_module.perf_counter()
+
+            collect_time += (collect_end - collect_start)
 
             reward_batch = np.zeros((batch_size), dtype=np.float32)
 
@@ -216,7 +225,11 @@ class MATRunner:
             # 報酬の受け取り
             for idx in range(batch_size):
                 env = env_list[idx]
+                step_start = time_module.perf_counter()
                 reward = env.step(actions_batch[idx][buffer.mask[step][idx]], buffer.agent_perm[step][idx], buffer.topic_perm[step][idx], time)
+                step_end = time_module.perf_counter()
+
+                step_time += (step_end - step_start)
 
                 reward_history[idx].append(reward)
                 if self.reward_scaling == True:
@@ -227,6 +240,7 @@ class MATRunner:
 
                 #  状態の観測
                 #  ランダムな順にいつか改修
+                observe_start = time_module.perf_counter()
                 agent_perm, topic_perm = self.get_perm(random_flag=self.random_flag)
                 agent_perm_batch[idx] = agent_perm
                 topic_perm_batch[idx] = topic_perm
@@ -244,10 +258,26 @@ class MATRunner:
                 #obs_num_used_batch[idx] = obs_num_used
                 obs_topic_info_batch[idx] = obs_topic_info
                 mask_batch[idx] = mask
+
+                observe_end = time_module.perf_counter()
+
+                observe_time += (observe_end - observe_start)
            
+            insert_start = time_module.perf_counter()
             #self.insert_batch(buffer, obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_topic_used_storage_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_topic_num_used_batch, obs_num_used_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
             self.insert_batch(buffer, obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
+            insert_end = time_module.perf_counter()
 
+            insert_time += (insert_end - insert_start)
+
+        episode_loop_end = time_module.perf_counter()
+
+        print(f"episode_loop time = {episode_loop_end - episode_loop_start}")
+        print(f"collect time = {collect_time}")
+        print(f"step time = {step_time}")
+        print(f"observe time = {observe_time}")
+        print(f"insert time = {insert_time}")
+        
 
     def cal_nearest_server_reward(self, index_path):
         nearest_reward = 0
@@ -375,19 +405,6 @@ class MATRunner:
         test_dir_path = os.path.join(test_data_index_dir, "*")
         test_index_path = natsorted(glob.glob(test_dir_path))
 
-        """
-        env_list = []
-        if self.batch_size < len(train_index_path):
-            for idx in range(len(train_index_path)):
-                env_list.append(Env(train_index_path[idx]))
-        else:
-            if self.batch_size % len(train_index_path) != 0:
-                sys.exit("batch_size が train データの整数倍になっていません")
-            
-            for _ in range(int(self.batch_size / len(train_index_path))):
-                for idx in range(len(train_index_path)):
-                    env_list.append(Env(train_index_path[idx]))
-        """
         env_list = [[] for _ in range(len(train_index_path))]
         
         for idx in range(len(train_index_path)):
