@@ -35,6 +35,7 @@ class Edge:
         self.cpu_cycle = cpu_cycle
         self.power_allocation = cpu_cycle
         self.used_publishers = np.zeros(num_topic)
+        self.remain_cycle = 0
 
     
     def cal_used_volume(self):
@@ -342,6 +343,7 @@ class Env:
         obs_distribution = np.zeros((channel_dim))  #  クライアントの分布
         obs_storage = np.zeros((channel_dim))  #  最大ストレージサイズ
         obs_cpu_cycle = np.zeros((channel_dim))  #  CPU の最大クロック数
+        obs_remain_cycle = np.zeros((channel_dim))
         obs_topic_info = np.zeros((max_topic, 3))  #  あるトピックの処理に必要なクロック数, データサイズ, ストレージサイズ
 
         mask = np.zeros((max_agent, max_topic))
@@ -388,6 +390,7 @@ class Env:
                 
             obs_storage[block_index_y*obs_size + block_index_x] = edge.max_volume
             obs_cpu_cycle[block_index_y*obs_size + block_index_x] = edge.cpu_cycle
+            obs_remain_cycle[block_index_y*obs_size + block_index_x] = edge.remain_cycle
 
         for t in range(self.num_topic):
             topic_id = topic_perm[t]
@@ -398,7 +401,8 @@ class Env:
                 obs_topic_info[t][2] = topic.volume * 1e1
 
         # return obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask
-        return obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_topic_info, mask
+
+        return obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_remain_cycle, obs_topic_info, mask
     
 
     def get_near_action(self, agent_perm, topic_perm):
@@ -466,7 +470,9 @@ class Env:
         for edge in self.all_edge:
             edge.used_volume = np.zeros(self.num_topic)
             edge.deploy_topic = np.zeros(self.num_topic)
-            num_user = edge.used_publishers.sum()
+            num_message = 0
+            for t in range(self.num_topic):
+                num_message += self.all_topic[t].publish_rate * self.time_step * edge.used_publishers[t]
 
             for t, topic_id in enumerate(topic_perm):
                 if topic_id < self.num_topic:
@@ -474,8 +480,8 @@ class Env:
                     if edge.used_publishers[topic_id] > 0:
                         edge.used_volume[topic_id] = self.all_topic[topic_id].volume
                     
-                    if num_user != 0:
-                        edge.power_allocation = edge.cpu_cycle / num_user
+                    if num_message != 0:
+                        edge.power_allocation = edge.cpu_cycle / num_message
                     else:
                         edge.power_allocation = edge.cpu_cycle
 
@@ -503,6 +509,15 @@ class Env:
                 for t in range(self.num_topic):
                     if edge.used_publishers[t] > 0 and not(t in cloud_topic):
                         edge.deploy_topic[t] = True
+
+            total_require_cycle = 0
+            total_require_cycle += edge.remain_cycle
+            for t in range(self.num_topic):
+                topic = self.all_topic[t]
+                if edge.deploy_topic[t]:
+                    total_require_cycle += topic.publish_rate * self.time_step * edge.used_publishers[t]* (topic.require_cycle * math.log(topic.volume / topic.data_size))
+
+            edge.remain_cycle = max(total_require_cycle - (edge.cpu_cycle * self.time_step), 0)
         
         # 報酬の計算
         reward = self.cal_reward()
@@ -541,9 +556,9 @@ class Env:
         for t in range(self.num_topic):
             for publisher in self.publishers[t]:
                 for subscriber in self.subscribers[t]:
-                    delay = self.cal_delay(publisher, subscriber, t)
+                    delay = (self.all_topic[t].publish_rate*self.time_step)*self.cal_delay(publisher, subscriber, t)
                     reward = reward + delay
-                    num_message += 1
+                    num_message += self.all_topic[t].publish_rate*self.time_step
 
         reward = reward / num_message
                 
@@ -574,7 +589,7 @@ class Env:
         topic = self.all_topic[n]
 
         if edge.deploy_topic[n]:
-            delay = (topic.require_cycle*(topic.volume / topic.data_size)) / edge.power_allocation
+            delay = (edge.remain_cycle / edge.cpu_cycle) + (topic.require_cycle*math.log(topic.volume / topic.data_size)) / edge.power_allocation
         else:
             delay = (topic.require_cycle*(topic.volume / topic.data_size)) / self.cloud_cycle
 

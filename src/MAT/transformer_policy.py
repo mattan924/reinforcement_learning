@@ -80,7 +80,7 @@ class TransformerPolicy:
         obs_posi = obs_posi.reshape(-1, self.max_agent, self.obs_distri_dim)
         obs_client = obs_client.reshape(-1, self.max_topic, self.obs_distri_dim*3)
         #obs_edge = obs_edge.reshape(-1, self.max_topic, self.obs_distri_dim*5)
-        obs_edge = obs_edge.reshape(-1, self.max_topic, self.obs_distri_dim*2)
+        obs_edge = obs_edge.reshape(-1, self.max_topic, self.obs_distri_dim*3)
         obs_topic_info = obs_topic_info.reshape(-1, self.max_topic, 3)
         actions = actions.reshape(-1, self.max_agent*self.max_topic, self.act_num)
 

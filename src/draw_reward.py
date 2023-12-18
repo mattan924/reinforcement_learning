@@ -51,7 +51,7 @@ def cal_nearest_server_reward(index_path):
 
     for time in range(0, simulation_time, time_step):
         #obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, obs_size=27)
-        obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, obs_size=27)
+        obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_remain_cycle, obs_topic_info, mask = env.get_observation_mat(agent_perm, topic_perm, obs_size=27)
         mask = np.bool_(mask.reshape(-1))
         actions = env.get_near_action(agent_perm, topic_perm)
 
@@ -77,57 +77,57 @@ def cal_RELOC_reward(index_path):
     return reloc_reward
 
 
-"""
-data_index_path = "../dataset/debug/debug/index/index_easy.csv"
+data_index_path = "../dataset/master_thesis/single_data/index/low_capacity_high_cycle_client15.csv"
 
-log_path = "../result/temporary/debug/easy/easy_mat0.log"
-log_path_tuning = "../result/temporary/parameter_tuning/easy_tuning_importance_trail89_learning_log_process4.log"
-result_fig = "../result/temporary/parameter_tuning/easy_tuning_importance.png"
+log_path = "../result/save/master_thesis/single_data/low_capacity_high_cycle_client15_0.log"
+result_fig = "../result/save/master_thesis/single_data/low_capacity_high_cycle_client15_0.png"
 
 train_curve = read_train_curve(log_path)
-train_curve_tuning = read_train_curve(log_path_tuning)*-1
 
 df_index = pd.read_csv(data_index_path, index_col=0)
 opt = df_index.at['data', 'opt']
 
 nearest_reward = cal_nearest_server_reward(data_index_path)
+RELOC_reward = cal_RELOC_reward(data_index_path)
 
 fig = plt.figure()
 wind = fig.add_subplot(1, 1, 1)
 #wind.set_ylim(ymin=21000, ymax=34000)
 wind.grid()
-#wind.set_title("train iteration - total reward")
 wind.set_xlabel("train iteration")
 wind.set_ylabel("total reward (ms)")
 wind.plot(train_curve, linewidth=1, label='mat')
-wind.plot(train_curve_tuning, linewidth=1, label='tuning')
-wind.axhline(y=opt, c='r', label="optimal")
+#wind.axhline(y=opt, c='r', label="optimal")
 wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+wind.axhline(y=RELOC_reward, c='r', label="RELOC")
 wind.legend()
 fig.savefig(result_fig)
+
+
 """
-
-
-data_index_dir = "../dataset/similar_dataset/hard/small100_fix50/test/index/"
+data_index_dir = "../dataset/similar_dataset/hard/dataset10000_fix40/test/index/"
 data_index_dir_path = os.path.join(data_index_dir, "*")
 data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-log_path_base = "../result/temporary/similar_dataset/hard/small100_fix50/batch240_obs_revision0_test"
-log_batch15_path_base = "../result/temporary/similar_dataset/hard/small100_fix50/batch15_obs_revision0_test"
-log_block3_path_base = "../result/temporary/similar_dataset/hard/small100_fix50/batch15_block3_0_test"
+log_path_base = "../result/temporary/similar_dataset/hard/dataset10000_fix40/batch240_obs_revision0_test"
+log_batch15_path_base = "../result/temporary/similar_dataset/hard/dataset10000_fix40/batch15_obs_revision0_test"
+#log_block3_path_base = "../result/temporary/similar_dataset/hard/small100_fix50/batch15_block3_0_test"
+#log_reward_path_base = "../result/temporary/similar_dataset/hard/small100_fix50/batch15_block1_original_reward0_test"
 
-result_fig_base = "../result/temporary/similar_dataset/hard/small100_fix50/data_fix"
+result_fig_base = "../result/temporary/similar_dataset/hard/dataset10000_fix40/data_fix"
 
 for idx in range(len(data_index_path)):
     index_path = data_index_path[idx]
 
     log_path = log_path_base + str(idx) + ".log"
     log_batch15_path = log_batch15_path_base + str(idx) + ".log"
-    log_block3_path = log_block3_path_base + str(idx) + ".log"
+    #log_block3_path = log_block3_path_base + str(idx) + ".log"
+    #log_reward_path = log_reward_path_base + str(idx) + ".log"
 
     train_curve = read_train_curve(log_path)
     train_curve_batch15 = read_train_curve(log_batch15_path)
-    train_curve_block3 = read_train_curve(log_block3_path)
+    #train_curve_block3 = read_train_curve(log_block3_path)
+    #train_curve_reward = read_train_curve(log_reward_path)
 
     df_index = pd.read_csv(index_path, index_col=0)
     opt = df_index.at['data', 'opt']
@@ -145,9 +145,11 @@ for idx in range(len(data_index_path)):
     wind.set_ylabel("total reward (ms)")
     wind.plot(train_curve, linewidth=1, label='mat_batch240')
     wind.plot(train_curve_batch15, linewidth=1, label='mat_batch15')
-    wind.plot(train_curve_block3, linewidth=1, label='mat_block3')
+    #wind.plot(train_curve_block3, linewidth=1, label='mat_block3')
+    #wind.plot(train_curve_reward, linewidth=1, label='mat_original_reward')
     #wind.axhline(y=opt, c='r', label="optimal")
     wind.axhline(y=nearest_reward, c='g', label="nearest_server")
     wind.axhline(y=reloc_reward, c='r', label="RELOC")
     wind.legend()
     fig.savefig(result_fig_base + str(idx) + ".png")
+"""

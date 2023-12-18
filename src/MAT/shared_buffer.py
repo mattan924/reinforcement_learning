@@ -35,7 +35,7 @@ class SharedReplayBuffer(object):
 
         self.obs_dim = obs_dim
         #self.obs_size2 = int((self.obs_dim-3)/9)
-        self.obs_size2 = int((self.obs_dim-3)/6)
+        self.obs_size2 = int((self.obs_dim-3)/7)
         self.act_dim = act_dim
 
         self.obs_posi = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents, self.obs_size2), dtype=np.float32)
@@ -45,6 +45,7 @@ class SharedReplayBuffer(object):
         #self.obs_topic_used_storage = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.obs_size2), dtype=np.float32)
         self.obs_storage = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
         self.obs_cpu_cycle = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
+        self.obs_remain_cycle = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
         #self.obs_topic_num_used = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.obs_size2), dtype=np.float32)
         #self.obs_num_used = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
         self.obs_topic_info = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, 3), dtype=np.float32)
@@ -66,7 +67,7 @@ class SharedReplayBuffer(object):
 
     #  データを挿入する
     #def insert_batch(self, obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask, actions, action_log_probs, value_preds, rewards, agent_perm, topic_perm):
-    def insert_batch(self, obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_topic_info, mask, actions, action_log_probs, value_preds, rewards, agent_perm, topic_perm):
+    def insert_batch(self, obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_remain_cycle, obs_topic_info, mask, actions, action_log_probs, value_preds, rewards, agent_perm, topic_perm):
 
         self.obs_posi[self.step + 1] = obs_posi
         self.obs_publisher[self.step + 1] = obs_publisher
@@ -75,6 +76,7 @@ class SharedReplayBuffer(object):
         #self.obs_topic_used_storage[self.step + 1] = obs_topic_used_storage
         self.obs_storage[self.step + 1] = obs_storage
         self.obs_cpu_cycle[self.step + 1] = obs_cpu_cycle
+        self.obs_remain_cycle[self.step + 1] = obs_remain_cycle
         #self.obs_topic_num_used[self.step + 1] = obs_topic_num_used
         #self.obs_num_used[self.step + 1] = obs_num_used
         self.obs_topic_info[self.step + 1] = obs_topic_info
@@ -110,7 +112,7 @@ class SharedReplayBuffer(object):
 
             self.advantages[step][self.mask[step]] = gae
             self.returns[step][self.mask[step]] = gae + value_normalizer.denormalize(self.value_preds[step][self.mask[step]])
-
+        
 
     def feed_forward_generator_transformer(self, advantages, num_mini_batch=None, mini_batch_size=None):
         """
@@ -147,9 +149,10 @@ class SharedReplayBuffer(object):
         obs_edge[:, :, :, self.obs_size2*4:self.obs_size2*5] = self.obs_num_used[:-1][:, :, np.newaxis]
         """
 
-        obs_edge = np.zeros((self.episode_length, self.batch_size, self.num_topic, self.obs_size2*2), dtype=np.float32)
+        obs_edge = np.zeros((self.episode_length, self.batch_size, self.num_topic, self.obs_size2*3), dtype=np.float32)
         obs_edge[:, :, :, 0:self.obs_size2] = self.obs_storage[:-1][:, :, np.newaxis]
         obs_edge[:, :, :, self.obs_size2:self.obs_size2*2] = self.obs_cpu_cycle[:-1][:, :, np.newaxis]
+        obs_edge[:, :, :, self.obs_size2*2:self.obs_size2*3] = self.obs_remain_cycle[:-1][:, :, np.newaxis]
 
         obs_topic_info = self.obs_topic_info[:-1]
 
