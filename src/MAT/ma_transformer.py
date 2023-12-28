@@ -109,10 +109,11 @@ class DecodeBlock(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, obs_distri_dim, obs_info_dim, n_block, n_embd, n_head, n_agent, n_topic, device):
+    def __init__(self, obs_distri_dim, edge_dim, obs_info_dim, n_block, n_embd, n_head, n_agent, n_topic, device):
         super(Encoder, self).__init__()
 
         self.obs_distri_dim = obs_distri_dim
+        self.edge_dim = edge_dim
         self.obs_info_dim = obs_info_dim
         self.n_embd = n_embd
         self.n_agent = n_agent
@@ -122,7 +123,7 @@ class Encoder(nn.Module):
         self.obs_encoder_posi = nn.Sequential(init_(nn.Linear(obs_distri_dim, n_embd), activate=True), nn.GELU())
         self.obs_encoder_client = nn.Sequential(init_(nn.Linear(obs_distri_dim*3, n_embd), activate=True), nn.GELU())
         #self.obs_encoder_edge = nn.Sequential(init_(nn.Linear(obs_distri_dim*5, n_embd), activate=True), nn.GELU())
-        self.obs_encoder_edge = nn.Sequential(init_(nn.Linear(obs_distri_dim*3, n_embd), activate=True), nn.GELU())
+        self.obs_encoder_edge = nn.Sequential(init_(nn.Linear(self.edge_dim*3, n_embd), activate=True), nn.GELU())
         self.obs_encoder = nn.Sequential(init_(nn.Linear(n_embd*3+self.obs_info_dim, n_embd), activate=True), nn.GELU())
 
         self.blocks = nn.Sequential(*[EncodeBlock(n_embd, n_head, n_agent, n_topic) for _ in range(n_block)])
@@ -139,7 +140,7 @@ class Encoder(nn.Module):
         obs_emb_posi = obs_emb_posi.unsqueeze(2).repeat(1, 1, self.n_topic, 1).reshape(batch_dim, self.n_agent*self.n_topic, self.n_embd)
         obs_emb_client = obs_emb_client.unsqueeze(1).repeat(1, self.n_agent, 1, 1).reshape(batch_dim, self.n_agent*self.n_topic, self.n_embd)
         obs_emb_edge = obs_emb_edge.unsqueeze(1).repeat(1, self.n_agent, 1, 1).reshape(batch_dim, self.n_agent*self.n_topic, self.n_embd)
-        obs_topic_info = obs_topic_info.unsqueeze(1).repeat(1, self.n_agent, 1, 1).reshape(batch_dim, self.n_agent*self.n_topic, 3)
+        obs_topic_info = obs_topic_info.unsqueeze(1).repeat(1, self.n_agent, 1, 1).reshape(batch_dim, self.n_agent*self.n_topic, self.obs_info_dim)
 
         obs_embeddings = self.obs_encoder(torch.cat([obs_emb_posi[mask], obs_emb_client[mask], obs_emb_edge[mask], obs_topic_info[mask]], dim=-1))
 
@@ -190,7 +191,7 @@ class Decoder(nn.Module):
 
 class MultiAgentTransformer(nn.Module):
 
-    def __init__(self, obs_distri_dim, obs_info_dim, action_dim, batch_size, max_agent, max_topic, n_block, n_embd, device=torch.device("cpu")):
+    def __init__(self, obs_distri_dim, edge_dim, obs_info_dim, action_dim, batch_size, max_agent, max_topic, n_block, n_embd, device=torch.device("cpu")):
 
         super(MultiAgentTransformer, self).__init__()
 
@@ -207,7 +208,7 @@ class MultiAgentTransformer(nn.Module):
         self.n_embd = n_embd
         self.n_head = 1
 
-        self.encoder = Encoder(obs_distri_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic, self.device)
+        self.encoder = Encoder(obs_distri_dim, edge_dim, obs_info_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic, self.device)
         self.decoder = Decoder(action_dim, self.n_block, self.n_embd, self.n_head, max_agent, max_topic)
 
         self.to(device)

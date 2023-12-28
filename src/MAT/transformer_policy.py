@@ -18,7 +18,7 @@ class TransformerPolicy:
     param device: (torch.device) 実行するデバイスを指定します（cpu/gpu）。
     """
 
-    def __init__(self, obs_dim, obs_distri_dim, obs_info_dim, act_dim, batch_size, max_agent, max_topic, lr, eps, weight_decay, n_block, n_embd, device=torch.device("cpu"), multi=True):
+    def __init__(self, obs_dim, obs_distri_dim, obs_edge_dim, obs_info_dim, act_dim, batch_size, max_agent, max_topic, lr, eps, weight_decay, n_block, n_embd, device=torch.device("cpu"), multi=True):
         self.device = device
         self.lr = lr
         self.opti_eps = eps
@@ -27,6 +27,7 @@ class TransformerPolicy:
 
         self.obs_dim = obs_dim
         self.obs_distri_dim = obs_distri_dim
+        self.edge_dim = obs_edge_dim
         self.obs_info_dim = obs_info_dim
 
         self.act_dim = act_dim
@@ -43,7 +44,7 @@ class TransformerPolicy:
         if multi:
             self.transformer = MAT_multi(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, max_agent, max_topic, n_block, n_embd, device=device)
         else:
-            self.transformer = MAT(self.obs_distri_dim, self.obs_info_dim, self.act_dim, self.batch_size, max_agent, max_topic, n_block, n_embd, device=device)
+            self.transformer = MAT(self.obs_distri_dim, self.edge_dim, self.obs_info_dim, self.act_dim, self.batch_size, max_agent, max_topic, n_block, n_embd, device=device)
 
         self.optimizer = torch.optim.Adam(self.transformer.parameters(), lr=self.lr, eps=self.opti_eps, weight_decay=self.weight_decay)
 
@@ -80,8 +81,8 @@ class TransformerPolicy:
         obs_posi = obs_posi.reshape(-1, self.max_agent, self.obs_distri_dim)
         obs_client = obs_client.reshape(-1, self.max_topic, self.obs_distri_dim*3)
         #obs_edge = obs_edge.reshape(-1, self.max_topic, self.obs_distri_dim*5)
-        obs_edge = obs_edge.reshape(-1, self.max_topic, self.obs_distri_dim*3)
-        obs_topic_info = obs_topic_info.reshape(-1, self.max_topic, 3)
+        obs_edge = obs_edge.reshape(-1, self.max_topic, self.edge_dim*3)
+        obs_topic_info = obs_topic_info.reshape(-1, self.max_topic, self.obs_info_dim)
         actions = actions.reshape(-1, self.max_agent*self.max_topic, self.act_num)
 
         action_log_probs, values, entropy = self.transformer(obs_posi, obs_client, obs_edge, obs_topic_info, actions, mask)

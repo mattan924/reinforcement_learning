@@ -139,12 +139,12 @@ class Env:
         #  edge情報の読み込み
         edges = util.read_edge(self.edge_file)
 
-        self.all_edge_opt = [Edge(e.id, e.x, e.y, e.volume, e.cpu_cycle, self.num_topic) for e in edges]
+        self.all_edge = [Edge(e.id, e.x, e.y, e.volume, e.cpu_cycle, self.num_topic) for e in edges]
 
         #  topic 情報の読み込み
         topics = util.read_topic(self.topic_file)
 
-        self.all_topic_opt = [Topic(t.id, t.save_period, t.publish_rate, t.data_size, t.require_cycle) for t in topics]
+        self.all_topic = [Topic(t.id, t.save_period, t.publish_rate, t.data_size, t.require_cycle) for t in topics]
 
         self.learning_data = util.read_data_set_topic(self.data_file, self.num_topic)
 
@@ -265,6 +265,8 @@ class Env:
     #  状態の観測
     def get_observation_mat(self, agent_perm, topic_perm, obs_size=81):
         channel_dim = obs_size*obs_size
+        edge_obs_size = 3
+        edge_channel_dim = 9
 
         max_agent = len(agent_perm)
         max_topic = len(topic_perm)
@@ -341,15 +343,18 @@ class Env:
         obs_publisher = np.zeros((max_topic, channel_dim))  #  あるトピックの publisher の分布
         obs_subscriber = np.zeros((max_topic ,channel_dim))  #  あるトピックの subscriber の分布
         obs_distribution = np.zeros((channel_dim))  #  クライアントの分布
-        obs_storage = np.zeros((channel_dim))  #  最大ストレージサイズ
-        obs_cpu_cycle = np.zeros((channel_dim))  #  CPU の最大クロック数
-        obs_remain_cycle = np.zeros((channel_dim))
+        obs_storage = np.zeros((edge_channel_dim))  #  最大ストレージサイズ
+        obs_cpu_cycle = np.zeros((edge_channel_dim))  #  CPU の最大クロック数
+        obs_remain_cycle = np.zeros((edge_channel_dim))
         obs_topic_info = np.zeros((max_topic, 3))  #  あるトピックの処理に必要なクロック数, データサイズ, ストレージサイズ
 
         mask = np.zeros((max_agent, max_topic))
 
         block_len_x = (self.max_x-self.min_x)/obs_size
         block_len_y = (self.max_y-self.min_y)/obs_size
+
+        edge_block_len_x = (self.max_x-self.min_x)/edge_obs_size
+        edge_block_len_y = (self.max_y-self.min_y)/edge_obs_size
 
         for i in range(max_agent):
             client_id = agent_perm[i]
@@ -380,17 +385,17 @@ class Env:
                 obs_distribution[block_index_y*obs_size + block_index_x] += 1
 
         for edge in self.all_edge:
-            block_index_x = int(edge.x / block_len_x)
-            block_index_y = int(edge.y / block_len_y)
+            block_index_x = int(edge.x / edge_block_len_x)
+            block_index_y = int(edge.y / edge_block_len_y)
 
-            if block_index_x == obs_size:
-                block_index_x = obs_size-1
-            if block_index_y == obs_size:
-                block_index_y = obs_size-1
+            if block_index_x == edge_obs_size:
+                block_index_x = edge_obs_size-1
+            if block_index_y == edge_obs_size:
+                block_index_y = edge_obs_size-1
                 
-            obs_storage[block_index_y*obs_size + block_index_x] = edge.max_volume
-            obs_cpu_cycle[block_index_y*obs_size + block_index_x] = edge.cpu_cycle
-            obs_remain_cycle[block_index_y*obs_size + block_index_x] = edge.remain_cycle
+            obs_storage[block_index_y*edge_obs_size + block_index_x] = edge.max_volume
+            obs_cpu_cycle[block_index_y*edge_obs_size + block_index_x] = edge.cpu_cycle
+            obs_remain_cycle[block_index_y*edge_obs_size + block_index_x] = edge.remain_cycle
 
         for t in range(self.num_topic):
             topic_id = topic_perm[t]
@@ -443,6 +448,8 @@ class Env:
 
         for edge in self.all_edge:
             edge.used_publishers = np.zeros(self.num_topic)
+            edge.used_volume = np.zeros(self.num_topic)
+            edge.deploy_topic = np.zeros(self.num_topic)
 
         block_len_x = (self.max_x-self.min_x)/3
         block_len_y = (self.max_y-self.min_y)/3
@@ -468,8 +475,6 @@ class Env:
                             client.sub_edge[topic_id] = block_index_y*3+block_index_x
 
         for edge in self.all_edge:
-            edge.used_volume = np.zeros(self.num_topic)
-            edge.deploy_topic = np.zeros(self.num_topic)
             num_message = 0
             for t in range(self.num_topic):
                 num_message += self.all_topic[t].publish_rate * self.time_step * edge.used_publishers[t]
@@ -574,12 +579,14 @@ class Env:
         gamma = 0.1
 
         delay += gamma*self.cal_distance(publisher.x, publisher.y, pub_edge.x, pub_edge.y)
-        delay += self.cal_compute_time(pub_edge, n)
+        compute_delay = self.cal_compute_time(pub_edge, n)
+        delay += compute_delay
+       
         if pub_edge.deploy_topic[n]:
             delay += gamma*self.cal_distance(pub_edge.x, pub_edge.y, sub_edge.x, sub_edge.y)
         else:
             delay += 2*self.cloud_time
-        delay += gamma*self.cal_distance(sub_edge.x, sub_edge.y, subscriber.x, subscriber.y)
+        delay += gamma*self.cal_distance(sub_edge.x, sub_edge.y, subscriber.x, subscriber.y)        
 
         return delay
 

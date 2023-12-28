@@ -35,7 +35,9 @@ class SharedReplayBuffer(object):
 
         self.obs_dim = obs_dim
         #self.obs_size2 = int((self.obs_dim-3)/9)
-        self.obs_size2 = int((self.obs_dim-3)/7)
+        self.edge_obs_size = 3**2
+        self.topic_obs_size = 3
+        self.obs_size2 = int((self.obs_dim - self.edge_obs_size*3 - self.topic_obs_size)/4)
         self.act_dim = act_dim
 
         self.obs_posi = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents, self.obs_size2), dtype=np.float32)
@@ -43,12 +45,12 @@ class SharedReplayBuffer(object):
         self.obs_subscriber = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.obs_size2), dtype=np.float32)
         self.obs_distribution = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
         #self.obs_topic_used_storage = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.obs_size2), dtype=np.float32)
-        self.obs_storage = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
-        self.obs_cpu_cycle = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
-        self.obs_remain_cycle = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
+        self.obs_storage = np.zeros((self.episode_length + 1, self.batch_size, self.edge_obs_size), dtype=np.float32)
+        self.obs_cpu_cycle = np.zeros((self.episode_length + 1, self.batch_size, self.edge_obs_size), dtype=np.float32)
+        self.obs_remain_cycle = np.zeros((self.episode_length + 1, self.batch_size, self.edge_obs_size), dtype=np.float32)
         #self.obs_topic_num_used = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.obs_size2), dtype=np.float32)
         #self.obs_num_used = np.zeros((self.episode_length + 1, self.batch_size, self.obs_size2), dtype=np.float32)
-        self.obs_topic_info = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, 3), dtype=np.float32)
+        self.obs_topic_info = np.zeros((self.episode_length + 1, self.batch_size, self.num_topic, self.topic_obs_size), dtype=np.float32)
         self.mask = np.zeros((self.episode_length + 1, self.batch_size, self.num_agents*self.num_topic), dtype=np.bool)
 
         self.value_preds = np.zeros((self.episode_length + 1, self.batch_size, num_agents*num_topic, 1), dtype=np.float32)
@@ -149,10 +151,10 @@ class SharedReplayBuffer(object):
         obs_edge[:, :, :, self.obs_size2*4:self.obs_size2*5] = self.obs_num_used[:-1][:, :, np.newaxis]
         """
 
-        obs_edge = np.zeros((self.episode_length, self.batch_size, self.num_topic, self.obs_size2*3), dtype=np.float32)
-        obs_edge[:, :, :, 0:self.obs_size2] = self.obs_storage[:-1][:, :, np.newaxis]
-        obs_edge[:, :, :, self.obs_size2:self.obs_size2*2] = self.obs_cpu_cycle[:-1][:, :, np.newaxis]
-        obs_edge[:, :, :, self.obs_size2*2:self.obs_size2*3] = self.obs_remain_cycle[:-1][:, :, np.newaxis]
+        obs_edge = np.zeros((self.episode_length, self.batch_size, self.num_topic, self.edge_obs_size*3), dtype=np.float32)
+        obs_edge[:, :, :, 0:self.edge_obs_size] = self.obs_storage[:-1][:, :, np.newaxis]
+        obs_edge[:, :, :, self.edge_obs_size:self.edge_obs_size*2] = self.obs_cpu_cycle[:-1][:, :, np.newaxis]
+        obs_edge[:, :, :, self.edge_obs_size*2:self.edge_obs_size*3] = self.obs_remain_cycle[:-1][:, :, np.newaxis]
 
         obs_topic_info = self.obs_topic_info[:-1]
 

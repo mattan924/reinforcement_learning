@@ -98,8 +98,6 @@ class MATTrainer:
         value_loss = self.cal_value_loss(values, value_preds_batch[mask_batch], return_batch[mask_batch])
 
         loss = policy_loss - dist_entropy * self.entropy_coef + value_loss * self.value_loss_coef
-        print(f"loss = {loss}")
-        print(f"policy_loss = {policy_loss}, dist_entropy = {dist_entropy * self.entropy_coef}, value_loss = {value_loss * self.value_loss_coef}")
         
         self.policy.optimizer.zero_grad()
         loss.backward()

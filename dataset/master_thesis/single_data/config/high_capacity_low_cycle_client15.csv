@@ -13,3 +13,5 @@ cloud_time, 200
 cloud_cycle, 50
 save_period,30
 speed,40
+topic_cycle, 0.002
+publish_rate, 5
