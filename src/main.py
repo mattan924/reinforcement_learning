@@ -4,9 +4,9 @@ from MAT.mat_runner import MATRunner
 import sys
 
 
-#learning_data_index_path = "../dataset/master_thesis/single_data/index/high_capacity_high_cycle_client15.csv"
-learning_data_index_dir = "../dataset/master_thesis/multi_data/high_capacity_low_cycle_client20_fix20/train/index/"
-test_data_index_dir = "../dataset/master_thesis/multi_data/high_capacity_low_cycle_client20_fix20/test/index/"
+#learning_data_index_path = "../dataset/master_thesis/single_data/index/high_capacity_low_cycle_client40.csv"
+learning_data_index_dir = "../dataset/master_thesis/multi_data/high_capycity_high_cycle_client40_fix50/train/index/"
+test_data_index_dir = "../dataset/master_thesis/multi_data/high_capycity_high_cycle_client40_fix50/test/index/"
 
 # 各種パラメーター
 # MAT
@@ -19,28 +19,29 @@ max_topic = 3
 
 # ハイパーパラメーター
 obs_size = 9
-sample_data = 16
-multi_env = 16
+sample_data = 64
+multi_env = 1
 batch_size = sample_data * multi_env
 ppo_epoch = 6
 lr = 0.0005
 eps = 1e-05
 weight_decay = 0.0001
 n_block = 3
-n_embd = 9
+n_embd1 = 81
+n_embd2 = 9
 reward_scaling = False
 
 
 device = "cuda:0"
-result_dir = "../result/save/master_thesis/multi_data/"
-file_name = "high_capacity_low_cycle_client20_fix20_batch256_"
+result_dir = "../result/save/master_thesis/multi_data/high_capacity_high_cycle/"
+file_name = "client40_fix50_pretraining"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
-#load_parameter_path = '../result/save/master_thesis/single_data/model_parameter/transformer_high_capacity_low_cycle_client15_2_0_9900.pth'
-load_parameter_path = None
+load_parameter_path = '../result/save/master_thesis/multi_data/high_capacity_high_cycle/model_parameter/transformer_high_capacity_high_cycle_client20_fix20_networktest_batch64_0_10000.pth'
+#load_parameter_path = None
 
 
-runner = MATRunner(batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd, reward_scaling, device, max_agent, max_topic)
+runner = MATRunner(batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd1, n_embd2, reward_scaling, device, max_agent, max_topic)
 
 for i in range(1):
     output = output_base + str(i)
