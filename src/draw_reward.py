@@ -124,9 +124,9 @@ data_index_dir = "../dataset/master_thesis/multi_data/low_capacity_high_cycle_cl
 data_index_dir_path = os.path.join(data_index_dir, "*")
 data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-log_path_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle_client20_fix20_0_test"
+log_path_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/low_capacity_high_cycle_client20_fix20_0_test"
 
-result_fig_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle_client20_fix20_test"
+result_fig_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/low_capacity_high_cycle_client20_fix20_test"
 
 for idx in range(len(data_index_path)):
     index_path = data_index_path[idx]
