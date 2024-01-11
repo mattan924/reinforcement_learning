@@ -193,10 +193,21 @@ class MATRunner:
             obs_topic_info_batch = np.zeros((batch_size, self.max_topic, self.topic_obs_size), dtype=np.float32)
             mask_batch = np.zeros((batch_size, self.max_agent, self.max_topic), dtype=np.bool)
 
+            print(f"===== time: {time} =====")
+
             # 報酬の受け取り
             for idx in range(batch_size):
                 env = env_list[idx]
                 reward = env.step(actions_batch[idx][buffer.mask[step][idx]], buffer.agent_perm[step][idx], buffer.topic_perm[step][idx], time)
+
+                total_remain_cycle = 0
+                for edge_idx in range(env.num_edge):
+                    edge = env.all_edge[edge_idx]
+                    print(f"edge {edge_idx}: {edge.remain_cycle}")
+                    total_remain_cycle += edge.remain_cycle
+                print(f"reward = {reward}")
+                print(f"total_remain_cycle = {total_remain_cycle}")
+
 
                 reward_history[idx].append(reward)
                 if self.reward_scaling == True:
@@ -783,9 +794,8 @@ class MATRunner:
     
 
     def execute_single_env(self,  data_index_path, load_parameter_path):
-
         env_list = []
-        for idx in range(self.batch_size):
+        for _ in range(self.batch_size):
             env_list.append(Env(data_index_path))
 
         simulation_time = env_list[0].simulation_time
@@ -798,7 +808,7 @@ class MATRunner:
 
         policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.edge_obs_size, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd1, self.n_embd2, self.device, multi=False)
 
-        trainer = MATTrainer(policy, self.device)
+        trainer = MATTrainer(policy, self.ppo_epoch, self.device)
 
         buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
 
@@ -808,7 +818,7 @@ class MATRunner:
             env = env_list[idx]
             self.warmup(buffer, env, idx)
 
-        reward_history = [[] for idx in range(self.batch_size)]
+        reward_history = [[] for _ in range(self.batch_size)]
 
         self.episode_loop(simulation_time, time_step, trainer, buffer, self.batch_size, env_list, reward_history, deternimistic=False)
 

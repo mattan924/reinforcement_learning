@@ -120,40 +120,44 @@ fig.savefig(result_fig)
 """
 
 
-data_index_dir = "../dataset/master_thesis/multi_data/low_capacity_high_cycle_client20_fix20/test/index/"
+data_index_dir = "../dataset/master_thesis/multi_data/high_capacity_low_cycle_client20_fix20/test/index/"
 data_index_dir_path = os.path.join(data_index_dir, "*")
 data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-log_path_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/low_capacity_high_cycle_client20_fix20_0_test"
+log_path_base = "../result/save/master_thesis/multi_data/high_capacity_low_cycle/client20_fix20_0_test"
+#log_path_base_pretrain = "../result/save/master_thesis/multi_data/high_capacity_low_cycle/client20_fix20_pretraining0_test"
 
-result_fig_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/low_capacity_high_cycle_client20_fix20_test"
+result_fig_base = "../result/save/master_thesis/multi_data/high_capacity_low_cycle/client20_fix20_test"
 
 for idx in range(len(data_index_path)):
     index_path = data_index_path[idx]
 
     log_path = log_path_base + str(idx) + ".log"
+    #log_path_pretrain = log_path_base_pretrain + str(idx) + ".log"
 
     train_curve = read_train_curve(log_path)
+    #train_curve_pretraining = read_train_curve(log_path_pretrain)
 
     df_index = pd.read_csv(index_path, index_col=0)
     opt = df_index.at['data', 'opt']
     edge_file = df_index.at['data', 'edge_file']
 
     nearest_reward = cal_nearest_server_reward(index_path)
-    reloc_reward = cal_RELOC_reward(index_path, edge_file, K=3, M=3)
+    reloc_reward = cal_RELOC_reward(index_path, edge_file, K=4, M=3)
 
     fig = plt.figure()
     wind = fig.add_subplot(1, 1, 1)
-    #wind.set_ylim(ymin=0, ymax=1500)
-    #wind.set_xlim(xmin=0, xmax=1000)
+    #wind.set_ylim(ymin=0, ymax=2000)
+    #wind.set_xlim(xmin=0, xmax=400)
     wind.grid()
     wind.set_title("test " + str(idx))
     wind.set_xlabel("training iteration")
     wind.set_ylabel("total reward (ms)")
     wind.plot(train_curve, linewidth=1, label='mat')
+    #wind.plot(train_curve_pretraining, linewidth=1, label='mat_pretraining')
     #wind.axhline(y=opt, c='r', label="optimal")
-    wind.axhline(y=nearest_reward, c='g', label="nearest_server")
-    wind.axhline(y=reloc_reward, c='r', label="RELOC")
+    #wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+    #wind.axhline(y=reloc_reward, c='r', label="RELOC")
     wind.legend()
     fig.savefig(result_fig_base + str(idx) + ".png")
 

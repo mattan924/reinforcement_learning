@@ -5,8 +5,8 @@ import sys
 
 
 #learning_data_index_path = "../dataset/master_thesis/single_data/index/high_capacity_low_cycle_client40.csv"
-learning_data_index_dir = "../dataset/master_thesis/multi_data/high_capycity_low_cycle_client40_fix50/train/index/"
-test_data_index_dir = "../dataset/master_thesis/multi_data/high_capycity_low_cycle_client40_fix50/test/index/"
+learning_data_index_dir = "../dataset/master_thesis/multi_data/high_capacity_high_cycle_client30_fix30/train/index/"
+test_data_index_dir = "../dataset/master_thesis/multi_data/high_capacity_high_cycle_client30_fix30/test/index/"
 
 # 各種パラメーター
 # MAT
@@ -33,11 +33,11 @@ reward_scaling = False
 
 
 device = "cuda:0"
-result_dir = "../result/save/master_thesis/multi_data/high_capacity_low_cycle/"
-file_name = "client40_fix50_pretraining"
+result_dir = "../result/save/master_thesis/multi_data/high_capacity_high_cycle/"
+file_name = "client30_fix30_pretraining"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
-load_parameter_path = '../result/save/master_thesis/multi_data/low_capacity_high_cycle/model_parameter/transformer_low_capacity_high_cycle_client20_fix20_0_15000.pth'
+load_parameter_path = '../result/save/master_thesis/multi_data/high_capacity_high_cycle/model_parameter/transformer_high_capacity_high_cycle_client20_fix20_networktest_batch64_0_500.pth'
 #load_parameter_path = None
 
 

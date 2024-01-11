@@ -23,41 +23,36 @@ from data import DataSolution
 # MAT
 
 start_epi_itr = 0
-max_epi_itr = 37000
+max_epi_itr = 4400
 backup_itr = 100
 
-max_agent = 30
+max_agent = 40
 max_topic = 3
 
 # ハイパーパラメーター
-obs_size = 27
-batch_size = 16
+obs_size = 9
+batch_size = 1
 ppo_epoch = 6
 lr = 0.0005
 eps = 1e-05
 weight_decay = 0
-n_block = 1
-n_embd = 9
+n_block = 3
+n_embd1 = 81
+n_embd2 = 9
 reward_scaling = True
 
 
 device = "cuda:1"
-data_index_path = "../dataset/similar_dataset/easy/traking_assign/train/index/hight_load_traking1_assign1_edge0_topic0.csv"
-load_parameter_path_base = "../result/temporary/similar_dataset/easy/traking_assign/model_parameter/transformer_hight_load_multi_scaling0_"
-output_file = "../result/temporary/similar_dataset/easy/traking_assign/hight_load_multi_scaling0_traindata_execution2.log"
+data_index_path = "../dataset/master_thesis/multi_data/high_capacity_low_cycle_client20_fix20/test/index/data_fix_traking1_assign8_edge0_topic2.csv"
+load_parameter_path_base = "../result/save/master_thesis/multi_data/high_capacity_low_cycle/model_parameter/transformer_client20_fix20_0_"
 
-runner = MATRunner(batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd, reward_scaling, device, max_agent, max_topic)
-
-with open(output_file, "w") as f:
-    pass
+runner = MATRunner(batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd1, n_embd2, reward_scaling, device, max_agent, max_topic)
 
 for epi in range(start_epi_itr, max_epi_itr+1, backup_itr):
+    print(f"========== epi: {epi} ==========")
     load_parameter_path = load_parameter_path_base + str(epi) + ".pth"
     
     reward = runner.execute_single_env(data_index_path, load_parameter_path)
-
-    with open(output_file, "a") as f:
-        f.write(f"{epi}, {reward}\n")
 
     #print(f"{reward}:{epi}/{max_epi_itr} is complete")
 
