@@ -271,73 +271,6 @@ class Env:
         max_agent = len(agent_perm)
         max_topic = len(topic_perm)
 
-        """
-        #  観測値
-        obs_posi = np.zeros((max_agent, channel_dim))  #  クライアントの位置
-        obs_publisher = np.zeros((max_topic, channel_dim))  #  あるトピックの publisher の分布
-        obs_subscriber = np.zeros((max_topic ,channel_dim))  #  あるトピックの subscriber の分布
-        obs_distribution = np.zeros((channel_dim))  #  クライアントの分布
-        obs_topic_used_storage = np.zeros((max_topic, channel_dim))  #  あるトピックが使用しているストレージ状況
-        obs_storage = np.zeros((channel_dim))  #  ストレージの空き状況
-        obs_cpu_cycle = np.zeros((channel_dim))  #  CPU の最大クロック数
-        obs_topic_num_used = np.zeros((max_topic, channel_dim))  #  あるトピックの publisher がどのエッジを何人使用しているか
-        obs_num_used = np.zeros((channel_dim))  #  各エッジを使用中ののクライアントの数
-        obs_topic_info = np.zeros((max_topic, 3))  #  あるトピックの処理に必要なクロック数, データサイズ, ストレージサイズ
-
-        mask = np.zeros((max_agent, max_topic))
-
-        block_len_x = (self.max_x-self.min_x)/obs_size
-        block_len_y = (self.max_y-self.min_y)/obs_size
-
-        for i in range(max_agent):
-            client_id = agent_perm[i]
-
-            if client_id < self.num_client:
-                client = self.clients[client_id]
-                block_index_x = int(client.x / block_len_x)
-                block_index_y = int(client.y / block_len_y)
-
-                if block_index_x == obs_size:
-                    block_index_x = obs_size-1
-                if block_index_y == obs_size:
-                    block_index_y = obs_size-1
-
-                obs_posi[i][block_index_y*obs_size + block_index_x] = 1000
-
-                for t in range(max_topic):
-                    topic_id = topic_perm[t]
-                    
-                    if topic_id < self.num_topic:
-                        if client.pub_topic[topic_id] == 1:
-                            obs_publisher[t][block_index_y*obs_size + block_index_x] += 1
-                            mask[i][t] = 1
-
-                        if client.sub_topic[topic_id] == 1:
-                            obs_subscriber[t][block_index_y*obs_size + block_index_x] += 1
-
-                obs_distribution[block_index_y*obs_size + block_index_x] += 1
-
-        for edge in self.all_edge:
-            block_index_x = int(edge.x / block_len_x)
-            block_index_y = int(edge.y / block_len_y)
-
-            if block_index_x == obs_size:
-                block_index_x = obs_size-1
-            if block_index_y == obs_size:
-                block_index_y = obs_size-1
-                
-            obs_storage[block_index_y*obs_size + block_index_x] = (edge.max_volume - edge.total_used_volume)
-            obs_cpu_cycle[block_index_y*obs_size + block_index_x] = edge.cpu_cycle
-            obs_num_used[block_index_y*obs_size + block_index_x] = sum(edge.used_publishers)
-
-            for t in range(max_topic):
-                topic_id = topic_perm[t]
-
-                if topic_id < self.num_topic:
-                    obs_topic_used_storage[t][block_index_y*obs_size + block_index_x] = edge.used_volume[topic_id]
-                    obs_topic_num_used[t][block_index_y*obs_size + block_index_x] = edge.used_publishers[topic_id]
-        """
-
         #  観測値
         obs_posi = np.zeros((max_agent, channel_dim))  #  クライアントの位置
         obs_publisher = np.zeros((max_topic, channel_dim))  #  あるトピックの publisher の分布
@@ -397,15 +330,13 @@ class Env:
             obs_cpu_cycle[block_index_y*edge_obs_size + block_index_x] = edge.cpu_cycle
             obs_remain_cycle[block_index_y*edge_obs_size + block_index_x] = edge.remain_cycle
 
-        for t in range(self.num_topic):
+        for t in range(max_topic):
             topic_id = topic_perm[t]
             if topic_id < self.num_topic:
                 topic = self.all_topic[topic_id]
                 obs_topic_info[t][0] = topic.require_cycle * 1e4
                 obs_topic_info[t][1] = topic.data_size * 1e4
                 obs_topic_info[t][2] = topic.volume * 1e1
-
-        # return obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_topic_used_storage, obs_storage, obs_cpu_cycle, obs_topic_num_used, obs_num_used, obs_topic_info, mask
 
         return obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_remain_cycle, obs_topic_info, mask
     

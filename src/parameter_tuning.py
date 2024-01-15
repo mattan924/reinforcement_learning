@@ -36,16 +36,16 @@ test_data_index_dir = "../dataset/master_thesis/multi_data/high_capacity_low_cyc
 # 設定
 max_agent = 20
 max_topic = 3
-device = "cuda:0"
+device = "cuda:1"
 start_epi_itr = 0
 max_epi_itr = 1000
 
 log_dir = "../result/save/master_thesis/multi_data/parameter_tuning/high_capacity_low_cycle/"
 log_name_base = 'client20_fix20_tuning_'
-process_name = "process1"
+process_name = "process8"
 
 optuna.logging.get_logger("optuna").addHandler(logging.FileHandler(log_dir + log_name_base + process_name + '.log'))
 
-pruner = optuna.pruners.MedianPruner(n_startup_trials=4, n_warmup_steps=25)
-study = optuna.create_study(storage="sqlite:///high_low.db", study_name="client20_fix20", pruner=pruner, direction='minimize', load_if_exists=True)
+pruner = optuna.pruners.MedianPruner(n_startup_trials=4, n_warmup_steps=50)
+study = optuna.create_study(storage="sqlite:///tuning_DB/high_low.db", study_name="client20_fix20", pruner=pruner, direction='minimize', load_if_exists=True)
 study.optimize(objective, n_trials=10)
