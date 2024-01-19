@@ -4,9 +4,9 @@ from MAT.mat_runner import MATRunner
 import sys
 
 
-#learning_data_index_path = "../dataset/master_thesis/single_data/index/high_capacity_low_cycle_client40.csv"
-learning_data_index_dir = "../dataset/master_thesis/multi_data/high_capacity_high_cycle_client20_fix20/train/index/"
-test_data_index_dir = "../dataset/master_thesis/multi_data/high_capacity_high_cycle_client20_fix20/test/index/"
+#learning_data_index_path = "../dataset/master_thesis/single_data/index/fix_allocation_low_capacity_high_cycle.csv"
+learning_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/high_capacity_high_cycle_client20_fix20_data10000/train/index/"
+test_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/high_capacity_low_cycle_client20_fix20_data10000/test/index/"
 
 # 各種パラメーター
 # MAT
@@ -14,8 +14,8 @@ start_epi_itr = 0
 max_epi_itr = 10000
 backup_itr = 100
 
-max_agent = 40
-max_topic = 5
+max_agent = 60
+max_topic = 10
 
 # ハイパーパラメーター
 obs_size = 9
@@ -31,24 +31,26 @@ n_embd1 = 81
 n_embd2 = 9
 reward_scaling = False
 
+num_mini_batch = 1
+
 
 device = "cuda:1"
 result_dir = "../result/temporary/debug/"
-file_name = "batch_env_debug"
+file_name = "debug_env_batch"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
-#load_parameter_path = '../result/save/master_thesis/multi_data/high_capacity_high_cycle/model_parameter/transformer_high_capacity_high_cycle_client20_fix20_networktest_batch64_0_500.pth'
+#load_parameter_path = '../result/save/master_thesis/fix_allocation/model_parameter/transformer_low_capacity_high_cycle0_5000.pth'
 load_parameter_path = None
 
 
-runner = MATRunner(batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd1, n_embd2, reward_scaling, device, max_agent, max_topic)
+runner = MATRunner(batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd1, n_embd2, reward_scaling, num_mini_batch, device, max_agent, max_topic)
 
 for i in range(1):
     output = output_base + str(i)
     transformer_weight = transformer_weight_base + "_" + file_name + str(i)
 
     #  標準エラー出力先の変更
-    #sys.stderr = open(output + "_err.log", 'w')
+    sys.stderr = open(output + "_err.log", 'w')
 
     #runner.train_single_env(start_epi_itr, max_epi_itr, learning_data_index_path, result_dir, output, transformer_weight, backup_itr, load_parameter_path=load_parameter_path)
     #runner.train_multi_env(sample_data, start_epi_itr, max_epi_itr, learning_data_index_dir, test_data_index_dir, result_dir, output, transformer_weight, backup_itr, load_parameter_path=load_parameter_path)

@@ -29,8 +29,8 @@ class Env_Batch:
 
         self.client_x = np.zeros((self.batch_size, self.num_client))
         self.client_y = np.zeros((self.batch_size, self.num_client))
-        self.client_pub_topic = np.zeros((self.batch_size, self.num_client, self.num_topic))
-        self.client_sub_topic = np.zeros((self.batch_size, self.num_client, self.num_topic))
+        self.client_pub_topic = np.zeros((self.batch_size, self.num_client, self.num_topic), np.bool_)
+        self.client_sub_topic = np.zeros((self.batch_size, self.num_client, self.num_topic), np.bool_)
         self.client_pub_edge = np.zeros((self.batch_size, self.num_client, self.num_topic, self.num_edge))
         self.client_sub_edge = np.zeros((self.batch_size, self.num_client, self.num_edge))
 
@@ -124,8 +124,8 @@ class Env_Batch:
 
         self.client_x = np.zeros((self.batch_size, self.num_client))
         self.client_y = np.zeros((self.batch_size, self.num_client))
-        self.client_pub_topic = np.zeros((self.batch_size, self.num_client, self.num_topic))
-        self.client_sub_topic = np.zeros((self.batch_size, self.num_client, self.num_topic))
+        self.client_pub_topic = np.zeros((self.batch_size, self.num_client, self.num_topic), np.bool_)
+        self.client_sub_topic = np.zeros((self.batch_size, self.num_client, self.num_topic), np.bool_)
         self.client_pub_edge = np.zeros((self.batch_size, self.num_client, self.num_topic, self.num_edge))
         self.client_sub_edge = np.zeros((self.batch_size, self.num_client, self.num_edge))
 
@@ -151,17 +151,6 @@ class Env_Batch:
         self.topic_update_client(0)
 
         self.topic_cal_volume()
-
-    
-    def get_perm(self, max_agent, max_topic):
-        agent_perm_batch = np.zeros((self.batch_size, max_agent), dtype=np.int64)
-        topic_perm_batch = np.zeros((self.batch_size, max_topic), dtype=np.int64)
-
-        for idx in range(self.batch_size):
-            agent_perm_batch[idx] = np.random.permutation(max_agent)
-            topic_perm_batch[idx] = np.random.permutation(max_topic)
-
-        return agent_perm_batch, topic_perm_batch
 
     
     def get_observation_mat(self, agent_perm_batch, topic_perm_batch, obs_size=9):
@@ -277,3 +266,37 @@ class Env_Batch:
         mask[agent_id_mask]= client_pub_topic_perm_extend.reshape(-1, max_topic)
 
         return obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_remain_cycle, obs_topic_info, mask
+    
+
+    def step(self, actions_batch, agent_perm_batch, topic_perm_batch, time):
+        max_agent = agent_perm_batch.shape[1]
+        max_topic = topic_perm_batch.shape[1]
+
+        agent_id_mask = agent_perm_batch < self.num_client
+        topic_id_mask = topic_perm_batch < self.num_topic
+
+        agent_perm_mask = agent_perm_batch[agent_id_mask].reshape(self.batch_size, self.num_client)
+        topic_perm_mask = topic_perm_batch[topic_id_mask].reshape(self.batch_size, self.num_topic)
+
+        self.edge_used_publisher = np.zeros((self.batch_size, self.num_edge, self.num_topic))
+        self.edge_used_volume = np.zeros((self.batch_size, self.num_edge, self.num_topic))
+        self.edge_deploy_topic = np.bool_(np.zeros((self.batch_size, self.num_edge, self.num_topic)))
+
+        actions_batch = np.identity(self.num_edge)[actions_batch.reshape(-1)].reshape(self.batch_size, -1, self.num_edge)
+
+        # self.client_pub_edge (batch_size, num_client, num_topic, num_edge)
+
+        print(f"actions_batch = {actions_batch.shape}")
+        print(f"agent_perm_mask = {agent_perm_mask.shape}")
+        print(f"topic_perm_mask = {topic_perm_mask.shape}")
+
+        self.client_pub_edge[self.client_pub_topic] = actions_batch
+
+        # self.client_sub_edge (batch_size, num_client, num_edge)
+        # self.edge_used_publisher (batch_size, num_edge, num_topic)
+
+        reward_batch = np.zeroos((self.batch_size))
+
+        return reward_batch
+
+

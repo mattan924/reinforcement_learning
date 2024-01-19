@@ -120,14 +120,14 @@ fig.savefig(result_fig)
 """
 
 
-data_index_dir = "../dataset/master_thesis/multi_data/high_capacity_low_cycle_client20_fix20/test/index/"
+data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle_client20_fix20_data100000/test/index/"
 data_index_dir_path = os.path.join(data_index_dir, "*")
 data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-log_path_base = "../result/save/master_thesis/multi_data/high_capacity_low_cycle/client20_fix20_0_test"
+log_path_base = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client20_fix20_0_test"
 #log_path_base_pretrain = "../result/save/master_thesis/multi_data/high_capacity_low_cycle/client20_fix20_pretraining0_test"
 
-result_fig_base = "../result/save/master_thesis/multi_data/high_capacity_low_cycle/client20_fix20_test"
+result_fig_base = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client20_fix20_test"
 
 for idx in range(len(data_index_path)):
     index_path = data_index_path[idx]
@@ -152,12 +152,12 @@ for idx in range(len(data_index_path)):
     wind.grid()
     wind.set_title("test " + str(idx))
     wind.set_xlabel("training iteration")
-    wind.set_ylabel("total reward (ms)")
+    wind.set_ylabel("total reward")
     wind.plot(train_curve, linewidth=1, label='mat')
     #wind.plot(train_curve_pretraining, linewidth=1, label='mat_pretraining')
     #wind.axhline(y=opt, c='r', label="optimal")
-    #wind.axhline(y=nearest_reward, c='g', label="nearest_server")
-    #wind.axhline(y=reloc_reward, c='r', label="RELOC")
+    wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+    wind.axhline(y=reloc_reward, c='r', label="RELOC")
     wind.legend()
     fig.savefig(result_fig_base + str(idx) + ".png")
 

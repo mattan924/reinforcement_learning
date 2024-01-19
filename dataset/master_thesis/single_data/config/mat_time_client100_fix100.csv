@@ -1,0 +1,17 @@
+min_x,0
+max_x,12
+min_y,0
+max_y,12
+simulation_time,300
+time_step,5
+num_client,100
+num_topic,3
+num_edge,9
+volume, 5
+cpu_cycle,1
+cloud_time, 200
+cloud_cycle, 50
+save_period,30
+speed,40
+topic_cycle, 0.005
+publish_rate, 3

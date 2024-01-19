@@ -1,8 +1,4 @@
 from env import Env
-from MAT.ma_transformer import MultiAgentTransformer
-from MAT.transformer_policy import TransformerPolicy
-from MAT.mat_trainer import MATTrainer
-from MAT.shared_buffer import SharedReplayBuffer
 from MAT.mat_runner import MATRunner
 
 import matplotlib.pyplot as plt

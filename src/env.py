@@ -507,7 +507,7 @@ class Env:
         sub_edge = self.all_edge[int(subscriber.sub_edge[n])]
 
         delay = 0
-        gamma = 0.1
+        gamma = 1
 
         delay += gamma*self.cal_distance(publisher.x, publisher.y, pub_edge.x, pub_edge.y)
         compute_delay = self.cal_compute_time(pub_edge, n)

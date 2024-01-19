@@ -38,7 +38,7 @@ def _t2n(x):
 
 
 class MATRunner:
-    def __init__(self, batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd1, n_embd2, reward_scaling, device, max_agent, max_topic):
+    def __init__(self, batch_size, ppo_epoch, lr, eps, weight_decay, obs_size, n_block, n_embd1, n_embd2, reward_scaling, num_mini_batch, device, max_agent, max_topic):
 
         # ハイパーパラメーター
         self.batch_size = batch_size
@@ -51,6 +51,7 @@ class MATRunner:
         self.n_embd1 = n_embd1
         self.n_embd2 = n_embd2
         self.reward_scaling = reward_scaling
+        self.num_mini_batch = num_mini_batch
 
         # 各種パラメーター
         self.device = device
@@ -231,7 +232,6 @@ class MATRunner:
             for idx in range(batch_size):
                 env = env_list[idx]
                 reward = env.step(actions_batch[idx][buffer.mask[step][idx]], buffer.agent_perm[step][idx], buffer.topic_perm[step][idx], time)
-
                 reward_history[idx].append(reward)
                 if self.reward_scaling == True:
                     reward_batch[idx] = (-reward / 200) + 1
@@ -313,7 +313,7 @@ class MATRunner:
 
         policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.edge_obs_size, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd1, self.n_embd2, device=self.device, multi=False)
 
-        trainer = MATTrainer(policy, self.ppo_epoch, self.device)
+        trainer = MATTrainer(policy, self.ppo_epoch, self.num_mini_batch, self.device)
 
         buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
 
@@ -415,7 +415,7 @@ class MATRunner:
         episode_length = int(simulation_time / time_step)
             
         policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.edge_obs_size, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd1, self.n_embd2, device=self.device, multi=False)
-        trainer = MATTrainer(policy, self.ppo_epoch, self.device)
+        trainer = MATTrainer(policy, self.ppo_epoch, self.num_mini_batch, self.device)
 
         buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
         test_buffer = SharedReplayBuffer(episode_length, len(test_env_list), self.max_agent, self.max_topic, self.obs_dim, self.N_action)
@@ -549,7 +549,7 @@ class MATRunner:
         episode_length = int(simulation_time / time_step)
         
         policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.edge_obs_size, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd1, self.n_embd2, device=self.device, multi=False)
-        trainer = MATTrainer(policy, self.ppo_epoch, self.device)
+        trainer = MATTrainer(policy, self.ppo_epoch, self.num_mini_batch, self.device)
 
         buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
         test_buffer = SharedReplayBuffer(episode_length, test_env_batch.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
@@ -592,15 +592,13 @@ class MATRunner:
             #  1エピソード中の reward の保持
             reward_history = [[] for _ in range(self.batch_size)]
 
-            self.check_batch_env_obs(env_batch, env_list_shuffle)
-
             warmup_start = time_module.perf_counter()
 
             self.warmup_batch(buffer, env_batch)
 
             warmup_end = time_module.perf_counter()
 
-            self.episode_loop_batch(simulation_time, time_step, trainer, buffer, self.batch_size, env_list_shuffle, reward_history)
+            self.episode_loop_batch(simulation_time, time_step, trainer, buffer, self.batch_size, env_batch, reward_history)
                         
             compute_start = time_module.perf_counter()
 
@@ -681,7 +679,7 @@ class MATRunner:
 
         policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.edge_obs_size, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd1, self.n_embd2, device=self.device, multi=False)
 
-        trainer = MATTrainer(policy, self.ppo_epoch, self.device)
+        trainer = MATTrainer(policy, self.ppo_epoch, self.num_mini_batch, self.device)
 
         buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
 
@@ -749,7 +747,7 @@ class MATRunner:
                 pass
 
         policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.edge_obs_size, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd1, self.n_embd2, device=self.device, multi=False)
-        trainer = MATTrainer(policy, self.ppo_epoch, self.device)
+        trainer = MATTrainer(policy, self.ppo_epoch, self.num_mini_batch, self.device)
 
         buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
         test_buffer = SharedReplayBuffer(episode_length, len(test_env_list), self.max_agent, self.max_topic, self.obs_dim, self.N_action)
@@ -829,7 +827,7 @@ class MATRunner:
 
         policy = TransformerPolicy(self.obs_dim, self.obs_distri_dim, self.edge_obs_size, self.obs_info_dim, self.N_action, self.batch_size, self.max_agent, self.max_topic, self.lr, self.eps, self.weight_decay, self.n_block, self.n_embd1, self.n_embd2, self.device, multi=False)
 
-        trainer = MATTrainer(policy, self.ppo_epoch, self.device)
+        trainer = MATTrainer(policy, self.ppo_epoch, self.num_mini_batch, self.device)
 
         buffer = SharedReplayBuffer(episode_length, self.batch_size, self.max_agent, self.max_topic, self.obs_dim, self.N_action)
 
@@ -843,11 +841,8 @@ class MATRunner:
 
         self.episode_loop(simulation_time, time_step, trainer, buffer, self.batch_size, env_list, reward_history, deternimistic=False)
 
-        reward_average = 0
-        for idx in range(self.batch_size):
-            reward_average += sum(reward_history[idx]) / self.batch_size
-
-        return reward_average
+        return reward_history
+    
 
     def check_batch_env(self, env_batch, env_list, time, time_step):
         
@@ -1112,12 +1107,9 @@ class MATRunner:
         agent_perm_batch, topic_perm_batch = self.get_perm_batch(random_flag=self.random_flag)
 
         # env_batch
-        opt_start = time_module.perf_counter()
         opt_obs_posi_batch, opt_obs_publisher_batch, opt_obs_subscriber_batch, opt_obs_distribution_batch, opt_obs_storage_batch, opt_obs_cpu_cycle_batch, opt_obs_remain_cycle_batch, opt_obs_topic_info_batch, opt_mask_batch = env_batch.get_observation_mat(agent_perm_batch, topic_perm_batch, self.obs_size)
-        opt_end = time_module.perf_counter()
 
         # env_list
-        old_start = time_module.perf_counter()
         obs_posi_batch = np.zeros((self.batch_size, self.max_agent, self.obs_distri_dim), dtype=np.float32)
         obs_publisher_batch = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
         obs_subscriber_batch = np.zeros((self.batch_size, self.max_topic, self.obs_distri_dim), dtype=np.float32)
@@ -1141,11 +1133,6 @@ class MATRunner:
             obs_remain_cycle_batch[idx] = obs_remain_cycle
             obs_topic_info_batch[idx] = obs_topic_info
             mask_batch[idx] = mask
-
-        old_end = time_module.perf_counter()
-
-        print(f"opt time = {opt_end - opt_start}")
-        print(f"old time = {old_end - old_start}")
 
         # obs_posi のチェック
         flag = True
