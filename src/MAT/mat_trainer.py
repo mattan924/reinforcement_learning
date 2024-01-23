@@ -64,7 +64,7 @@ class MATTrainer:
         return value_loss
     
 
-    def ppo_update(self, obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch,old_action_log_probs_batch, adv_targ, mask_batch):
+    def ppo_update(self, obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch):
         """
         アクターとクリティックのネットワークを更新します。
         param sample: (タプル) ネットワークを更新するデータバッチを含みます。
@@ -126,17 +126,28 @@ class MATTrainer:
         std_advantages = np.nanstd(advantages_copy[mask])
         advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
 
-        obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
+        # obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
         
-        obs_posi_batch = check(obs_posi_batch).to(**self.tpdv)
-        obs_client_batch = check(obs_client_batch).to(**self.tpdv)
-        obs_edge_batch = check(obs_edge_batch).to(**self.tpdv)
-        obs_topic_info_batch = check(obs_topic_info_batch).to(**self.tpdv)
-        actions_batch = check(actions_batch).to(**self.tpdv)
-        mask_batch = check(mask_batch)
+        # obs_posi_batch = check(obs_posi_batch).to(**self.tpdv)
+        # obs_client_batch = check(obs_client_batch).to(**self.tpdv)
+        # obs_edge_batch = check(obs_edge_batch).to(**self.tpdv)
+        # obs_topic_info_batch = check(obs_topic_info_batch).to(**self.tpdv)
+        # actions_batch = check(actions_batch).to(**self.tpdv)
+        # mask_batch = check(mask_batch)
         
         for _ in range(self.ppo_epoch):
-            self.ppo_update(obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch)
+            data_generator = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
+            for sample in data_generator:
+                obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch = sample
+
+                obs_posi_batch = check(obs_posi_batch).to(**self.tpdv)
+                obs_client_batch = check(obs_client_batch).to(**self.tpdv)
+                obs_edge_batch = check(obs_edge_batch).to(**self.tpdv)
+                obs_topic_info_batch = check(obs_topic_info_batch).to(**self.tpdv)
+                actions_batch = check(actions_batch).to(**self.tpdv)
+                mask_batch = check(mask_batch)
+
+                self.ppo_update(obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch)
 
 
     def prep_training(self):

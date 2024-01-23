@@ -5,13 +5,13 @@ import sys
 
 
 #learning_data_index_path = "../dataset/master_thesis/single_data/index/fix_allocation_low_capacity_high_cycle.csv"
-learning_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/high_capacity_high_cycle_client20_fix20_data10000/train/index/"
-test_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/high_capacity_low_cycle_client20_fix20_data10000/test/index/"
+learning_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle_client20_fix20_data100000/train/index/"
+test_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle_client20_fix20_data100000/test/index/"
 
 # 各種パラメーター
 # MAT
 start_epi_itr = 0
-max_epi_itr = 10000
+max_epi_itr = 5000
 backup_itr = 100
 
 max_agent = 60
@@ -19,7 +19,7 @@ max_topic = 10
 
 # ハイパーパラメーター
 obs_size = 9
-sample_data = 64
+sample_data = 256
 multi_env = 1
 batch_size = sample_data * multi_env
 ppo_epoch = 6
@@ -31,12 +31,12 @@ n_embd1 = 81
 n_embd2 = 9
 reward_scaling = False
 
-num_mini_batch = 1
+num_mini_batch = 4
 
 
 device = "cuda:1"
-result_dir = "../result/temporary/debug/"
-file_name = "debug_env_batch"
+result_dir = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/"
+file_name = "client20_fix20_batch256_minbatch"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
 #load_parameter_path = '../result/save/master_thesis/fix_allocation/model_parameter/transformer_low_capacity_high_cycle0_5000.pth'
@@ -53,8 +53,8 @@ for i in range(1):
     sys.stderr = open(output + "_err.log", 'w')
 
     #runner.train_single_env(start_epi_itr, max_epi_itr, learning_data_index_path, result_dir, output, transformer_weight, backup_itr, load_parameter_path=load_parameter_path)
-    #runner.train_multi_env(sample_data, start_epi_itr, max_epi_itr, learning_data_index_dir, test_data_index_dir, result_dir, output, transformer_weight, backup_itr, load_parameter_path=load_parameter_path)
-    runner.debug_multi_env(sample_data, start_epi_itr, max_epi_itr, learning_data_index_dir, test_data_index_dir, result_dir, output, transformer_weight, backup_itr, load_parameter_path=load_parameter_path)
+    runner.train_multi_env(sample_data, start_epi_itr, max_epi_itr, learning_data_index_dir, test_data_index_dir, result_dir, output, transformer_weight, backup_itr, load_parameter_path=load_parameter_path)
+    #runner.debug_multi_env(sample_data, start_epi_itr, max_epi_itr, learning_data_index_dir, test_data_index_dir, result_dir, output, transformer_weight, backup_itr, load_parameter_path=load_parameter_path)
 
 #  標準エラー出力先を戻す
 sys.stderr = sys.__stderr__

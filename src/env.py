@@ -529,7 +529,7 @@ class Env:
         if edge.deploy_topic[n]:
             delay = (edge.remain_cycle / edge.cpu_cycle) + (topic.require_cycle*math.log(topic.volume / topic.data_size)) / edge.power_allocation
         else:
-            delay = (topic.require_cycle*(topic.volume / topic.data_size)) / self.cloud_cycle
+            delay = (topic.require_cycle*math.log(topic.volume / topic.data_size)) / self.cloud_cycle
 
         return delay
     

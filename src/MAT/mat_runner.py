@@ -82,17 +82,17 @@ class MATRunner:
         return agent_perm, topic_perm
     
 
-    def get_perm_batch(self, random_flag=True):
+    def get_perm_batch(self, batch_size, random_flag=True):
         
-        agent_list = [range(self.max_agent) for _ in range(self.batch_size)]
-        topic_list = [range(self.max_topic) for _ in range(self.batch_size)]
+        agent_list = [range(self.max_agent) for _ in range(batch_size)]
+        topic_list = [range(self.max_topic) for _ in range(batch_size)]
 
         if random_flag:
-            agent_perm = [random.sample(agent_list[idx], self.max_agent) for idx in range(self.batch_size)]
-            topic_perm = [random.sample(topic_list[idx], self.max_topic) for idx in range(self.batch_size)]
+            agent_perm = [random.sample(agent_list[idx], self.max_agent) for idx in range(batch_size)]
+            topic_perm = [random.sample(topic_list[idx], self.max_topic) for idx in range(batch_size)]
         else:
-            agent_perm = [list(agent_list[idx]) for idx in range(self.batch_size)]
-            topic_perm = [list(topic_list[idx]) for idx in range(self.batch_size)]
+            agent_perm = [list(agent_list[idx]) for idx in range(batch_size)]
+            topic_perm = [list(topic_list[idx]) for idx in range(batch_size)]
 
         return np.array(agent_perm, dtype=np.int64), np.array(topic_perm, dtype=np.int64)
 
@@ -121,7 +121,7 @@ class MATRunner:
     def warmup_batch(self, buffer, env_batch):
         env_batch.reset()
 
-        agent_perm_batch, topic_perm_batch = self.get_perm_batch(random_flag=self.random_flag)
+        agent_perm_batch, topic_perm_batch = self.get_perm_batch(env_batch.batch_size, random_flag=self.random_flag)
         obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_remain_cycle_batch, obs_topic_info_batch, mask_batch = env_batch.get_observation_mat(agent_perm_batch, topic_perm_batch, self.obs_size)
 
         buffer.obs_posi[0] = obs_posi_batch
@@ -132,7 +132,7 @@ class MATRunner:
         buffer.obs_cpu_cycle[0] = obs_cpu_cycle_batch
         buffer.obs_remain_cycle[0] = obs_remain_cycle_batch
         buffer.obs_topic_info[0] = obs_topic_info_batch
-        buffer.mask[0] = np.bool_(mask_batch.reshape(self.batch_size, self.max_agent*self.max_topic))
+        buffer.mask[0] = np.bool_(mask_batch.reshape(env_batch.batch_size, self.max_agent*self.max_topic))
 
         buffer.agent_perm[0] = agent_perm_batch
         buffer.topic_perm[0] = topic_perm_batch
@@ -258,7 +258,7 @@ class MATRunner:
             self.insert_batch(buffer, obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_remain_cycle_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
     
 
-    def episode_loop_batch(self, simulation_time, time_step, trainer, buffer, batch_size, env_batch, reward_history, deternimistic=False):
+    def episode_loop_batch(self, simulation_time, time_step, trainer, buffer, batch_size, env_batch, env_list, reward_history, deternimistic=False):
 
         #  各エピソードにおける時間の推移
         for time in range(0, simulation_time, time_step):
@@ -267,12 +267,37 @@ class MATRunner:
             #  行動と確率分布の取得
             values_batch, actions_batch, action_log_probs_batch = self.collect(trainer, buffer, step, deterministic=deternimistic)
 
+            old_reward_batch = np.zeros((batch_size), dtype=np.float32)
+
+            # 報酬の受け取り
+            for idx in range(batch_size):
+                env = env_list[idx]
+                old_reward = env.step(actions_batch[idx][buffer.mask[step][idx]], buffer.agent_perm[step][idx], buffer.topic_perm[step][idx], time)
+
+                if self.reward_scaling == True:
+                    old_reward_batch[idx] = (-old_reward / 200) + 1
+                else:
+                    old_reward_batch[idx] = (-old_reward)
+
             reward_batch = env_batch.step(actions_batch[buffer.mask[step]], buffer.agent_perm[step], buffer.topic_perm[step], time)
+            reward_batch = reward_batch * (-1)
+
+            flag = True
+            for batch_idx in range(self.batch_size):
+                if old_reward_batch[batch_idx] != reward_batch[batch_idx]:
+                    # print(f"opt = {reward_batch[batch_idx]}, old = {old_reward_batch[batch_idx]}")
+                    # print(f"error")
+                    flag = False
+
+            if flag:
+                print(f"OK")
+
+            # self.check_batch_env(env_batch, env_list, time, time_step)
 
             reward_history.append(reward_batch)
             reward_batch = reward_batch * -1
 
-            agent_perm_batch, topic_perm_batch = self.get_perm_batch(random_flag=self.random_flag)
+            agent_perm_batch, topic_perm_batch = self.get_perm_batch(batch_size, random_flag=self.random_flag)
             obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_remain_cycle_batch, obs_topic_info_batch, mask_batch = env_batch.get_observation_mat(agent_perm_batch, topic_perm_batch, self.obs_size)
            
             self.insert_batch(buffer, obs_posi_batch, obs_publisher_batch, obs_subscriber_batch, obs_distribution_batch, obs_storage_batch, obs_cpu_cycle_batch, obs_remain_cycle_batch, obs_topic_info_batch, mask_batch, reward_batch, values_batch, actions_batch, action_log_probs_batch, agent_perm_batch, topic_perm_batch)
@@ -598,7 +623,7 @@ class MATRunner:
 
             warmup_end = time_module.perf_counter()
 
-            self.episode_loop_batch(simulation_time, time_step, trainer, buffer, self.batch_size, env_batch, reward_history)
+            self.episode_loop_batch(simulation_time, time_step, trainer, buffer, self.batch_size, env_batch, env_list_shuffle, reward_history)
                         
             compute_start = time_module.perf_counter()
 
@@ -624,17 +649,14 @@ class MATRunner:
             if epi_iter % test_iter == 0 or (epi_iter+1) == max_epi_itr:
                 test_start = time_module.perf_counter()
 
-                for idx in range(len(test_env_list)):
-                    test_env = test_env_list[idx]
-
-                    self.warmup(test_buffer, test_env, idx)
+                self.warmup_batch(test_buffer, test_env_batch)
 
                 #  各エピソードにおける時間の推移
-                reward_history_test = [[] for _ in range(len(test_env_list))]
+                reward_history_test = [[] for _ in range(test_env_batch.batch_size)]
 
-                self.episode_loop(simulation_time, time_step, trainer, test_buffer, len(test_env_list), test_env_list, reward_history_test, deternimistic=True)
+                self.episode_loop_batch(simulation_time, time_step, trainer, test_buffer, test_env_batch.batch_size, test_env_batch, [], reward_history_test, deternimistic=False)
 
-                for idx in range(len(test_env_list)):
+                for idx in range(test_env_batch.batch_size):
                     with open(output + "_test" + str(idx) + ".log", 'a') as f:
                         f.write(f"{(epi_iter/max_epi_itr)*100}%, {-sum(reward_history_test[idx])}\n")
 
@@ -846,55 +868,59 @@ class MATRunner:
 
     def check_batch_env(self, env_batch, env_list, time, time_step):
         
+        # client_x のチェック
+        Flag = True
         for batch_idx in range(self.batch_size):
-            # client_x のチェック
-            Flag = True
             for client_idx in range(env_list[batch_idx].num_client):
                 if env_batch.client_x[batch_idx][client_idx] != env_list[batch_idx].clients[client_idx].x:
                     Flag = False
             
-            if Flag:
-                print(f"client_x is OK!")
-            else:
-                print(f"client_x is error")
+        if Flag:
+            print(f"client_x is OK!")
+        else:
+            print(f"client_x is error")
 
-            # client_y のチェック
-            Flag = True
+        # client_y のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for client_idx in range(env_list[batch_idx].num_client):
                 if env_batch.client_y[batch_idx][client_idx] != env_list[batch_idx].clients[client_idx].y:
                     Flag = False
             
-            if Flag:
-                print(f"client_y is OK!")
-            else:
-                print(f"client_y is error")
+        if Flag:
+            print(f"client_y is OK!")
+        else:
+            print(f"client_y is error")
 
-            # client_pub_topic のチェック
-            Flag = True
+        # client_pub_topic のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for client_idx in range(env_list[batch_idx].num_client):
                 for topic_idx in range(env_list[batch_idx].num_topic):
                     if env_batch.client_pub_topic[batch_idx][client_idx][topic_idx] != env_list[batch_idx].clients[client_idx].pub_topic[topic_idx]:
                         Flag = False
             
-            if Flag:
-                print(f"client_pub_topic is OK!")
-            else:
-                print(f"client_pub_topic is error")
+        if Flag:
+            print(f"client_pub_topic is OK!")
+        else:
+            print(f"client_pub_topic is error")
 
-            # client_sub_topic のチェック
-            Flag = True
+        # client_sub_topic のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for client_idx in range(env_list[batch_idx].num_client):
                 for topic_idx in range(env_list[batch_idx].num_topic):
                     if env_batch.client_sub_topic[batch_idx][client_idx][topic_idx] != env_list[batch_idx].clients[client_idx].sub_topic[topic_idx]:
                         Flag = False
             
-            if Flag:
-                print(f"client_sub_topic is OK!")
-            else:
-                print(f"client_sub_topic is error")
+        if Flag:
+            print(f"client_sub_topic is OK!")
+        else:
+            print(f"client_sub_topic is error")
 
-            # client_pub_edge のチェック
-            Flag = True
+        # client_pub_edge のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for client_idx in range(env_list[batch_idx].num_client):
                 for topic_idx in range(env_list[batch_idx].num_topic):
                     for edge_idx in range(env_list[batch_idx].num_edge):
@@ -906,13 +932,14 @@ class MATRunner:
                             if env_list[batch_idx].clients[client_idx].pub_edge[topic_idx] == edge_idx:
                                 Flag = False
             
-            if Flag:
-                print(f"client_pub_edge is OK!")
-            else:
-                print(f"client_pub_edge is error")
+        if Flag:
+            print(f"client_pub_edge is OK!")
+        else:
+            print(f"client_pub_edge is error")
 
-            # client_sub_edge のチェック
-            Flag = True
+        # client_sub_edge のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for client_idx in range(env_list[batch_idx].num_client):
                 for topic_idx in range(env_list[batch_idx].num_topic):
                     for edge_idx in range(env_list[batch_idx].num_edge):
@@ -924,172 +951,186 @@ class MATRunner:
                             if env_list[batch_idx].clients[client_idx].sub_edge[topic_idx] == edge_idx:
                                 Flag = False
             
-            if Flag:
-                print(f"client_sub_edge is OK!")
-            else:
-                print(f"client_sub_edge is error")
+        if Flag:
+            print(f"client_sub_edge is OK!")
+        else:
+            print(f"client_sub_edge is error")
                 
-            # edge_x のチェック
-            Flag = True
+        # edge_x のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for edge_idx in range(env_list[batch_idx].num_edge):
                 if env_batch.edge_x[batch_idx][edge_idx] != env_list[batch_idx].all_edge[edge_idx].x:
                     Flag = False
             
-            if Flag:
-                print(f"edge_x is OK!")
-            else:
-                print(f"edge_x is error")
+        if Flag:
+            print(f"edge_x is OK!")
+        else:
+            print(f"edge_x is error")
 
-            # edge_y のチェック
-            Flag = True
+        # edge_y のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for edge_idx in range(env_list[batch_idx].num_edge):
                 if env_batch.edge_y[batch_idx][edge_idx] != env_list[batch_idx].all_edge[edge_idx].y:
                     Flag = False
             
-            if Flag:
-                print(f"edge_y is OK!")
-            else:
-                print(f"edge_y is error")
+        if Flag:
+            print(f"edge_y is OK!")
+        else:
+            print(f"edge_y is error")
 
-            # edge_max_volume のチェック
-            Flag = True
+        # edge_max_volume のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for edge_idx in range(env_list[batch_idx].num_edge):
                 if env_batch.edge_max_volume[batch_idx][edge_idx] != env_list[batch_idx].all_edge[edge_idx].max_volume:
                     Flag = False
             
-            if Flag:
-                print(f"edge_max_volume is OK!")
-            else:
-                print(f"edge_max_volume is error")
+        if Flag:
+            print(f"edge_max_volume is OK!")
+        else:
+            print(f"edge_max_volume is error")
 
-            # edge_used_volume のチェック
-            Flag = True
+        # edge_used_volume のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for edge_idx in range(env_list[batch_idx].num_edge):
                 for topic_idx in range(env_list[batch_idx].num_topic):
                     if env_batch.edge_used_volume[batch_idx][edge_idx][topic_idx] != env_list[batch_idx].all_edge[edge_idx].used_volume[topic_idx]:
                         Flag = False
             
-            if Flag:
-                print(f"edge_used_volume is OK!")
-            else:
-                print(f"edge_used_volume is error")
+        if Flag:
+            print(f"edge_used_volume is OK!")
+        else:
+            print(f"edge_used_volume is error")
 
-            # edge_deploy_topic のチェック
-            Flag = True
+        # edge_deploy_topic のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for edge_idx in range(env_list[batch_idx].num_edge):
                 for topic_idx in range(env_list[batch_idx].num_topic):
                     if env_batch.edge_deploy_topic[batch_idx][edge_idx][topic_idx] != env_list[batch_idx].all_edge[edge_idx].deploy_topic[topic_idx]:
                         Flag = False
             
-            if Flag:
-                print(f"edge_deploy_topic is OK!")
-            else:
-                print(f"edge_deploy_topic is error")
+        if Flag:
+            print(f"edge_deploy_topic is OK!")
+        else:
+            print(f"edge_deploy_topic is error")
 
-            # edge_cpu_cycle のチェック
-            Flag = True
+        # edge_cpu_cycle のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for edge_idx in range(env_list[batch_idx].num_edge):
                 if env_batch.edge_cpu_cycle[batch_idx][edge_idx] != env_list[batch_idx].all_edge[edge_idx].cpu_cycle:
                     Flag = False
             
-            if Flag:
-                print(f"edge_cpu_cycle is OK!")
-            else:
-                print(f"edge_cpu_cycle is error")
+        if Flag:
+            print(f"edge_cpu_cycle is OK!")
+        else:
+            print(f"edge_cpu_cycle is error")
 
-            # edge_power_allocation のチェック
-            Flag = True
+        # edge_power_allocation のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for edge_idx in range(env_list[batch_idx].num_edge):
                 if env_batch.edge_power_allocation[batch_idx][edge_idx] != env_list[batch_idx].all_edge[edge_idx].power_allocation:
                     Flag = False
             
-            if Flag:
-                print(f"edge_power_allocation is OK!")
-            else:
-                print(f"edge_power_allocation is error")
+        if Flag:
+            print(f"edge_power_allocation is OK!")
+        else:
+            print(f"edge_power_allocation is error")
 
-            # edge_used_publisher のチェック
-            Flag = True
+        # edge_used_publisher のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for edge_idx in range(env_list[batch_idx].num_edge):
                 for topic_idx in range(env_list[batch_idx].num_topic):
                     if env_batch.edge_used_publisher[batch_idx][edge_idx][topic_idx] != env_list[batch_idx].all_edge[edge_idx].used_publishers[topic_idx]:
                         Flag = False
             
-            if Flag:
-                print(f"edge_used_publisher is OK!")
-            else:
-                print(f"edge_used_publisher is error")
+        if Flag:
+            print(f"edge_used_publisher is OK!")
+        else:
+            print(f"edge_used_publisher is error")
 
-            # edge_remain_cycle のチェック
-            Flag = True
+        # edge_remain_cycle のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for edge_idx in range(env_list[batch_idx].num_edge):
                 if env_batch.edge_remain_cycle[batch_idx][edge_idx] != env_list[batch_idx].all_edge[edge_idx].remain_cycle:
                     Flag = False
             
-            if Flag:
-                print(f"edge_remain_cycle is OK!")
-            else:
-                print(f"edge_remain_cycle is error")
+        if Flag:
+            print(f"edge_remain_cycle is OK!")
+        else:
+            print(f"edge_remain_cycle is error")
 
-            # topic_save_period のチェック
-            Flag = True
+        # topic_save_period のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for topic_idx in range(env_list[batch_idx].num_topic):
                 if env_batch.topic_save_period[batch_idx][topic_idx] != env_list[batch_idx].all_topic[topic_idx].save_period:
                     Flag = False
             
-            if Flag:
-                print(f"topic_save_period is OK!")
-            else:
-                print(f"topic_save_period is error")
+        if Flag:
+            print(f"topic_save_period is OK!")
+        else:
+            print(f"topic_save_period is error")
 
-            # topic_publish_rate のチェック
-            Flag = True
+        # topic_publish_rate のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for topic_idx in range(env_list[batch_idx].num_topic):
                 if env_batch.topic_publish_rate[batch_idx][topic_idx] != env_list[batch_idx].all_topic[topic_idx].publish_rate:
                     Flag = False
             
-            if Flag:
-                print(f"topic_publish_rate is OK!")
-            else:
-                print(f"topic_publish_rate is error")
+        if Flag:
+            print(f"topic_publish_rate is OK!")
+        else:
+            print(f"topic_publish_rate is error")
 
-            # topic_data_size のチェック
-            Flag = True
+        # topic_data_size のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for topic_idx in range(env_list[batch_idx].num_topic):
                 if env_batch.topic_data_size[batch_idx][topic_idx] != env_list[batch_idx].all_topic[topic_idx].data_size:
                     Flag = False
             
-            if Flag:
-                print(f"topic_data_size is OK!")
-            else:
-                print(f"topic_data_size is error")
+        if Flag:
+            print(f"topic_data_size is OK!")
+        else:
+            print(f"topic_data_size is error")
 
-            # topic_require_cycle のチェック
-            Flag = True
+        # topic_require_cycle のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for topic_idx in range(env_list[batch_idx].num_topic):
                 if env_batch.topic_require_cycle[batch_idx][topic_idx] != env_list[batch_idx].all_topic[topic_idx].require_cycle:
                     Flag = False
             
-            if Flag:
-                print(f"topic_require_cycle is OK!")
-            else:
-                print(f"topic_require_cycyle is error")
+        if Flag:
+            print(f"topic_require_cycle is OK!")
+        else:
+            print(f"topic_require_cycyle is error")
 
-            # topic_volume のチェック
-            Flag = True
+        # topic_volume のチェック
+        Flag = True
+        for batch_idx in range(self.batch_size):
             for topic_idx in range(env_list[batch_idx].num_topic):
                 if env_batch.topic_volume[batch_idx][topic_idx] != env_list[batch_idx].all_topic[topic_idx].volume:
                     Flag = False
             
-            if Flag:
-                print(f"topic_volume is OK!")
-            else:
-                print(f"topic_volume is error")
+        if Flag:
+            print(f"topic_volume is OK!")
+        else:
+            print(f"topic_volume is error")
 
-            # topic_num_client_history のチェック
-            Flag = True
-            now_step = int(time/time_step)
-
+        # topic_num_client_history のチェック
+        Flag = True
+        now_step = int(time/time_step)
+        for batch_idx in range(self.batch_size):
             for topic_idx in range(env_list[batch_idx].num_topic):
                 save_period = env_list[topic_idx].all_topic[topic_idx].save_period
                 start_step = max(now_step - int(save_period/time_step), 0)
@@ -1097,10 +1138,10 @@ class MATRunner:
                 if sum(env_batch.topic_num_client_history[batch_idx][topic_idx][start_step:now_step+1]) != env_list[batch_idx].all_topic[topic_idx].total_num_client:
                     Flag = False
 
-            if Flag:
-                print(f"topic_num_clinet_history is OK!")
-            else:
-                print(f"topic_num_clinet_history is error")
+        if Flag:
+            print(f"topic_num_clinet_history is OK!")
+        else:
+            print(f"topic_num_clinet_history is error")
 
     def check_batch_env_obs(self, env_batch, env_list):
         # 共通で使用

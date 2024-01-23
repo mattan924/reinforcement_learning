@@ -121,7 +121,8 @@ class SharedReplayBuffer(object):
             
             mini_batch_size = self.batch_size*self.episode_length // num_mini_batch
 
-        rand = torch.randperm(self.batch_size*self.episode_length).numpy()
+        rand = torch.randperm(self.batch_size * self.episode_length).numpy()
+        sampler = [rand[i * mini_batch_size:(i + 1) * mini_batch_size] for i in range(num_mini_batch)]
         
         obs_posi = self.obs_posi[:-1]
 
@@ -153,20 +154,22 @@ class SharedReplayBuffer(object):
 
         advantages = advantages.reshape(-1, *advantages.shape[2:])
 
-        obs_posi_batch = obs_posi.reshape(-1, *obs_posi.shape[2:])
-        obs_client_batch = obs_client.reshape(-1, *obs_client.shape[2:])
-        obs_edge_batch = obs_edge.reshape(-1, *obs_edge.shape[2:])
-        obs_topic_info_batch = obs_topic_info.reshape(-1, *obs_topic_info.shape[2:])
-        mask_batch = mask.reshape(-1, *mask.shape[1:])
-        actions_batch = actions.reshape(-1, *actions.shape[2:])
 
-        value_preds_batch = value_preds.reshape(-1, *value_preds.shape[2:])
-        return_batch = returns.reshape(-1, *returns.shape[2:])
-        old_action_log_probs_batch = action_log_probs.reshape(-1, *action_log_probs.shape[2:])
+        for indices in sampler:
+            obs_posi_batch = obs_posi[indices].reshape(-1, *obs_posi.shape[2:])
+            obs_client_batch = obs_client[indices].reshape(-1, *obs_client.shape[2:])
+            obs_edge_batch = obs_edge[indices].reshape(-1, *obs_edge.shape[2:])
+            obs_topic_info_batch = obs_topic_info[indices].reshape(-1, *obs_topic_info.shape[2:])
+            mask_batch = mask[indices].reshape(-1, *mask.shape[1:])
+            actions_batch = actions[indices].reshape(-1, *actions.shape[2:])
 
-        if advantages is None:
-            adv_targ = None
-        else:
-            adv_targ = advantages.reshape(-1, *advantages.shape[2:])
+            value_preds_batch = value_preds[indices].reshape(-1, *value_preds.shape[2:])
+            return_batch = returns[indices].reshape(-1, *returns.shape[2:])
+            old_action_log_probs_batch = action_log_probs[indices].reshape(-1, *action_log_probs.shape[2:])
 
-        return obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch
+            if advantages is None:
+                adv_targ = None
+            else:
+                adv_targ = advantages[indices].reshape(-1, *advantages.shape[2:])
+
+            yield obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch

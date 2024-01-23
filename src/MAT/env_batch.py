@@ -269,34 +269,210 @@ class Env_Batch:
     
 
     def step(self, actions_batch, agent_perm_batch, topic_perm_batch, time):
+        block_size = 3
+
         max_agent = agent_perm_batch.shape[1]
         max_topic = topic_perm_batch.shape[1]
 
+        # *_perm_batch の内，num_client, num_topic を満たす位置を mask する
         agent_id_mask = agent_perm_batch < self.num_client
         topic_id_mask = topic_perm_batch < self.num_topic
 
+        # num_client, num_topic を満たす順列
         agent_perm_mask = agent_perm_batch[agent_id_mask].reshape(self.batch_size, self.num_client)
         topic_perm_mask = topic_perm_batch[topic_id_mask].reshape(self.batch_size, self.num_topic)
 
+
+        # client の割り当ての前にリセット
         self.edge_used_publisher = np.zeros((self.batch_size, self.num_edge, self.num_topic))
         self.edge_used_volume = np.zeros((self.batch_size, self.num_edge, self.num_topic))
         self.edge_deploy_topic = np.bool_(np.zeros((self.batch_size, self.num_edge, self.num_topic)))
 
-        actions_batch = np.identity(self.num_edge)[actions_batch.reshape(-1)].reshape(self.batch_size, -1, self.num_edge)
+        block_len_x = (self.max_x-self.min_x)/block_size
+        block_len_y = (self.max_y-self.min_y)/block_size
 
-        # self.client_pub_edge (batch_size, num_client, num_topic, num_edge)
+        block_index_x_batch = np.clip(self.client_x / block_len_x, 0, block_size-1).astype(int)
+        block_index_y_batch = np.clip(self.client_y / block_len_y, 0, block_size-1).astype(int)
 
-        print(f"actions_batch = {actions_batch.shape}")
-        print(f"agent_perm_mask = {agent_perm_mask.shape}")
-        print(f"topic_perm_mask = {topic_perm_mask.shape}")
+        actions_batch = actions_batch.reshape(self.batch_size, -1)
+        actions_batch_onehot = np.identity(self.num_edge)[actions_batch]
 
-        self.client_pub_edge[self.client_pub_topic] = actions_batch
+        for batch_idx in range(self.batch_size):
+            action_idx = 0
+            for i, agent_idx in enumerate(agent_perm_batch[batch_idx]):
+                if agent_idx < self.num_client:
+                    for j, topic_idx in enumerate(topic_perm_batch[batch_idx]):
+                        if topic_idx < self.num_topic:
+                            if self.client_pub_topic[batch_idx][agent_idx][topic_idx] == True:
+                                self.client_pub_edge[batch_idx][agent_idx][topic_idx] = actions_batch_onehot[batch_idx][action_idx]
 
-        # self.client_sub_edge (batch_size, num_client, num_edge)
-        # self.edge_used_publisher (batch_size, num_edge, num_topic)
+                                self.edge_used_publisher[batch_idx][actions_batch[batch_idx][action_idx]][topic_idx] += 1
 
-        reward_batch = np.zeroos((self.batch_size))
+                                action_idx += 1
+
+                            if self.client_sub_topic[batch_idx][agent_idx][topic_idx] == True:
+                                self.client_sub_edge[batch_idx][agent_idx][block_index_y_batch[batch_idx][agent_idx]*block_size + block_index_x_batch[batch_idx][agent_idx]] = 1
+
+        num_message = np.repeat((self.topic_publish_rate * self.time_step)[:, :, None], self.num_edge, axis=2) * self.edge_used_publisher.transpose(0, 2, 1)
+        num_message = np.sum(num_message, axis=1)
+
+
+        edge_used_mask = self.edge_used_publisher > 0
+
+        self.edge_used_volume[edge_used_mask] = np.repeat(self.topic_volume[:, None, :], self.num_edge, axis=1)[edge_used_mask]
+
+        num_message_mask_true = num_message > 0
+        num_message_mask_false = num_message == 0
+
+        self.edge_power_allocation[num_message_mask_true] = self.edge_cpu_cycle[num_message_mask_true] / num_message[num_message_mask_true]
+        self.edge_power_allocation[num_message_mask_false] = self.edge_cpu_cycle[num_message_mask_false]
+
+        edge_total_used_volume = np.sum(self.edge_used_volume, axis=2)
+
+        edge_deploy_mask_true = edge_total_used_volume <= self.edge_max_volume
+        edge_deploy_mask_flase = edge_total_used_volume > self.edge_max_volume
+
+        self.edge_deploy_topic[edge_deploy_mask_true] = self.edge_used_publisher[edge_deploy_mask_true].astype(bool)
+
+        if np.sum(edge_deploy_mask_flase) > 0:
+            flag = True
+            # self.edge_used_publisher = np.zeros((self.batch_size, self.num_edge, self.num_topic))
+            while(flag):
+                max_publisher_index = np.argmax(self.edge_used_publisher, axis=2)
+                print(f"max_publisher.shape = {max_publisher_index.shape}")
+                sys.exit(f"実装してください")
+
+        total_require_cycle = self.edge_remain_cycle.copy()
+
+        out1 = self.topic_require_cycle * np.log(self.topic_volume / self.topic_data_size)
+        out2 = np.repeat(out1[:, None, :], self.num_edge, axis=1)
+        out3 = self.edge_used_publisher * out2
+        out4 = np.repeat(self.topic_publish_rate[:, None, :], self.num_edge, axis=1) * self.time_step * out3
+
+        total_require_cycle = total_require_cycle + np.sum(out4*self.edge_deploy_topic, axis=2)
+
+        self.edge_remain_cycle = np.maximum(total_require_cycle - (self.edge_cpu_cycle * self.time_step), 0)
+
+        reward_batch = self.cal_reward()
+        
 
         return reward_batch
 
+
+    def cal_reward(self):
+        gamma = 1
+
+        delay = np.zeros((self.batch_size, self.num_client, self.num_topic))
+
+        d_client_edge, d_edge_edge = self.cal_distance()
+
+        num_publish = np.repeat((self.topic_publish_rate * self.time_step)[:, None, :], self.num_client, axis=1)
+
+        print(f"num_publish.shape = {num_publish.shape}")
+        print(f"self.client_pub_topic.shape = {self.client_pub_topic.shape}")
+        print(f"num_publish * self.client_pub_topic = {(num_publish * self.client_pub_topic).shape}")
+        num_message = np.sum(np.sum((num_publish * self.client_pub_topic), axis=2), axis=1).reshape(-1)
+
+        d_client_edge = np.repeat(d_client_edge[:, :, None, :], self.num_topic, axis=2)
+        client_sub_edge = np.repeat(self.client_sub_edge[:, :, None, :], self.num_topic, axis=2)
+        edge_deploy_topic = np.repeat(self.edge_deploy_topic[:, None, :, :], self.num_client, axis=1).transpose(0, 1, 3, 2)
+        edge_deploy_topic = np.repeat(edge_deploy_topic[:, :, :, :, None], self.num_edge, axis=4)
+
+        d_edge_edge = np.repeat(d_edge_edge[:, None, :, :], self.num_client, axis=1)
+        d_edge_edge = np.repeat(d_edge_edge[:, :, None, :, :], self.num_topic, axis=2)
+
+        matrix1 = self.client_pub_edge.reshape(self.batch_size, self.num_client, self.num_topic, self.num_edge, 1)
+        matrix2 = client_sub_edge.reshape(self.batch_size, self.num_client, self.num_topic, 1, self.num_edge)
+        
+        foward = np.matmul(matrix1, matrix2)
+
+        # delay = delay + num_publish * np.sum(gamma*(d_client_edge * self.client_pub_edge), axis=3)
+
+        # compute_delay = self.cal_compute_time()
+
+        # delay = delay + num_publish * compute_delay
+
+        # delay = delay +  num_publish * np.sum(np.sum((1-edge_deploy_topic)*2*self.cloud_time*foward, axis=4), axis=3)
+
+        # delay = delay +  num_publish * np.sum(gamma * np.sum(gamma*(edge_deploy_topic * d_edge_edge * foward), axis=4), axis=3)
+
+        # delay = delay +  num_publish * np.sum(gamma*(d_client_edge * client_sub_edge), axis=3)
+
+        # reward = np.sum(np.sum(delay, axis=2), axis=1) / num_message
+
+
+        delay1 =  num_publish * np.sum(gamma*(d_client_edge * self.client_pub_edge), axis=3)
+
+        compute_delay = num_publish * self.cal_compute_time()
+
+        penalty = num_publish * np.sum(np.sum((1-edge_deploy_topic)*2*self.cloud_time*foward, axis=4), axis=3)
+
+        delay2 = num_publish * np.sum(gamma * np.sum(gamma*(edge_deploy_topic * d_edge_edge * foward), axis=4), axis=3)
+
+        delay3 = num_publish * np.sum(gamma*(d_client_edge * client_sub_edge), axis=3)
+
+        delay = delay + delay1 + compute_delay + penalty + delay2 + delay3
+
+        reward = np.sum(np.sum(delay, axis=2), axis=1) / num_message
+
+        print(f"opt num_message = {num_message}")
+        print(f"opt num_message.shape = {num_message.shape}")
+
+        return reward
+
+
+    def cal_distance(self):
+        client_x = np.repeat(self.client_x[:, :, None], self.num_edge, axis=2)
+        edge_x = np.repeat(self.edge_x[:, None, :], self.num_client, axis=1)
+        client_y = np.repeat(self.client_y[:, :, None], self.num_edge, axis=2)
+        edge_y = np.repeat(self.edge_y[:, None, :], self.num_client, axis=1)
+
+        d_client_edge = (np.sqrt(np.power(client_x-edge_x, 2) + np.power(client_y - edge_y, 2))*100).astype(int) / 100
+
+        edge_x1 = np.repeat(self.edge_x[:, :, None], self.num_edge, axis=2)
+        edge_y1 = np.repeat(self.edge_y[:, :, None], self.num_edge, axis=2)
+
+        edge_x2 = edge_x1.transpose(0, 2, 1)
+        edge_y2 = edge_y1.transpose(0, 2, 1)
+
+        d_edge_edge = (np.sqrt(np.power(edge_x1-edge_x2, 2) + np.power(edge_y1 - edge_y2, 2))*100).astype(int) / 100
+
+        return d_client_edge, d_edge_edge
+    
+
+    def cal_compute_time(self):
+        compute_time = np.zeros((self.batch_size, self.num_client, self.num_topic, self.num_edge))
+
+        # self.edge_deploy_topic = (batch_size, num_client, num_topic, num_edge)
+        # self.edge_remain_cycle = (batch_size, num_edge)
+        # self.edge_cpu_cycle = (batch_size, num_edge)
+        # self.edge_power_allocation = (batch_size, num_edge)
+        # self.topic_require_cycle = (batch_size, num_topic)
+        # self.topic_volume = (batch_size, num_topic)
+        # self.topic_data_seize = (batch_size, num_topic)
+
+        edge_deploy_topic = np.repeat(self.edge_deploy_topic[:, None, :, :], self.num_client, axis=1).transpose(0, 1, 3, 2)
+        edge_remain_cycle = np.repeat(self.edge_remain_cycle[:, None, None, :], self.num_client, axis=1)
+        edge_remain_cycle = np.repeat(edge_remain_cycle, self.num_topic, axis=2)
+        edge_cpu_cycle = np.repeat(self.edge_cpu_cycle[:, None, None, :], self.num_client, axis=1)
+        edge_cpu_cycle = np.repeat(edge_cpu_cycle, self.num_topic, axis=2)
+        edge_power_allocation = np.repeat(self.edge_power_allocation[:, None, None, :], self.num_client, axis=1)
+        edge_power_allocation = np.repeat(edge_power_allocation, self.num_topic, axis=2)
+        topic_require_cycle = np.repeat(self.topic_require_cycle[:, None, :, None], self.num_client, axis=1)
+        topic_require_cycle = np.repeat(topic_require_cycle, self.num_edge, axis=3)
+        topic_volume = np.repeat(self.topic_volume[:, None, :, None], self.num_client, axis=1)
+        topic_volume = np.repeat(topic_volume, self.num_edge, axis=3)
+        topic_data_size = np.repeat(self.topic_data_size[:, None, :, None], self.num_client, axis=1)
+        topic_data_size = np.repeat(topic_data_size, self.num_edge, axis=3)
+
+        mask = (self.client_pub_edge * edge_deploy_topic).astype(np.bool_)
+
+        compute_time[mask] = (edge_remain_cycle[mask] / edge_cpu_cycle[mask]) + (topic_require_cycle[mask] * np.log(topic_volume[mask] / topic_data_size[mask])) / edge_power_allocation[mask]
+
+        mask = (self.client_pub_edge * np.logical_not(edge_deploy_topic)).astype(np.bool_)
+        compute_time[mask] = (topic_require_cycle[mask] * np.log(topic_volume[mask] / topic_data_size[mask])) / self.cloud_cycle
+
+        compute_time = np.sum(compute_time, axis=3)
+
+        return compute_time
 

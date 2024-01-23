@@ -120,23 +120,29 @@ fig.savefig(result_fig)
 """
 
 
-data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle_client20_fix20_data100000/test/index/"
+data_index_dir = "../dataset/master_thesis/multi_data/low_capacity_high_cycle_client20_fix20/test/index/"
 data_index_dir_path = os.path.join(data_index_dir, "*")
 data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-log_path_base = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client20_fix20_0_test"
-#log_path_base_pretrain = "../result/save/master_thesis/multi_data/high_capacity_low_cycle/client20_fix20_pretraining0_test"
+log_path_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/low_capacity_high_cycle_client20_fix20_0_test"
+log_path_base_minbatch1 = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/client20_fix20_random_minbatch0_test"
+log_path_base_minbatch2 = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/client20_fix20_random_minbatch1_test"
 
-result_fig_base = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client20_fix20_test"
+
+
+result_fig_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/client20_fix20_test"
 
 for idx in range(len(data_index_path)):
     index_path = data_index_path[idx]
 
     log_path = log_path_base + str(idx) + ".log"
-    #log_path_pretrain = log_path_base_pretrain + str(idx) + ".log"
+    log_path_minbatch1 = log_path_base_minbatch1 + str(idx) + ".log"
+    log_path_minbatch2 = log_path_base_minbatch2 + str(idx) + ".log"
+
 
     train_curve = read_train_curve(log_path)
-    #train_curve_pretraining = read_train_curve(log_path_pretrain)
+    train_curve_minbatch1 = read_train_curve(log_path_minbatch1)
+    train_curve_minbatch2 = read_train_curve(log_path_minbatch2)
 
     df_index = pd.read_csv(index_path, index_col=0)
     opt = df_index.at['data', 'opt']
@@ -154,7 +160,8 @@ for idx in range(len(data_index_path)):
     wind.set_xlabel("training iteration")
     wind.set_ylabel("total reward")
     wind.plot(train_curve, linewidth=1, label='mat')
-    #wind.plot(train_curve_pretraining, linewidth=1, label='mat_pretraining')
+    wind.plot(train_curve_minbatch1, linewidth=1, label='mat_minbatch1')
+    wind.plot(train_curve_minbatch2, linewidth=1, label='mat_minbatch2')
     #wind.axhline(y=opt, c='r', label="optimal")
     wind.axhline(y=nearest_reward, c='g', label="nearest_server")
     wind.axhline(y=reloc_reward, c='r', label="RELOC")
