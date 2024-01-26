@@ -119,52 +119,205 @@ wind.legend()
 fig.savefig(result_fig)
 """
 
-
-data_index_dir = "../dataset/master_thesis/multi_data/low_capacity_high_cycle_client20_fix20/test/index/"
-data_index_dir_path = os.path.join(data_index_dir, "*")
-data_index_path = natsorted(glob.glob(data_index_dir_path))
-
-log_path_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/low_capacity_high_cycle_client20_fix20_0_test"
-log_path_base_minbatch1 = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/client20_fix20_random_minbatch0_test"
-log_path_base_minbatch2 = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/client20_fix20_random_minbatch1_test"
+switch = "high_high40"
 
 
+if switch == "high_high20":
+    data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/high_capacity_high_cycle_client20_fix20_data10000/test/index/"
+    data_index_dir_path = os.path.join(data_index_dir, "*")
+    data_index_path = natsorted(glob.glob(data_index_dir_path))
 
-result_fig_base = "../result/save/master_thesis/multi_data/low_capacity_high_cycle/client20_fix20_test"
+    log_path_base = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_high_cycle/client20_fix20_batch64_minbatch1_test"
 
-for idx in range(len(data_index_path)):
-    index_path = data_index_path[idx]
+    result_fig_base = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_high_cycle/client20_fix20_test"
 
-    log_path = log_path_base + str(idx) + ".log"
-    log_path_minbatch1 = log_path_base_minbatch1 + str(idx) + ".log"
-    log_path_minbatch2 = log_path_base_minbatch2 + str(idx) + ".log"
+    for idx in range(len(data_index_path)):
+        index_path = data_index_path[idx]
 
+        log_path = log_path_base + str(idx) + ".log"
 
-    train_curve = read_train_curve(log_path)
-    train_curve_minbatch1 = read_train_curve(log_path_minbatch1)
-    train_curve_minbatch2 = read_train_curve(log_path_minbatch2)
+        train_curve = read_train_curve(log_path)
 
-    df_index = pd.read_csv(index_path, index_col=0)
-    opt = df_index.at['data', 'opt']
-    edge_file = df_index.at['data', 'edge_file']
+        df_index = pd.read_csv(index_path, index_col=0)
+        opt = df_index.at['data', 'opt']
+        edge_file = df_index.at['data', 'edge_file']
 
-    nearest_reward = cal_nearest_server_reward(index_path)
-    reloc_reward = cal_RELOC_reward(index_path, edge_file, K=4, M=3)
+        nearest_reward = cal_nearest_server_reward(index_path)
+        reloc_reward = cal_RELOC_reward(index_path, edge_file, K=4, M=3)
 
-    fig = plt.figure()
-    wind = fig.add_subplot(1, 1, 1)
-    #wind.set_ylim(ymin=0, ymax=2000)
-    #wind.set_xlim(xmin=0, xmax=400)
-    wind.grid()
-    wind.set_title("test " + str(idx))
-    wind.set_xlabel("training iteration")
-    wind.set_ylabel("total reward")
-    wind.plot(train_curve, linewidth=1, label='mat')
-    wind.plot(train_curve_minbatch1, linewidth=1, label='mat_minbatch1')
-    wind.plot(train_curve_minbatch2, linewidth=1, label='mat_minbatch2')
-    #wind.axhline(y=opt, c='r', label="optimal")
-    wind.axhline(y=nearest_reward, c='g', label="nearest_server")
-    wind.axhline(y=reloc_reward, c='r', label="RELOC")
-    wind.legend()
-    fig.savefig(result_fig_base + str(idx) + ".png")
+        fig = plt.figure()
+        wind = fig.add_subplot(1, 1, 1)
+        #wind.set_ylim(ymin=0, ymax=2000)
+        #wind.set_xlim(xmin=0, xmax=400)
+        wind.grid()
+        wind.set_title("test " + str(idx))
+        wind.set_xlabel("training iteration")
+        wind.set_ylabel("total reward")
+        wind.plot(train_curve, linewidth=1, label='mat')
+        #wind.axhline(y=opt, c='r', label="optimal")
+        wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+        wind.axhline(y=reloc_reward, c='r', label="RELOC")
+        wind.legend()
+        fig.savefig(result_fig_base + str(idx) + ".png")
+
+elif switch == "high_high40":
+    data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/high_capacity_high_cycle_client40_fix40_data10000/test/index/"
+    data_index_dir_path = os.path.join(data_index_dir, "*")
+    data_index_path = natsorted(glob.glob(data_index_dir_path))
+
+    log_path_base = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_high_cycle/client40_fix40_batch64_0_test"
+    log_path_base_pretrain = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_high_cycle/client40_fix40_pretraining 0_test"
+
+    result_fig_base = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_high_cycle/client40_fix40_test"
+
+    for idx in range(len(data_index_path)):
+        index_path = data_index_path[idx]
+
+        log_path = log_path_base + str(idx) + ".log"
+        log_path_pretrain = log_path_base_pretrain + str(idx) + ".log"
+
+        train_curve = read_train_curve(log_path)
+        train_curve_pretrain = read_train_curve(log_path_pretrain)
+
+        df_index = pd.read_csv(index_path, index_col=0)
+        opt = df_index.at['data', 'opt']
+        edge_file = df_index.at['data', 'edge_file']
+
+        nearest_reward = cal_nearest_server_reward(index_path)
+        reloc_reward = cal_RELOC_reward(index_path, edge_file, K=4, M=3)
+
+        fig = plt.figure()
+        wind = fig.add_subplot(1, 1, 1)
+        #wind.set_ylim(ymin=0, ymax=2000)
+        #wind.set_xlim(xmin=0, xmax=400)
+        wind.grid()
+        wind.set_title("test " + str(idx))
+        wind.set_xlabel("training iteration")
+        wind.set_ylabel("total reward")
+        wind.plot(train_curve, linewidth=1, label='mat')
+        wind.plot(train_curve_pretrain, linewidth=1, label='mat_pretrain')
+        #wind.axhline(y=opt, c='r', label="optimal")
+        wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+        wind.axhline(y=reloc_reward, c='r', label="RELOC")
+        wind.legend()
+        fig.savefig(result_fig_base + str(idx) + ".png")
+
+elif switch == "high_low20":
+    data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/high_capacity_low_cycle_client20_fix20_data100000/test/index/"
+    data_index_dir_path = os.path.join(data_index_dir, "*")
+    data_index_path = natsorted(glob.glob(data_index_dir_path))
+
+    log_path_base = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_low_cycle/client20_fix20_0_test"
+
+    result_fig_base = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_low_cycle/client20_fix20_test"
+
+    for idx in range(len(data_index_path)):
+        index_path = data_index_path[idx]
+
+        log_path = log_path_base + str(idx) + ".log"
+
+        train_curve = read_train_curve(log_path)
+
+        df_index = pd.read_csv(index_path, index_col=0)
+        opt = df_index.at['data', 'opt']
+        edge_file = df_index.at['data', 'edge_file']
+
+        nearest_reward = cal_nearest_server_reward(index_path)
+        reloc_reward = cal_RELOC_reward(index_path, edge_file, K=4, M=3)
+
+        fig = plt.figure()
+        wind = fig.add_subplot(1, 1, 1)
+        #wind.set_ylim(ymin=0, ymax=2000)
+        #wind.set_xlim(xmin=0, xmax=400)
+        wind.grid()
+        wind.set_title("test " + str(idx))
+        wind.set_xlabel("training iteration")
+        wind.set_ylabel("total reward")
+        wind.plot(train_curve, linewidth=1, label='mat')
+        #wind.axhline(y=opt, c='r', label="optimal")
+        wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+        wind.axhline(y=reloc_reward, c='r', label="RELOC")
+        wind.legend()
+        fig.savefig(result_fig_base + str(idx) + ".png")
+
+elif switch == "high_low40":
+    data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/high_capacity_low_cycle_client40_fix40_data100000/test/index/"
+    data_index_dir_path = os.path.join(data_index_dir, "*")
+    data_index_path = natsorted(glob.glob(data_index_dir_path))
+
+    log_path_base = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_low_cycle/client40_fix40_0_test"
+    log_path_base_pretrain = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_low_cycle/client40_fix40_pretraining0_test"
+
+    result_fig_base = "../result/save/master_thesis/multi_data/general_evaluation/high_capacity_low_cycle/client40_fix40_test"
+
+    for idx in range(len(data_index_path)):
+        index_path = data_index_path[idx]
+
+        log_path = log_path_base + str(idx) + ".log"
+        log_path_pretrain = log_path_base_pretrain + str(idx) + ".log"
+
+        train_curve = read_train_curve(log_path)
+        train_curve_pretrain = read_train_curve(log_path_pretrain)
+
+        df_index = pd.read_csv(index_path, index_col=0)
+        opt = df_index.at['data', 'opt']
+        edge_file = df_index.at['data', 'edge_file']
+
+        nearest_reward = cal_nearest_server_reward(index_path)
+        reloc_reward = cal_RELOC_reward(index_path, edge_file, K=4, M=3)
+
+        fig = plt.figure()
+        wind = fig.add_subplot(1, 1, 1)
+        #wind.set_ylim(ymin=0, ymax=2000)
+        #wind.set_xlim(xmin=0, xmax=400)
+        wind.grid()
+        wind.set_title("test " + str(idx))
+        wind.set_xlabel("training iteration")
+        wind.set_ylabel("total reward")
+        wind.plot(train_curve, linewidth=1, label='mat')
+        wind.plot(train_curve_pretrain, linewidth=1, label='mat_pretrainig')
+        #wind.axhline(y=opt, c='r', label="optimal")
+        wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+        wind.axhline(y=reloc_reward, c='r', label="RELOC")
+        wind.legend()
+        fig.savefig(result_fig_base + str(idx) + ".png")
+
+elif switch == "low_high20":
+    data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle_client20_fix20_data10000/test/index/"
+    data_index_dir_path = os.path.join(data_index_dir, "*")
+    data_index_path = natsorted(glob.glob(data_index_dir_path))
+
+    log_path_base = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client20_fix20_0_test"
+
+    result_fig_base = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client20_fix20_test"
+
+    for idx in range(len(data_index_path)):
+        index_path = data_index_path[idx]
+
+        log_path = log_path_base + str(idx) + ".log"
+
+        train_curve = read_train_curve(log_path)
+
+        df_index = pd.read_csv(index_path, index_col=0)
+        opt = df_index.at['data', 'opt']
+        edge_file = df_index.at['data', 'edge_file']
+
+        nearest_reward = cal_nearest_server_reward(index_path)
+        reloc_reward = cal_RELOC_reward(index_path, edge_file, K=4, M=3)
+
+        fig = plt.figure()
+        wind = fig.add_subplot(1, 1, 1)
+        #wind.set_ylim(ymin=0, ymax=2000)
+        #wind.set_xlim(xmin=0, xmax=400)
+        wind.grid()
+        wind.set_title("test " + str(idx))
+        wind.set_xlabel("training iteration")
+        wind.set_ylabel("total reward")
+        wind.plot(train_curve, linewidth=1, label='mat')
+        #wind.axhline(y=opt, c='r', label="optimal")
+        wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+        wind.axhline(y=reloc_reward, c='r', label="RELOC")
+        wind.legend()
+        fig.savefig(result_fig_base + str(idx) + ".png")
+
 
