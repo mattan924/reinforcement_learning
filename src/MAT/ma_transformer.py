@@ -5,6 +5,7 @@ import math
 import numpy as np
 from torch.distributions import Categorical
 from MAT.utils.util import check, init
+import time as time_module
 
 
 def init_(m, gain=0.01, activate=False):
