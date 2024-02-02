@@ -5,13 +5,13 @@ import sys
 
 
 #learning_data_index_path = "../dataset/master_thesis/single_data/index/fix_allocation_low_capacity_high_cycle.csv"
-learning_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle_client20_fix20_data10000/train/index/"
-test_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle_client20_fix20_data10000/test/index/"
+learning_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle_client40_fix40_data10000/train/index/"
+test_data_index_dir = "../dataset/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle_client40_fix40_data10000/test/index/"
 
 # 各種パラメーター
 # MAT
-start_epi_itr = 4400
-max_epi_itr = 15000
+start_epi_itr = 0
+max_epi_itr = 10000
 backup_itr = 100
 
 max_agent = 40
@@ -36,10 +36,10 @@ num_mini_batch = 4
 
 device = "cuda:1"
 result_dir = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/"
-file_name = "client20_fix20_"
+file_name = "client40_fix40_batch64_pretraining"
 output_base = result_dir + file_name
 transformer_weight_base = "transformer"
-load_parameter_path = '../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/model_parameter/transformer_client20_fix20_0_4400.pth'
+load_parameter_path = '../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/model_parameter/transformer_client20_fix20_0_12000.pth'
 #load_parameter_path = None
 
 

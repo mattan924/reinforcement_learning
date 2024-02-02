@@ -317,7 +317,7 @@ elif switch == "low_high20":
         wind.set_xlabel("training iteration")
         wind.set_ylabel("total reward")
         wind.plot(train_curve, linewidth=1, label='mat')
-        wind.plot(train_curve_batch16_4, linewidth=1, label='mat_batch16_4')
+        #wind.plot(train_curve_batch16_4, linewidth=1, label='mat_batch16_4')
         #wind.axhline(y=opt, c='r', label="optimal")
         wind.axhline(y=nearest_reward, c='g', label="nearest_server")
         wind.axhline(y=reloc_reward, c='r', label="RELOC")
@@ -330,7 +330,8 @@ elif switch == "low_high40":
     data_index_path = natsorted(glob.glob(data_index_dir_path))
 
     log_path_base_batch16 = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client40_fix40_batch16_minbatch4_0_test"
-    log_path_base_batch64 = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client40_fix40_batch64_minbatch4_0_test"
+    log_path_base_pre_batch16 = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client40_fix40_batch16_pretraining0_test"
+    log_path_base_pre_batch64 = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client40_fix40_batch64_pretraining0_test"
 
     result_fig_base = "../result/save/master_thesis/multi_data/general_evaluation/low_capacity_high_cycle/client40_fix40_test"
 
@@ -338,10 +339,12 @@ elif switch == "low_high40":
         index_path = data_index_path[idx]
 
         log_path_batch16 = log_path_base_batch16 + str(idx) + ".log"
-        log_path_batch64 = log_path_base_batch64 + str(idx) + ".log"
+        log_path_pre_batch16 = log_path_base_pre_batch16 + str(idx) + ".log"
+        log_path_pre_batch64 = log_path_base_pre_batch64 + str(idx) + ".log"
 
         train_curve_batch16 = read_train_curve(log_path_batch16)
-        train_curve_batch64 = read_train_curve(log_path_batch64)
+        train_curve_pre_batch16 = read_train_curve(log_path_pre_batch16)
+        train_curve_pre_batch64 = read_train_curve(log_path_pre_batch64)
 
         df_index = pd.read_csv(index_path, index_col=0)
         opt = df_index.at['data', 'opt']
@@ -359,7 +362,8 @@ elif switch == "low_high40":
         wind.set_xlabel("training iteration")
         wind.set_ylabel("total reward")
         wind.plot(train_curve_batch16, linewidth=1, label='mat_batch16')
-        wind.plot(train_curve_batch64, linewidth=1, label='mat_batch64')
+        wind.plot(train_curve_pre_batch16, linewidth=1, label='mat_pretraining_batch16')
+        wind.plot(train_curve_pre_batch64, linewidth=1, label='mat_pretraining_batch64')
         #wind.axhline(y=opt, c='r', label="optimal")
         wind.axhline(y=nearest_reward, c='g', label="nearest_server")
         wind.axhline(y=reloc_reward, c='r', label="RELOC")
