@@ -156,14 +156,14 @@ class MATRunner:
             
         obs_topic_info = buffer.obs_topic_info[step]
 
-        value, action, action_log_prob = trainer.policy.get_actions(obs_posi, obs_client, obs_edge, obs_topic_info, buffer.mask[step], deterministic=deterministic)
+        value, action, action_log_prob, mat_time = trainer.policy.get_actions(obs_posi, obs_client, obs_edge, obs_topic_info, buffer.mask[step], deterministic=deterministic)
 
         # _t2n: tensor → numpy
         values = np.array(_t2n(value))
         actions = np.array(_t2n(action))
         action_log_probs = np.array(_t2n(action_log_prob))
 
-        return values, actions, action_log_probs
+        return values, actions, action_log_probs, mat_time
     
 
     def insert_batch(self, buffer, obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_remain_cycle, obs_topic_info, mask, rewards, values, actions, action_log_probs, agent_perm, topic_perm):       
@@ -211,7 +211,7 @@ class MATRunner:
             step = int(time / time_step)
 
             #  行動と確率分布の取得
-            values_batch, actions_batch, action_log_probs_batch = self.collect(trainer, buffer, step, deterministic=deternimistic)
+            values_batch, actions_batch, action_log_probs_batch, mat_time = self.collect(trainer, buffer, step, deterministic=deternimistic)
 
             reward_batch = np.zeros((batch_size), dtype=np.float32)
 

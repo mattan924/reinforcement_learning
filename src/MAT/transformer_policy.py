@@ -55,12 +55,12 @@ class TransformerPolicy:
         """
         batch, _, distri_dim = obs_posi.shape
 
-        actions, action_log_probs, values = self.transformer.get_actions(obs_posi, obs_client, obs_edge, obs_topic_info, mask, deterministic)
+        actions, action_log_probs, values, mat_time = self.transformer.get_actions(obs_posi, obs_client, obs_edge, obs_topic_info, mask, deterministic)
         
         actions = actions.view(batch, -1, self.act_num)
         action_log_probs = action_log_probs.view(batch, -1, self.act_num)
 
-        return values, actions, action_log_probs
+        return values, actions, action_log_probs, mat_time
     
 
     def get_values(self, obs_posi, obs_client, obs_edge, obs_topic_info, mask):

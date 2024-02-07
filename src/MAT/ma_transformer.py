@@ -239,11 +239,15 @@ class MultiAgentTransformer(nn.Module):
         obs_topic_info = check(obs_topic_info).to(self.device)
         mask = check(mask).to(self.device)
 
+        mat_start = time_module.perf_counter()
         v_loc, obs_rep = self.encoder(obs_posi, obs_client, obs_edge, obs_topic_info, mask)
         
         output_action, output_action_log = self.discrete_autoregreesive_act(obs_rep, mask, deterministic=deterministic)
+        mat_end = time_module.perf_counter()
 
-        return output_action, output_action_log, v_loc
+        mat_time = mat_end - mat_start
+
+        return output_action, output_action_log, v_loc, mat_time
 
 
     def get_values(self, obs_posi, obs_client, obs_edge, obs_topic_info, mask):

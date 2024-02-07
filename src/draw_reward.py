@@ -23,7 +23,7 @@ def read_train_curve(log_path):
         train_curve = np.zeros(len(reward_history))
         
         for i in range(len(reward_history)):
-            train_curve[i] = - reward_history[i]
+            train_curve[i] = reward_history[i]
             
     return train_curve
 
@@ -76,27 +76,21 @@ def cal_RELOC_reward(index_path, edge_file, K=3, M=3):
 
     return reloc_reward
 
-
 """
-data_index_path = "../dataset/master_thesis/single_data/index/high_capacity_low_cycle_client40.csv"
 
-log_path = "../result/save/master_thesis/single_data/high_capacity_low_cycle_client40_0.log"
-#log_path_edge = "../result/save/master_thesis/single_data/high_capacity_low_cycle_client15_edge_dim0.log"
-#log_path_obs9 = "../result/save/master_thesis/single_data/high_capacity_high_cycle_client15_obs9_0.log"
-log_path_network = "../result/save/master_thesis/single_data/high_capacity_low_cycle_client40_networktest0.log"
-result_fig = "../result/save/master_thesis/single_data/high_capacity_low_cycle_client40_0.png"
+data_index_path = "../dataset/master_thesis/single_data/index/fix_allocation_high_capacity_low_cycle.csv"
+
+log_path = "../result/save/master_thesis/fix_allocation/high_capacity_low_cycle0.log"
+result_fig = "../result/save/master_thesis/fix_allocation/high_low_training.pdf"
 
 train_curve = read_train_curve(log_path)
-#train_curve_edge = read_train_curve(log_path_edge)
-#train_curve_obs9 = read_train_curve(log_path_obs9)
-train_curve_network = read_train_curve(log_path_network)
 
 df_index = pd.read_csv(data_index_path, index_col=0)
 opt = df_index.at['data', 'opt']
 edge_file = df_index.at['data', 'edge_file']
 
-nearest_reward = cal_nearest_server_reward(data_index_path)
-RELOC_reward = cal_RELOC_reward(data_index_path, edge_file, K=3, M=1)
+nearest_reward = - cal_nearest_server_reward(data_index_path)
+RELOC_reward = - cal_RELOC_reward(data_index_path, edge_file, K=4, M=3)
 
 print(f"RELOC reward = {RELOC_reward}")
 print(f"nearest reward = {nearest_reward}")
@@ -108,16 +102,15 @@ wind = fig.add_subplot(1, 1, 1)
 wind.grid()
 wind.set_xlabel("training iteration")
 wind.set_ylabel("total reward (ms)")
-#wind.plot(train_curve, linewidth=1, label='mat')
-#wind.plot(train_curve_edge, linewidth=1, label='mat_edge')
-#wind.plot(train_curve_obs9, linewidth=1, label='mat_obs9')
-wind.plot(train_curve_network, linewidth=1, label='mat_network')
-#wind.axhline(y=opt, c='r', label="optimal")
-#wind.axhline(y=nearest_reward, c='g', label="nearest_server")
+wind.plot(train_curve, linewidth=1, label='Proposed')
+#wind.axhline(y=nearest_reward, c='g', label="NS")
 #wind.axhline(y=RELOC_reward, c='r', label="RELOC")
 wind.legend()
-fig.savefig(result_fig)
+fig.savefig(result_fig, bbox_inches='tight')
+
 """
+
+
 
 switch = "low_high40"
 
@@ -350,8 +343,8 @@ elif switch == "low_high40":
         opt = df_index.at['data', 'opt']
         edge_file = df_index.at['data', 'edge_file']
 
-        nearest_reward = cal_nearest_server_reward(index_path)
-        reloc_reward = cal_RELOC_reward(index_path, edge_file, K=4, M=3)
+        nearest_reward =  - cal_nearest_server_reward(index_path)
+        reloc_reward = - cal_RELOC_reward(index_path, edge_file, K=4, M=3)
 
         fig = plt.figure()
         wind = fig.add_subplot(1, 1, 1)
@@ -363,11 +356,10 @@ elif switch == "low_high40":
         wind.set_ylabel("total reward")
         wind.plot(train_curve_batch16, linewidth=1, label='mat_batch16')
         wind.plot(train_curve_pre_batch16, linewidth=1, label='mat_pretraining_batch16')
-        wind.plot(train_curve_pre_batch64, linewidth=1, label='mat_pretraining_batch64')
+        #wind.plot(train_curve_pre_batch64, linewidth=1, label='mat_pretraining_batch64')
         #wind.axhline(y=opt, c='r', label="optimal")
         wind.axhline(y=nearest_reward, c='g', label="nearest_server")
         wind.axhline(y=reloc_reward, c='r', label="RELOC")
         wind.legend()
         fig.savefig(result_fig_base + str(idx) + ".png")
-
 
