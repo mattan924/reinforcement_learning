@@ -8,21 +8,10 @@ import glob
 import time as time_modu
 import random
 
-def read_train_curve(log_path, pre_train_iter):
-    reward_history = []
-    tmp = 0
 
-    with open(log_path, "r") as f:
-        for line in f:
-            line = line.split(",")
+# このファイルは COMA を使用した学習を行う際に使用する
 
-            if tmp % pre_train_iter != 0:
-                reward_history.append(float(line[1]))
-
-            tmp += 1
-            
-    return reward_history
-
+# 単一の時系列データに対して学習を行う際に使用する関数
 def train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
@@ -66,6 +55,7 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device,
         if load_flag:
             agent.load_model(load_parameter_path, actor_weight, critic_weight, V_net_weight, start_epi_itr)
 
+        #  ターゲットネットワークの同期タイミング
         if epi_iter % target_net_iter == 0:
             target_net_flag = True
         else:
@@ -136,10 +126,13 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, backup_iter, device,
     agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter+1)
 
 
+#  複数の時系列データに対する学習
 def train_loop_dataset(max_epi_itr, buffer_size, batch_size, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_dir, test_data_index_dir, output, start_epi_itr=0, load_parameter_path=None):
+    #  重みパラメータを保存するディレクトリの確認
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
 
+    #  重みパラメータの読み込み
     if start_epi_itr != 0:
         if load_parameter_path == None:
             sys.exit("読み込む重みパラメータのパスを指定してください")
@@ -288,3 +281,20 @@ def train_loop_dataset(max_epi_itr, buffer_size, batch_size, backup_iter, device
 
     #  重みパラメータの保存
     agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter+1)
+
+
+#  学習曲線の描画に使用
+def read_train_curve(log_path, pre_train_iter):
+    reward_history = []
+    tmp = 0
+
+    with open(log_path, "r") as f:
+        for line in f:
+            line = line.split(",")
+
+            if tmp % pre_train_iter != 0:
+                reward_history.append(float(line[1]))
+
+            tmp += 1
+            
+    return reward_history

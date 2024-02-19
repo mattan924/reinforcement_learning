@@ -8,6 +8,9 @@ import numpy as np
 import time
 
 
+#  publisher (エージェント) の人数がデータセット内でバラバラの時に使用
+
+
 def init_(m, gain=0.01, activate=False):
     if activate:
         gain = nn.init.calculate_gain('relu')
@@ -211,23 +214,16 @@ class Decoder(nn.Module):
         self.head = nn.Sequential(init_(nn.Linear(n_embd, n_embd), activate=True), nn.GELU(), init_(nn.Linear(n_embd, action_dim)))
 
 
-    #  state, action, and return
     def forward(self, action, obs_rep):
 
         action_embeddings = self.action_encoder(action)
-        #  action_embeddings.shape = torch.Size([1, num_agent*num_topic, n_embd])
 
         x = self.ln(action_embeddings)
 
         for block in self.blocks:
-            #  x.shape = torch.Size([1, num_agent*num_topic, n_embd])
-            #  obs_rep.shape = torch.Size([1, num_agent*num_topic, n_embd])
             x = block(x, obs_rep)
 
-        #  x.shape = torch.Size([Batch, num_agent, n_embd=64])
-
         logit = self.head(x)
-        #  logit.shape = torch.Size([Batch, num_agent, action_dim=14])
 
         return logit
 
@@ -259,9 +255,6 @@ class MultiAgentTransformer(nn.Module):
 
 
     def forward(self, obs_posi, obs_client, obs_edge, obs_topic_info, action, mask):
-        # obs: (batch, n_agent, obs_dim)
-        # action: (batch, n_agent, 1)
-        # available_actions: (batch, n_agent, act_dim)
 
         v_loc, obs_rep = self.encoder(obs_posi, obs_client, obs_edge, obs_topic_info, mask, update=True)
 
@@ -300,14 +293,13 @@ class MultiAgentTransformer(nn.Module):
         return v_tot
     
 
+    #  自己回帰的な行動の出力
     def discrete_autoregreesive_act(self, obs_rep, mask, deterministic=False):
-        ### tmp
         batch_dim, _, obs_rep_dim = obs_rep.shape
         output_action = torch.zeros((batch_dim, self.max_agent*self.max_topic, 1), dtype=torch.long)
         output_action_log = torch.zeros_like(output_action, dtype=torch.float32)
         tmp_obs_rep = torch.zeros((batch_dim, self.max_agent*self.max_topic, obs_rep_dim)).to(**self.tpdv)
 
-        # obs_rep.shape = torch.Size([16, 90, 9])        
         action_len_list = torch.sum(mask, axis=1)
         for idx in range(batch_dim):
             action_len = action_len_list[idx]
@@ -353,7 +345,6 @@ class MultiAgentTransformer(nn.Module):
         return output_action, output_action_log
 
 
-    #  まとめて行動を選択
     def discrete_parallel_act(self, obs_rep, action, mask):
         
         obs_rep = obs_rep.reshape(-1, self.batch_size, self.max_agent*self.max_topic, self.n_embd).permute(1, 0, 2, 3)

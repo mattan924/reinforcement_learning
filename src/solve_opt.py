@@ -2,6 +2,9 @@ from solver import Solver
 import pandas as pd
 import time as time_modu
 
+
+#  gurobi を使用した最適解の求解
+
 if __name__ == '__main__':
     index_file = "../dataset/debug/debug/index/index_hard_hight_load.csv"
     output_file = "../dataset/debug/debug/solution/index_hard_hight_load.csv"

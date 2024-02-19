@@ -6,6 +6,11 @@ import pandas as pd
 from sklearn.cluster import KMeans
 
 
+#  先行研究の RELOC の割り当てアルゴリズム
+#  元のコードとは異なるため注意
+#  gitlab においてあるオリジナルのコードを参照して下さい
+
+
 def get_perm(num_agent, num_topic, random_flag=True):
         
     agent_list = range(num_agent)
@@ -21,6 +26,7 @@ def get_perm(num_agent, num_topic, random_flag=True):
     return agent_perm, topic_perm
 
 
+#  使用リソースを表すθを計算
 def update_theta(edge, all_topic, edge_topic):
     used_storage = 0
     require_cycle = 0
@@ -35,6 +41,7 @@ def update_theta(edge, all_topic, edge_topic):
     return theta
 
 
+#  edge で扱うトピックの更新
 def update_edge_topic(home_server, all_client, all_topic, num_edge):
     edge_topic = [[] for _ in range(num_edge)]
 
@@ -48,6 +55,7 @@ def update_edge_topic(home_server, all_client, all_topic, num_edge):
     return edge_topic    
 
 
+#  publisher のリストを更新
 def update_publisher_list(home_server, all_client, all_topic, num_edge):
     publisher_list = [[[] for j in range(num_edge)] for i in range(len(all_topic))]
 
@@ -61,6 +69,7 @@ def update_publisher_list(home_server, all_client, all_topic, num_edge):
     return publisher_list
 
 
+#  ホームサーバの更新
 def change_home_server(home_server, client_id, new_edge_id, all_client, all_topic, num_edge):
     home_server[client_id] = new_edge_id
 
@@ -70,43 +79,7 @@ def change_home_server(home_server, client_id, new_edge_id, all_client, all_topi
     return home_server, edge_topic, publisher_list
 
 
-# client: env.Client
-# edge1: env.Edge
-# edge2: env.Edge
-# edge1_topic: edge1 で扱う topic のリスト (topic id を格納)
-# edge2_topic: edge2 で扱う topic のリスト (topic id を格納)
-# publisher_list: (topic 数, エッジの数) のサイズの二次元リスト
-# all_topic: env.Topic のインスタンスを全て格納したリスト
-def cooperation(client, edge1, edge2, theta, edge_topic, publisher_list, all_topic):
-    theta_edge1 = 0
-    theta_edge2 = 0
-
-    for topic in all_topic:
-        if client.pub_topic[topic.id] == 1:
-            if topic.id not in edge_topic[edge2.id]:
-                edge2_topic.append(topic.id)
-
-            publisher_list[topic.id][edge2.id].append(client.id)
-
-            theta_edge2 = update_theta(edge2, all_topic, edge2_topic)
-
-            if client.id in publisher_list[topic.id][edge1.id]:
-                publisher_list[topic.id][edge1.id].remove(client.id)
-
-            theta_edge1 = update_theta(edge1, all_topic, edge1_topic)
-
-
-    for topic in all_topic:
-        if client.pub_topic[topic.id] == 1:
-            if len(publisher_list[topic.id][edge1.id]) == 0:
-                edge1_topic.remove(topic.id)
-
-                theta_edge1 = update_theta(edge1, all_topic, edge1_topic)
-
-                
-    return theta, edge_topic, publisher_list
-
-
+#  クラスターの検索
 def search_cluster(client, centroid):
     cluster_idx = -1
     min_loss = 100000000
@@ -121,6 +94,7 @@ def search_cluster(client, centroid):
     return cluster_idx
 
 
+#  RELOC のアルゴリズム本体
 def RELOC(edge_file, all_client, all_topic, all_edge, K, M, agent_perm, topic_perm, near_actions):
     # 初期値の設定
     num_client = len(all_client)

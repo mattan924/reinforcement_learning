@@ -10,6 +10,7 @@ import time as time_module
 from collections import deque
 
 
+#  モバイルクライアントを表すクラス
 class Client:
 
     def __init__(self, id, x, y, pub_topic, sub_topic, num_topic):
@@ -22,6 +23,7 @@ class Client:
         self.sub_edge = np.full(num_topic, -1)
 
 
+#  エッジを表すクラス
 class Edge:
 
     def __init__(self, id, x, y, volume, cpu_cycle, num_topic):
@@ -38,10 +40,12 @@ class Edge:
         self.remain_cycle = 0
 
     
+    #  現在のタイムスロットで，使用しているストレート亮
     def cal_used_volume(self):
         self.total_used_volume = sum(self.used_volume)
 
 
+#  トピックを表すクラス
 class Topic:
 
     def __init__(self, id, save_period, publish_rate, data_size, require_cycle):
@@ -73,6 +77,7 @@ class Topic:
             sys.exit("save_period が time_step の整数倍になっていません")
 
 
+#  環境を表すクラス
 class Env:
 
     def __init__(self, index_file):
@@ -262,7 +267,7 @@ class Env:
         return obs, obs_topic
     
 
-    #  状態の観測
+    #  状態の観測 (MAT 用)
     def get_observation_mat(self, agent_perm, topic_perm, obs_size=81):
         channel_dim = obs_size*obs_size
         edge_obs_size = 3
@@ -278,7 +283,7 @@ class Env:
         obs_distribution = np.zeros((channel_dim))  #  クライアントの分布
         obs_storage = np.zeros((edge_channel_dim))  #  最大ストレージサイズ
         obs_cpu_cycle = np.zeros((edge_channel_dim))  #  CPU の最大クロック数
-        obs_remain_cycle = np.zeros((edge_channel_dim))
+        obs_remain_cycle = np.zeros((edge_channel_dim))  #  エッジに残っている処理量
         obs_topic_info = np.zeros((max_topic, 3))  #  あるトピックの処理に必要なクロック数, データサイズ, ストレージサイズ
 
         mask = np.zeros((max_agent, max_topic))
@@ -341,6 +346,7 @@ class Env:
         return obs_posi, obs_publisher, obs_subscriber, obs_distribution, obs_storage, obs_cpu_cycle, obs_remain_cycle, obs_topic_info, mask
     
 
+    #  近傍サーバへの割り当て
     def get_near_action(self, agent_perm, topic_perm):
         max_agent = len(agent_perm)
         max_topic = len(topic_perm)

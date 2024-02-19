@@ -5,6 +5,7 @@ import sys
 import os
 import logging
 
+#  パラメータチューニングに使用するコード
 
 def objective(trial):
     # ハイパーパラメータ

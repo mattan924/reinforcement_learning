@@ -10,12 +10,6 @@ import time
 class TransformerPolicy:
     """
     MAT Policyクラス。アクタとクリティックのネットワークをラップして、アクションと価値関数の予測を計算します。
-
-    param args: (argparse.Namespace) モデルとポリシーの関連情報を含む引数．
-    param obs_space: (gym.Space) 観測空間．
-    param cent_obs_space: (gym.Space) 値関数入力空間（MAPPO は集中入力, IPPO は分散入力）．
-    param action_space: (gym.Space) アクション空間．
-    param device: (torch.device) 実行するデバイスを指定します（cpu/gpu）。
     """
 
     def __init__(self, obs_dim, obs_distri_dim, obs_edge_dim, obs_info_dim, act_dim, batch_size, max_agent, max_topic, lr, eps, weight_decay, n_block, n_embd1, n_embd2, device=torch.device("cpu"), multi=True):

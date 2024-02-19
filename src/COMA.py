@@ -9,6 +9,7 @@ import math
 import time as time_modu
 
 
+#  獲得した経験データを格納するクラス
 class ReplayBuffer:
 
     def __init__(self, buffer_size, batch_size, N_actions, device):
@@ -18,7 +19,7 @@ class ReplayBuffer:
         self.N_actions = N_actions
         self.device = device
 
-    
+    #  データの追加
     def add(self, state, state_topic, actions_onehot, reward, next_state, next_state_topic):
         data = (state, state_topic, actions_onehot, reward, next_state, next_state_topic)
         self.buffer.append(data)
@@ -27,7 +28,7 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-
+    #  データの取り出し
     def get_batch(self):
         data = random.sample(self.buffer, self.batch_size)
 
@@ -40,7 +41,7 @@ class ReplayBuffer:
 
         return state, state_topic, actions_onehot, reward, next_state, next_state_topic
 
-
+#  Actor-Critic の Actor クラス
 class Actor(nn.Module):
     
     def __init__(self, N_action):
@@ -74,6 +75,7 @@ class Actor(nn.Module):
         nn.init.zeros_(self.fc3.bias)
     
 
+    #  行動の出力
     def get_action(self, obs, obs_topic):
         out1 = self.batch_norm2d_1(obs)
         out2 = F.selu(self.batch_norm2d_2(self.conv1(out1)))
@@ -92,7 +94,7 @@ class Actor(nn.Module):
         
         return out12
 
-
+#  Actor-Critic の Critic クラス
 class Critic(nn.Module):
 
     def __init__(self, N_action, num_client, num_topic):
@@ -133,6 +135,7 @@ class Critic(nn.Module):
         self.fc6 = nn.Linear(64, 1)
         
 
+    #  評価値の出力
     def get_value(self, S, S_topic, A):
         out1_s = self.conv1(self.batch_norm2d_1(S))
         out2_s = self.pool1(F.selu(self.batch_norm2d_2(out1_s)))
@@ -154,6 +157,7 @@ class Critic(nn.Module):
         return out7
 
 
+#  状態価値の出力
 class V_Net(nn.Module):
 
     def __init__(self, num_topic):
@@ -203,6 +207,7 @@ class V_Net(nn.Module):
         return out9
 
 
+#  COMA の本体
 class COMA:
     
     def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, device):
@@ -238,6 +243,7 @@ class COMA:
         self.V_net_loff_fn = torch.nn.MSELoss()
 
 
+    #  行動の出力
     def get_acction(self, obs, obs_topic, env, train_flag, pretrain_flag):        
         obs_tensor = torch.FloatTensor(obs).to(self.device)
         obs_topic_tensor = torch.FloatTensor(obs_topic).to(self.device)
@@ -277,6 +283,8 @@ class COMA:
                         if client.pub_topic[t] == 1:
                             actions[t][i] = min_idx
             else:
+                #  学習を円滑に進めるために行動を指定
+                #  強化学習の文脈としては不自然
                 pub_topic_tensor = torch.stack([torch.tensor(client.pub_topic) for client in clients]).T
                 mask = pub_topic_tensor.bool()  # マスクを作成
                 actions[mask] = Categorical(pi[mask]).sample()  # マスクを使ってアクションをサンプリング
@@ -290,22 +298,26 @@ class COMA:
         return actions, pi
     
 
+    #  ターゲットネットワークの同期
     def old_net_update(self):
         self.old_actor.load_state_dict(self.actor.state_dict())
 
     
+    #  モデルの書き出し
     def save_model(self, dir_path, actor_weight, critic_weight, v_net_weight, iter):
         torch.save(self.actor.state_dict(), dir_path + actor_weight + '_' + str(iter) + '.pth')
         torch.save(self.critic.state_dict(), dir_path + critic_weight + '_' + str(iter) + '.pth')
         torch.save(self.V_net.state_dict(), dir_path + v_net_weight + '_' + str(iter) + '.pth')
 
 
+    #  モデルの読み込み
     def load_model(self, dir_path, actor_weight, critic_weight, v_net_weight, iter):
         self.actor.load_state_dict(torch.load(dir_path + actor_weight + '_' + str(iter) + '.pth'))
         self.critic.load_state_dict(torch.load(dir_path + critic_weight + '_' + str(iter) + '.pth'))
         self.V_net.load_state_dict(torch.load(dir_path + v_net_weight + '_' + str(iter) + '.pth'))
 
 
+    #  学習
     def train(self, obs, obs_topic, actions, pi, reward, next_obs, next_obs_topic, target_net_flag):
         #  obs.shape = (num_client, num_topic, channel=9, 81, 81)
         #  obs_topic.shape = (num_topic, channel=3)

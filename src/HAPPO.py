@@ -8,6 +8,7 @@ import random
 import math
 
 
+#  経験データを格納するためのバッファ
 class ReplayBuffer:
 
     def __init__(self, buffer_size, batch_size, N_actions):
@@ -16,7 +17,8 @@ class ReplayBuffer:
         self.batch_size = batch_size
         self.N_actions = N_actions
 
-    
+
+    # データの追加
     def add(self, data):
         self.buffer.append(data)
 
@@ -25,6 +27,7 @@ class ReplayBuffer:
         return len(self.buffer)
 
 
+    #  データの取り出し
     def get_batch(self):
         data = random.sample(self.buffer, self.batch_size)
         
@@ -42,6 +45,7 @@ class ReplayBuffer:
         return actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_critic_obs, next_critic_obs_topic, actions, actions_onehot, pi, reward
     
 
+    #  PPO 用のデータ取り出し
     def get_batch_ppo(self):
         data = random.sample(self.buffer, self.batch_size)
         
@@ -65,6 +69,7 @@ class ReplayBuffer:
         self.buffer.clear()
 
 
+#  Actor クラス
 class Actor(nn.Module):
     
     def __init__(self, N_action):
@@ -98,6 +103,7 @@ class Actor(nn.Module):
         nn.init.zeros_(self.fc3.bias)
     
 
+    #  行動の出力
     def get_action(self, obs, obs_topic):
         
         out = self.batch_norm2d_1(obs)
@@ -139,6 +145,7 @@ class Actor(nn.Module):
         return out
 
 
+#  Critic クラス
 class Critic(nn.Module):
 
     def __init__(self, N_action, num_client, num_topic):
@@ -178,6 +185,7 @@ class Critic(nn.Module):
         self.fc6 = nn.Linear(64, 1)
         
 
+    #  評価値の出力
     def get_value(self, S, S_topic, A):
         
         out = self.conv1(self.batch_norm2d_1(S))
@@ -218,6 +226,7 @@ class Critic(nn.Module):
         return out
     
 
+#  状態価値関数
 class V_Net(nn.Module):
 
     def __init__(self, num_topic):
@@ -248,6 +257,7 @@ class V_Net(nn.Module):
         self.fc3 = nn.Linear(16, 1)
 
 
+    # 状態価値の出力
     def get_value(self, S, S_topic):
         
         out1 = self.conv1(self.batch_norm2d_1(S))
@@ -283,6 +293,7 @@ class V_Net(nn.Module):
         return out9
 
 
+#  HAPPO クラスの本体
 class HAPPO:
     
     def __init__(self, N_action, num_agent, num_topic, buffer_size, batch_size, episord_len, eps_clip, device):
@@ -323,6 +334,7 @@ class HAPPO:
         self.v_net_loss_fn = torch.nn.MSELoss()
 
 
+    #  行動の出力
     def get_acction(self, obs, obs_topic, env, train_flag, pretrain_flag):        
         obs = obs.reshape(-1, 9, 81, 81).to(self.device)
         obs_topic = obs_topic.reshape(-1, 3).to(self.device)
@@ -366,17 +378,21 @@ class HAPPO:
         return actions, pi
     
     
+    #  モデルの出力
     def save_model(self, dir_path, actor_weight, critic_weight, V_net_weight, iter):
         torch.save(self.actor.state_dict(), dir_path + actor_weight + '_' + str(iter) + '.pth')
         torch.save(self.critic.state_dict(), dir_path + critic_weight + '_' + str(iter) + '.pth')
         torch.save(self.V_net.state_dict(), dir_path + V_net_weight + '_' + str(iter) + '.pth')
 
+
+    #  モデルの読み込み
     def load_model(self, dir_path, actor_weight, critic_weight, V_net_weight, iter):
         self.actor.load_state_dict(torch.load(dir_path + actor_weight + '_' + str(iter) + '.pth'))
         self.critic.load_state_dict(torch.load(dir_path + critic_weight + '_' + str(iter) + '.pth'))
         self.V_net.load_state_dict(torch.load(dir_path + V_net_weight + '_' + str(iter) + '.pth'))
 
     
+    #  入力の作成
     def process_input(self, obs, obs_topic):
         #  状態の tensor 化
         obs_tensor = torch.FloatTensor(obs)
@@ -413,6 +429,7 @@ class HAPPO:
         return actor_obs, actor_obs_topic, critic_obs, critic_obs_topic
 
     
+    #  バッファへの格納
     def collect(self, actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward):
         actions_onehot = torch.zeros(self.num_topic * self.num_agent * self.N_action)
 
@@ -445,6 +462,7 @@ class HAPPO:
         self.replay_buffer.add((actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_critic_obs, next_critic_obs_topic, actions, actions_onehot, pi.detach(), reward))
 
 
+    #  PPO 用のバッファへの格納
     def collect_ppo(self, actor_obs, actor_obs_topic, critic_obs, critic_obs_topic, next_critic_obs, next_critic_obs_topic, actions, pi, reward):
         actions_onehot = torch.zeros(self.num_topic * self.num_agent * self.N_action)
 
@@ -520,6 +538,7 @@ class HAPPO:
         self.tmp_buffer = []
     
 
+    #  Critic ネットワークの学習
     def train_critic(self, target_net_flag):
 
         if len(self.replay_buffer) < self.buffer_size:
@@ -564,6 +583,7 @@ class HAPPO:
         self.critic_optimizer.step()
                 
 
+    #  PPO 用の Critic ネットワークの学習
     def train_critic_ppo(self, target_net_flag):
 
         if len(self.replay_buffer) < self.buffer_size:
@@ -616,6 +636,7 @@ class HAPPO:
         self.critic_optimizer.step()
 
 
+    #  Actor ネットワークの学習
     def train_actor(self, output, epi_iter):
 
         if len(self.replay_buffer) < self.buffer_size:
@@ -746,6 +767,7 @@ class HAPPO:
                     gain = (torch.exp(torch.log(pi_new_update[mask] + 1e-16) - torch.log(pi_new[mask] + 1e-16)) * gain).detach()
         
 
+    #  PPO 用の Actor ネットワークの学習
     def train_actor_ppo(self, output, epi_iter, time):
 
         if len(self.replay_buffer) < self.buffer_size:
@@ -753,13 +775,6 @@ class HAPPO:
             return
         
         actor_obs_exp, actor_obs_topic_exp, critic_obs_exp, critic_obs_topic_exp, next_critic_obs_exp, next_critic_obs_topic_exp, actions_exp, agent_id_exp, topic_id_exp, actions_onehot_exp, pi_exp, reward_exp = self.replay_buffer.get_batch_ppo()
-        #  actor_obs_exp = torch.Size([batch_size, channel=9, obs_size=81, obs_size=81]), cpu
-        #  actor_obs_topic_exp = torch.Size([batch_size, channel=3]), cpu
-        #  critic_obs_exp = torch.Size([batch_size, channel=14, 81, 81]), cpu
-        #  critic_obs_topic_exp = torch.Size([batch_size, num_topic * channel=3]), cpu
-        #  actions_exp = torch.Size([batch_size]), cpu
-        #  pi_exp = torch.Size([batch_size, N_action]), cpu
-        #  reward_exp = torch.Size(batch_size), cpu
 
         actor_obs_exp = actor_obs_exp.to(self.device)
         actor_obs_topic_exp = actor_obs_topic_exp.to(self.device)
@@ -770,9 +785,6 @@ class HAPPO:
 
         #  ========== actor ネットワークの更新 ==========
         #  ========== COMA baseline の計算 ==========
-        #  critic_obs_exp = torch.Size([batch_size, num_topic*4+2, 81, 81])
-        #  critic_obs_topic_exp = torch.Size([batch_size, num_topic*3])
-        #  actions_exp_onehot = torch.Size([batch_size, num_agent*num_topic*N_action])
 
         E = torch.eye(self.N_action).to(self.device)
 
@@ -786,7 +798,6 @@ class HAPPO:
         for batch in range(self.batch_size):
             action = actions_exp[batch]
             actions_onehot_exp_baseline = torch.stack([actions_onehot_exp.detach().clone()]*self.N_action, dim=0)
-            #  actions_onehot_exp_baseline.shape = [N_action, batch_size, num_agent*num_topic*N_action]
 
             if action != -1:
                 for a in range(self.N_action):
@@ -798,10 +809,8 @@ class HAPPO:
         Q_tmp = self.target_critic.get_value(critic_obs_exp_baseline, critic_obs_topic_exp_baseline, actions_onehot_exp_baseline).reshape(self.N_action, self.batch_size).detach()
 
         Q_tmp = Q_tmp.permute(1, 0)
-        #  Q_tmp.shape = [batch_size, N_action]
         
         M = Q2.squeeze(1) - torch.sum(pi_exp * Q_tmp, dim=1)
-        #  M.shape = [batch_size]
 
         with open(output + "_advantage.log", "a") as f:
             f.write(f"\n\n\n===================={epi_iter}====================\n\n\n")
@@ -809,13 +818,9 @@ class HAPPO:
         with open(output + "_actor_loss.log", "a") as f:
             f.write(f"\n\n\n===================={epi_iter}====================\n\n\n")
 
-        #  actor_obs_exp.shape = [batch_size, channel=9, 81, 81]
-        #  actor_obs_topic_exp.shape = [batch_size, channel=3*num_topic]
-
         actor_input1 = actor_obs_exp
         actor_input2 = actor_obs_topic_exp
 
-        #  actions_onehot_exp.shape = [batch_size, num_topic*num_agent*N_action]
         mask = torch.zeros((self.batch_size, self.N_action))
         for batch in range(self.batch_size):
             idx = int(agent_id_exp[batch] * self.num_topic * self.N_action + topic_id_exp[batch] * self.N_action)
@@ -825,8 +830,6 @@ class HAPPO:
 
         pi_new = self.actor.get_action(actor_input1.detach(), actor_input2.detach())
 
-        #  pi_new = torch.Size([300, 9])
-        #  pi_exp.shape = torch.Size([300, 9])
         rations = torch.exp(torch.log(pi_new[mask] + 1e-16) - torch.log(pi_exp[mask] + 1e-16))
 
         rations_size = int(rations.numel())
@@ -843,12 +846,6 @@ class HAPPO:
 
             with open(output + "_actor_loss.log", "a") as f:
                 f.write(f"actor_loss = {actor_loss}\n")
-
-            #entropy = - torch.sum(pi_exp[:, topic_id, agent_id][mask] * torch.log(pi_exp[:, topic_id, agent_id][mask] + 1e-16))
-
-            #loss = - (actor_loss + 0.01*entropy)
-
-            #print(f"actor_loss = {actor_loss}, entropy = {entropy}")
 
             self.actor_optimizer.zero_grad()
             actor_loss.backward(retain_graph=True)

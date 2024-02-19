@@ -19,6 +19,7 @@ def _shuffle_agent_grid(x, y):
     return rows, cols
 
 
+#  経験データを格納するためのバッファ
 class SharedReplayBuffer(object):
 
     def __init__(self, episode_length, batch_size, num_agents, num_topic, obs_dim, act_dim):
@@ -89,8 +90,8 @@ class SharedReplayBuffer(object):
     def compute_returns_batch(self, next_value, value_normalizer=None):
         """
         報酬の割引和として、または GAE を使用してリターンを計算します。
-        :param next_value: (np.ndarray) 最後のエピソードステップの次のステップの値予測。
-        :param value_normalizer: (PopArt) Noneでない場合、PopArt値のノーマライザインスタンス。
+        param next_value: (np.ndarray) 最後のエピソードステップの次のステップの値予測。
+        param value_normalizer: (PopArt) Noneでない場合、PopArt値のノーマライザインスタンス。
         """
 
         self.value_preds[-1][self.mask[-1]] = next_value

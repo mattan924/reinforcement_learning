@@ -8,18 +8,10 @@ import glob
 import time as time_modu
 import random
 
-def read_train_curve(log_path):
-    reward_history = []
 
-    with open(log_path, "r") as f:
-        for line in f:
-            line = line.split(",")
+#  HAPPO を使用した学習を行う際に使用するファイル
 
-            reward_history.append(float(line[1]))
-            
-    return reward_history
-
-
+#  単一データに対する学習
 def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_iter, device, result_dir, actor_weight, critic_weight, V_net_weight, learning_data_index_path, output, start_epi_itr=0, load_parameter_path=None):
     if not os.path.isdir(result_dir + "model_parameter"):
         sys.exit("結果を格納するディレクトリ" + result_dir + "model_parameter が作成されていません。")
@@ -203,3 +195,16 @@ def train_loop_single(max_epi_itr, buffer_size, batch_size, eps_clip, backup_ite
 
     #  重みパラメータの保存
     agent.save_model(result_dir + 'model_parameter/', actor_weight, critic_weight, V_net_weight, epi_iter+1)
+
+
+#  学習曲線を描画する際に使用
+def read_train_curve(log_path):
+    reward_history = []
+
+    with open(log_path, "r") as f:
+        for line in f:
+            line = line.split(",")
+
+            reward_history.append(float(line[1]))
+            
+    return reward_history

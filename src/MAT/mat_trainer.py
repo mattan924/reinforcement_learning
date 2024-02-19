@@ -7,12 +7,7 @@ from MAT.utils.valuenorm import ValueNorm
 
 
 class MATTrainer:
-    """
-    MAT がポリシーを更新するためのトレーナークラスです。
-    param args: (argparse.Namespace) 関連するモデル、ポリシー、env 情報を含む引数です。
-    param policy: (R_MAPPO_Policy) 更新するポリシーを指定します。
-    param device: (torch.device) 実行するデバイスを指定します (cpu/gpu)。
-    """
+    
     def __init__(self, policy, ppo_epoch, num_mini_batch, device=torch.device("cpu")):
 
         self.device = device
@@ -43,7 +38,6 @@ class MATTrainer:
         :param values: (torch.Tensor) value 関数の予測値。
         :param value_preds_batch: (torch.Tensor) バッチデータからの "古い"予測値 (value クリップ損失に利用).
         :param return_batch: (torch.Tensor) return to go returns
-        :param active_masks_batch: (torch.Tensor) 与えられたタイムステップでエージェントがアクティブかデッドかを表す。
 
         :return value_loss: (torch.Tensor) value 関数の損失。
         """
@@ -67,15 +61,13 @@ class MATTrainer:
     def ppo_update(self, obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch):
         """
         アクターとクリティックのネットワークを更新します。
-        param sample: (タプル) ネットワークを更新するデータバッチを含みます。
-        :update_actor: (bool) アクターネットワークを更新するかどうか。
 
-        :return value_loss: (torch.Tensor) 値関数の損失。
-        :return critic_grad_norm: (torch.Tensor) 批評家up9dateからの勾配ノルム。
-        :return policy_loss: (torch.Tensor) actor(policy)の損失値.
-        :return dist_entropy: (torch.Tensor) アクタのエントロピー.
-        :return actor_grad_norm: (torch.Tensor) アクタの更新からの勾配ノルム。
-        :return imp_weights: (torch.Tensor) 重要度サンプリングの重み。
+        return value_loss: (torch.Tensor) 値関数の損失。
+        return critic_grad_norm: (torch.Tensor) 批評家up9dateからの勾配ノルム。
+        return policy_loss: (torch.Tensor) actor(policy)の損失値.
+        return dist_entropy: (torch.Tensor) アクタのエントロピー.
+        return grad_norm: (torch.Tensor) 勾配ノルム。
+        return imp_weights: (torch.Tensor) 重要度サンプリングの重み。
         """
         old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
         adv_targ = check(adv_targ).to(**self.tpdv)
@@ -112,10 +104,7 @@ class MATTrainer:
     def train(self, buffer):
         """
         ミニバッチGDを使用してトレーニング更新を実行します。
-        :param buffer: (SharedReplayBuffer) トレーニングデータを含むバッファ。
-        param update_actor: (bool) アクタネットワークを更新するかどうか。
-
-        :return train_info: (dict)トレーニングの更新に関する情報（損失や勾配ノルムなど）を格納します。
+        param buffer: (SharedReplayBuffer) トレーニングデータを含むバッファ。
         """
 
         advantages_copy = buffer.advantages.copy()
@@ -125,15 +114,6 @@ class MATTrainer:
         mean_advantages = np.nanmean(advantages_copy[mask])
         std_advantages = np.nanstd(advantages_copy[mask])
         advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
-
-        # obs_posi_batch, obs_client_batch, obs_edge_batch, obs_topic_info_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ, mask_batch = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
-        
-        # obs_posi_batch = check(obs_posi_batch).to(**self.tpdv)
-        # obs_client_batch = check(obs_client_batch).to(**self.tpdv)
-        # obs_edge_batch = check(obs_edge_batch).to(**self.tpdv)
-        # obs_topic_info_batch = check(obs_topic_info_batch).to(**self.tpdv)
-        # actions_batch = check(actions_batch).to(**self.tpdv)
-        # mask_batch = check(mask_batch)
         
         for _ in range(self.ppo_epoch):
             data_generator = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
